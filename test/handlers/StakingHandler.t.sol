@@ -77,7 +77,7 @@ contract StakingHandler is Test{
         // Ensure enough time has passed
         vm.warp(block.timestamp + COMPOUND_PERIOD);
         
-        vm.prank(staking.operator());
+        vm.prank(staking.getRoleMember(staking.OPERATOR_ROLE(), 0));
         try staking.distributeRewards(amount, 0) {
             rewardCount++;
         } catch {
@@ -91,7 +91,7 @@ contract StakingHandler is Test{
         
         amount = bound(amount, 0.1 ether, staking.totalStaked());
         
-        vm.prank(staking.operator());
+        vm.prank(staking.getRoleMember(staking.OPERATOR_ROLE(), 0));
         try staking.handleSlashing(amount, block.timestamp) {
             slashingCount++;
         } catch {

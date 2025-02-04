@@ -61,7 +61,6 @@ contract NativeStakingHarness is NativeStaking {
     // // }
 
     function operator() external view returns (address) {
-        // return getRoleMember(OPERATOR_ROLE, 0);
-        return 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4;
+        return getRoleMember(OPERATOR_ROLE, 0);
     }
 }

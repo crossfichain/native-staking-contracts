@@ -3,9 +3,10 @@ pragma solidity ^0.8.20;
 
 import "./NativeStaking.base.t.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract NativeStakingTest is NativeStakingBaseTest {
-    function testInitialState() public {
+    function testInitialState() public view {
         assertEq(staking.totalStaked(), 0);
         assertEq(staking.totalShares(), 0);
         assertEq(staking.rewardPool(), 0);
@@ -81,7 +82,7 @@ contract NativeStakingTest is NativeStakingBaseTest {
         vm.prank(emergency);
         staking.pause();
 
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         vm.prank(alice);
         staking.stake{value: MIN_STAKE}();
     }
@@ -108,6 +109,7 @@ contract NativeStakingTest is NativeStakingBaseTest {
 
         vm.prank(alice);
         uint256 balanceBeforeWithRewards = address(alice).balance;
+        vm.deal(address(staking), 60 ether);
         staking.unstake(50 ether);
         assertGt(address(alice).balance, balanceBeforeWithRewards + 50 ether);
     }
@@ -171,9 +173,10 @@ contract NativeStakingTest is NativeStakingBaseTest {
         vm.expectRevert();
         staking.compoundRewards();
 
-        vm.prank(operator);
+        vm.startPrank(operator);
         vm.warp(block.timestamp + staking.COMPOUND_PERIOD());
         staking.distributeRewards(10 ether, 1 ether);
+        vm.stopPrank();
     }
 
     // Additional test functions...

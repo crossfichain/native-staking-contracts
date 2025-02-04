@@ -77,7 +77,7 @@ contract NativeStakingBaseTest is Test {
         address user,
         uint256 expectedLocked,
         uint256 expectedShares
-    ) internal {
+    ) internal view {
         (uint256 locked, , uint256 shares, ) = staking.getStakingPosition(user);
         assertEq(locked, expectedLocked, "Incorrect locked amount");
         assertEq(shares, expectedShares, "Incorrect shares amount");
