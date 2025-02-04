@@ -31,6 +31,8 @@ interface INativeStaking {
     // function compoundRewards() external;
     function handleSlashing(uint256 slashAmount) external;
     
+    function compoundRewards() external payable;
+    
     function getStakingPosition(address user) external view returns (
         uint256 lockedAmount,
         uint256 collateralAmount,

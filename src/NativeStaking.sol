@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IDIAOracle} from "./interfaces/IDIAOracle.sol";
+import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {INativeStaking} from "./interfaces/INativeStaking.sol";
 import {IStakingOperator} from "./interfaces/IStakingOperator.sol";
 
@@ -18,10 +18,10 @@ import {IStakingOperator} from "./interfaces/IStakingOperator.sol";
 contract NativeStaking is
     INativeStaking,
     IStakingOperator,
-    Ownable,
     ReentrancyGuard,
-    AccessControl,
-    Pausable
+    AccessControlEnumerable,
+    Pausable,
+    ERC20
 {
     using Math for uint256;
 
@@ -37,7 +37,7 @@ contract NativeStaking is
     uint256 private constant SLASH_PENALTY_RATE = 500; // 5% = 500 basis points
 
     // State variables
-    IDIAOracle public immutable oracle;
+    IPriceOracle public immutable oracle;
 
     uint256 public totalStaked;
     uint256 public totalShares;
@@ -47,12 +47,16 @@ contract NativeStaking is
 
     mapping(address => StakingPosition) private _positions;
 
+    // Add state variable for tracking stakers
+    address[] public stakers;
+    mapping(address => bool) public isStaker;
+
     constructor(
         address _oracle,
         address _operator,
         address _emergency
-    ) Ownable(msg.sender) Pausable() ReentrancyGuard() {
-        oracle = IDIAOracle(_oracle);
+    ) ERC20("Staked Native Token", "stNATIVE") {
+        oracle = IPriceOracle(_oracle);
         lastCompoundTimestamp = block.timestamp;
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -79,6 +83,11 @@ contract NativeStaking is
 
         totalStaked += msg.value;
         totalShares += shares;
+
+        if (!isStaker[msg.sender]) {
+            stakers.push(msg.sender);
+            isStaker[msg.sender] = true;
+        }
 
         emit Staked(msg.sender, msg.value, delegatedAmount);
     }
@@ -116,21 +125,36 @@ contract NativeStaking is
      * @notice Compounds rewards by converting to shares
      * @dev Only callable by authorized address
      */
-    function compoundRewards() external override onlyRole(OPERATOR_ROLE) {
-        uint256 currentRewards = rewardPool;
+    function compoundRewards() external payable onlyRole(OPERATOR_ROLE) {
+        uint256 currentRewards = msg.value;
         require(currentRewards > 0, "NativeStaking: No rewards");
 
-        uint256 newShares = _convertToShares(
-            currentRewards,
-            Math.Rounding.Floor
-        );
         uint256 delegatedAmount = _calculateDelegatedAmount(currentRewards);
-
-        rewardPool = 0;
-        totalShares += newShares;
         totalStaked += currentRewards;
 
+        // Iterate through stakers array
+        for (uint256 i = 0; i < stakers.length; i++) {
+            _compoundPositionRewards(stakers[i], currentRewards);
+        }
+
         emit RewardsCompounded(currentRewards, delegatedAmount);
+    }
+
+    function _compoundPositionRewards(address user, uint256 totalRewards) internal {
+        StakingPosition storage position = _positions[user];
+        if (position.shares == 0) return;
+
+        // Calculate user's share of rewards
+        uint256 userRewards = position.shares.mulDiv(
+            totalRewards,
+            totalShares,
+            Math.Rounding.Floor
+        );
+
+        // Update position's locked amount and collateral
+        position.lockedAmount += userRewards;
+        position.collateralAmount += _calculateDelegatedAmount(userRewards);
+        position.lastRewardTimestamp = block.timestamp;
     }
 
     /**
@@ -151,22 +175,22 @@ contract NativeStaking is
         uint256 assets,
         Math.Rounding rounding
     ) internal view returns (uint256) {
-        uint256 supply = totalShares;
+        uint256 supply = totalSupply();
         return
             (supply == 0)
                 ? assets
-                : assets.mulDiv(supply, totalStaked, rounding);
+                : assets.mulDiv(supply, totalAssets(), rounding);
     }
 
     function _convertToAssets(
         uint256 shares,
         Math.Rounding rounding
     ) internal view returns (uint256) {
-        uint256 supply = totalShares;
+        uint256 supply = totalSupply();
         return
             (supply == 0)
                 ? shares
-                : shares.mulDiv(totalStaked, supply, rounding);
+                : shares.mulDiv(totalAssets(), supply, rounding);
     }
 
     /**
@@ -205,7 +229,7 @@ contract NativeStaking is
      * @notice Gets native token price from oracle
      */
     function _getNativeTokenPrice() internal view returns (uint256) {
-        (uint256 price, ) = oracle.getValue("XFI/USD");
+        (uint256 price, ) = oracle.getXFIPrice();
         require(price > 0, "NativeStaking: Invalid price");
         return price;
     }
@@ -253,35 +277,42 @@ contract NativeStaking is
      * @notice Receive function to accept native tokens
      */
     receive() external payable {
-        rewardPool += msg.value;
-        emit RewardsDistributed(msg.value, 0);
+        // rewardPool += msg.value;
+        // emit RewardsDistributed(msg.value, 0);
     }
 
-    function distributeRewards(
-        uint256 amount,
-        uint256 newCollateralAmount
-    ) external override onlyRole(OPERATOR_ROLE) nonReentrant {
-        require(amount > 0, "NativeStaking: Zero rewards");
-        require(
-            block.timestamp >= lastCompoundTimestamp + COMPOUND_PERIOD,
-            "NativeStaking: Too early"
-        );
+    // function distributeRewards(
+    //     uint256 amount,
+    //     uint256 newCollateralAmount
+    // ) external override onlyRole(OPERATOR_ROLE) nonReentrant {
+    //     require(amount > 0, "NativeStaking: Zero rewards");
+    //     require(
+    //         block.timestamp >= lastCompoundTimestamp + COMPOUND_PERIOD,
+    //         "NativeStaking: Too early"
+    //     );
 
-        rewardPool += amount;
-        emit RewardsDistributed(amount, newCollateralAmount);
+    //     // Get rewards from oracle
+    //     (uint256 oracleRewards, uint256 timestamp) = oracle.getCurrentRewards();
+    //     require(oracleRewards == amount, "NativeStaking: Invalid reward amount");
+    //     require(timestamp >= lastCompoundTimestamp, "NativeStaking: Stale reward data");
+
+    //     rewardPool += amount;
+    //     lastCompoundTimestamp = block.timestamp;
+        
+    //     emit RewardsDistributed(amount, newCollateralAmount);
     }
 
-    function handleSlashing(
-        uint256 slashAmount,
-        uint256 timestamp
-    ) external override onlyRole(OPERATOR_ROLE) {
-        require(!slashingActive, "NativeStaking: Slashing already active");
+    // function handleSlashing(
+    //     uint256 slashAmount,
+    //     uint256 timestamp
+    // ) external override onlyRole(OPERATOR_ROLE) {
+    //     require(!slashingActive, "NativeStaking: Slashing already active");
 
-        slashingActive = true;
-        uint256 penaltyAmount = (totalStaked * SLASH_PENALTY_RATE) / 10000;
+    //     slashingActive = true;
+    //     uint256 penaltyAmount = (totalStaked * SLASH_PENALTY_RATE) / 10000;
 
-        emit ValidatorSlashed(penaltyAmount, timestamp);
-    }
+    //     emit ValidatorSlashed(penaltyAmount, timestamp);
+    // }
 
     // Emergency functions
     function pause() external onlyRole(EMERGENCY_ROLE) {
@@ -294,8 +325,21 @@ contract NativeStaking is
 
     function handleSlashing(uint256 slashAmount) external override {}
 
-    // function operator() external view returns (bool) {
-    //     return hasRole(OPERATOR_ROLE, msg.sender);
-    // }
+    function addOperator(address operator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _grantRole(OPERATOR_ROLE, operator);
+    }
 
+    function removeOperator(address operator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _revokeRole(OPERATOR_ROLE, operator);
+    }
+
+    function totalAssets() public view returns (uint256) {
+        (uint256 currentRewards, uint256 timestamp) = oracle.getCurrentRewards();
+        rewardPool = currentRewards;
+        return totalStaked + currentRewards;
+    }
+
+    function asset() public pure returns (address) {
+        return address(0); // Native token
+    }
 }
