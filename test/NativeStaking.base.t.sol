@@ -3,14 +3,17 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {NativeStakingHarness} from "./NativeStakingHarness.sol";
-import {MockDIAOracle} from "./mocks/MockDIAOracle.sol";
+import {MockUnifiedOracle} from "./mocks/MockUnifiedOracle.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract NativeStakingBaseTest is Test {
+    using Math for uint256;
+
     NativeStakingHarness public staking;
-    MockDIAOracle public oracle;
+    MockUnifiedOracle public oracle;
     
     // Test accounts
-    address public owner;
+    address public admin;
     address public operator = address(0x1);
     address public emergency = address(0x2);
     address public alice = address(0x3);
@@ -21,28 +24,27 @@ contract NativeStakingBaseTest is Test {
     uint256 public constant INITIAL_BALANCE = 1000 ether;
     uint256 public constant MIN_STAKE = 50 ether;
     uint256 public constant COMPOUND_PERIOD = 2 weeks;
-    uint256 public constant ORACLE_PRICE = 1 ether;
+    uint256 public constant ORACLE_PRICE = 1 ether; // 1 USD in 18 decimals
+    uint256 public constant DELEGATED_TOKEN_PRICE = 0.04 ether; // 0.04 USD in 18 decimals
 
     // Events from interfaces
     event Staked(address indexed user, uint256 nativeAmount, uint256 collateralAmount);
     event Unstaked(address indexed user, uint256 nativeAmount, uint256 rewardsAmount);
-    event RewardsDistributed(uint256 totalRewards, uint256 newCollateralMinted);
-    event ValidatorSlashed(uint256 slashAmount, uint256 timestamp);
     event RewardsCompounded(uint256 totalNativeRewards, uint256 newCollateralAmount);
 
     function setUp() public virtual {
-        // Setup owner
-        owner = address(this);
-        vm.label(owner, "Owner");
+        // Setup admin
+        admin = address(this);
+        vm.label(admin, "Admin");
         vm.label(operator, "Operator");
         vm.label(emergency, "Emergency");
         vm.label(alice, "Alice");
         vm.label(bob, "Bob");
         vm.label(carol, "Carol");
 
-        // Deploy and setup oracle
-        oracle = new MockDIAOracle();
-        oracle.setPrice("XFI/USD", ORACLE_PRICE);
+        // Deploy and setup mock oracle
+        oracle = new MockUnifiedOracle();
+        oracle.setXFIPrice(ORACLE_PRICE);
 
         // Deploy staking contract
         staking = new NativeStakingHarness(
@@ -64,22 +66,21 @@ contract NativeStakingBaseTest is Test {
         staking.stake{value: amount}();
     }
 
-    function _distributeRewards(uint256 amount) internal {
+    function _compoundRewards(uint256 amount) internal {
+        oracle.setRewards(amount);
         vm.prank(operator);
-        staking.distributeRewards(amount, 0);
-    }
-
-    function _warpToNextCompoundPeriod() internal {
-        vm.warp(block.timestamp + COMPOUND_PERIOD);
+        staking.compoundRewards{value: amount}();
     }
 
     function _checkStakingPosition(
         address user,
         uint256 expectedLocked,
+        uint256 expectedCollateral,
         uint256 expectedShares
     ) internal view {
-        (uint256 locked, , uint256 shares, ) = staking.getStakingPosition(user);
+        (uint256 locked, uint256 collateral, uint256 shares, ) = staking.getStakingPosition(user);
         assertEq(locked, expectedLocked, "Incorrect locked amount");
+        assertEq(collateral, expectedCollateral, "Incorrect collateral amount");
         assertEq(shares, expectedShares, "Incorrect shares amount");
     }
 
@@ -90,5 +91,9 @@ contract NativeStakingBaseTest is Test {
         uint256 rewards
     ) {
         return staking.getStakingPosition(user);
+    }
+
+    function _calculateExpectedDelegated(uint256 nativeAmount) internal pure returns (uint256) {
+        return (nativeAmount * ORACLE_PRICE) / DELEGATED_TOKEN_PRICE;
     }
 } 

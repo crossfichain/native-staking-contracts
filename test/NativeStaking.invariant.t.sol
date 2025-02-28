@@ -18,8 +18,8 @@ contract NativeStakingInvariantTest is NativeStakingBaseTest {
         bytes4[] memory selectors = new bytes4[](4);
         selectors[0] = handler.stake.selector;
         selectors[1] = handler.unstake.selector;
-        selectors[2] = handler.distributeRewards.selector;
-        selectors[3] = handler.handleSlashing.selector;
+        // selectors[2] = handler.distributeRewards.selector;
+        // selectors[3] = handler.handleSlashing.selector;
 
         targetSelector(FuzzSelector({
             addr: address(handler),

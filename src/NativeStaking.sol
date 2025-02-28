@@ -6,7 +6,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
+import {IUnifiedOracle} from "./interfaces/IUnifiedOracle.sol";
 import {INativeStaking} from "./interfaces/INativeStaking.sol";
 import {IStakingOperator} from "./interfaces/IStakingOperator.sol";
 
@@ -37,7 +37,7 @@ contract NativeStaking is
     uint256 private constant SLASH_PENALTY_RATE = 500; // 5% = 500 basis points
 
     // State variables
-    IPriceOracle public immutable oracle;
+    IUnifiedOracle public immutable oracle;
 
     uint256 public totalStaked;
     uint256 public totalShares;
@@ -56,7 +56,8 @@ contract NativeStaking is
         address _operator,
         address _emergency
     ) ERC20("Staked Native Token", "stNATIVE") {
-        oracle = IPriceOracle(_oracle);
+        require(_oracle != address(0), "NativeStaking: Zero oracle address");
+        oracle = IUnifiedOracle(_oracle);
         lastCompoundTimestamp = block.timestamp;
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -200,12 +201,20 @@ contract NativeStaking is
         uint256 amount
     ) internal view returns (uint256) {
         uint256 nativePrice = _getNativeTokenPrice();
-        return
-            amount.mulDiv(
-                nativePrice,
-                DELEGATED_TOKEN_PRICE,
-                Math.Rounding.Floor
-            );
+        
+        // First calculate the value in USD (18 decimals)
+        uint256 valueInUsd = amount.mulDiv(
+            nativePrice,
+            PRECISION,
+            Math.Rounding.Floor
+        );
+        
+        // Then convert to delegated tokens
+        return valueInUsd.mulDiv(
+            PRECISION,
+            DELEGATED_TOKEN_PRICE,
+            Math.Rounding.Floor
+        );
     }
 
     /**
@@ -229,6 +238,7 @@ contract NativeStaking is
      * @notice Gets native token price from oracle
      */
     function _getNativeTokenPrice() internal view returns (uint256) {
+        require(oracle.isOracleFresh(), "NativeStaking: Stale oracle data");
         (uint256 price, ) = oracle.getXFIPrice();
         require(price > 0, "NativeStaking: Invalid price");
         return price;
@@ -300,7 +310,7 @@ contract NativeStaking is
     //     lastCompoundTimestamp = block.timestamp;
         
     //     emit RewardsDistributed(amount, newCollateralAmount);
-    }
+    // }
 
     // function handleSlashing(
     //     uint256 slashAmount,
@@ -333,13 +343,20 @@ contract NativeStaking is
         _revokeRole(OPERATOR_ROLE, operator);
     }
 
-    function totalAssets() public view returns (uint256) {
-        (uint256 currentRewards, uint256 timestamp) = oracle.getCurrentRewards();
+    function updateCurrentRewards() external returns(uint256) {
+        require(oracle.isOracleFresh(), "NativeStaking: Stale oracle data");
+        (uint256 currentRewards, ) = oracle.getCurrentRewards();
         rewardPool = currentRewards;
+        return currentRewards;
+    }
+
+    function totalAssets() public view returns (uint256) {
+        (uint256 currentRewards, ) = oracle.getCurrentRewards();
         return totalStaked + currentRewards;
     }
 
     function asset() public pure returns (address) {
         return address(0); // Native token
     }
+    
 }

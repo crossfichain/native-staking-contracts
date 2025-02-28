@@ -68,36 +68,36 @@ contract StakingHandler is Test{
         }
     }
 
-    function distributeRewards(uint256 amount) public {
-        // Skip if no stakes
-        if (staking.totalStaked() == 0) return;
+    // function distributeRewards(uint256 amount) public {
+    //     // Skip if no stakes
+    //     if (staking.totalStaked() == 0) return;
         
-        amount = bound(amount, 0.1 ether, 10 ether);
+    //     amount = bound(amount, 0.1 ether, 10 ether);
         
-        // Ensure enough time has passed
-        vm.warp(block.timestamp + COMPOUND_PERIOD);
+    //     // Ensure enough time has passed
+    //     vm.warp(block.timestamp + COMPOUND_PERIOD);
         
-        vm.prank(staking.getRoleMember(staking.OPERATOR_ROLE(), 0));
-        try staking.distributeRewards(amount, 0) {
-            rewardCount++;
-        } catch {
-            failedMathOperations++;
-        }
-    }
+    //     vm.prank(staking.getRoleMember(staking.OPERATOR_ROLE(), 0));
+    //     try staking.distributeRewards(amount, 0) {
+    //         rewardCount++;
+    //     } catch {
+    //         failedMathOperations++;
+    //     }
+    // }
 
-    function handleSlashing(uint256 amount) public {
-        // Skip if no stakes or already slashed
-        if (staking.totalStaked() == 0 || staking.slashingActive()) return;
+    // function handleSlashing(uint256 amount) public {
+    //     // Skip if no stakes or already slashed
+    //     if (staking.totalStaked() == 0 || staking.slashingActive()) return;
         
-        amount = bound(amount, 0.1 ether, staking.totalStaked());
+    //     amount = bound(amount, 0.1 ether, staking.totalStaked());
         
-        vm.prank(staking.getRoleMember(staking.OPERATOR_ROLE(), 0));
-        try staking.handleSlashing(amount, block.timestamp) {
-            slashingCount++;
-        } catch {
-            failedMathOperations++;
-        }
-    }
+    //     vm.prank(staking.getRoleMember(staking.OPERATOR_ROLE(), 0));
+    //     try staking.handleSlashing(amount, block.timestamp) {
+    //         slashingCount++;
+    //     } catch {
+    //         failedMathOperations++;
+    //     }
+    // }
 
     // Helper functions
     function getOrCreateActor() internal returns (address) {

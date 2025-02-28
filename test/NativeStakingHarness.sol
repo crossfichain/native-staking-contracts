@@ -5,15 +5,11 @@ import {NativeStaking} from "../src/NativeStaking.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract NativeStakingHarness is NativeStaking {
-    uint256 public constant COMPOUND_PERIOD = 2 weeks;
-    // bytes32 public constant override OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-
     constructor(
         address _oracle,
         address _operator,
         address _emergency
     ) NativeStaking(_oracle, _operator, _emergency) {}
-    
 
     // Expose private functions for testing
     function exposed_convertToShares(
@@ -21,6 +17,13 @@ contract NativeStakingHarness is NativeStaking {
         Math.Rounding rounding
     ) external view returns (uint256) {
         return _convertToShares(assets, rounding);
+    }
+
+    function exposed_convertToAssets(
+        uint256 shares,
+        Math.Rounding rounding
+    ) external view returns (uint256) {
+        return _convertToAssets(shares, rounding);
     }
 
     function exposed_calculateDelegatedAmount(
@@ -39,26 +42,33 @@ contract NativeStakingHarness is NativeStaking {
         return _getNativeTokenPrice();
     }
 
-    // Expose constants for testing
-    // function exposed_DELEGATED_TOKEN_PRICE() external pure returns (uint256) {
-    //     return DELEGATED_TOKEN_PRICE;
-    // }
+    function exposed_compoundPositionRewards(
+        address user,
+        uint256 totalRewards
+    ) external {
+        _compoundPositionRewards(user, totalRewards);
+    }
 
-    // function exposed_MIN_STAKE() external pure returns (uint256) {
-    //     return MIN_STAKE;
-    // }
+    // Constants getters
+    function DELEGATED_TOKEN_PRICE() external pure returns (uint256) {
+        return 0.04 ether;
+    }
 
-    // function exposed_PRECISION() external pure returns (uint256) {
-    //     return PRECISION;
-    // }
+    function MIN_STAKE() external pure returns (uint256) {
+        return 50 ether;
+    }
 
-    // function exposed_COMPOUND_PERIOD() external pure returns (uint256) {
-    //     return COMPOUND_PERIOD;
-    // }
+    function PRECISION() external pure returns (uint256) {
+        return 1e18;
+    }
 
-    // function exposed_SLASH_PENALTY_RATE() external pure returns (uint256) {
-    //     return SLASH_PENALTY_RATE;
-    // // }
+    function COMPOUND_PERIOD() external pure returns (uint256) {
+        return 2 weeks;
+    }
+
+    function SLASH_PENALTY_RATE() external pure returns (uint256) {
+        return 500;
+    }
 
     function operator() external view returns (address) {
         return getRoleMember(OPERATOR_ROLE, 0);

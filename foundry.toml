@@ -2,6 +2,10 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+solc = "0.8.20"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 
@@ -9,3 +13,26 @@ libs = ["lib"]
 remappings = [
     "@openzeppelin/contracts=lib/openzeppelin-contracts/contracts"
 ]
+
+
+
+[rpc_endpoints]
+crossfi = "${CROSSFI_RPC}"
+crossfi_dev = "${CROSSFI_DEV_RPC}"
+crossfi_test = "${CROSSFI_TEST_RPC}"
+
+[etherscan]
+crossfi = { key = "no-key", url = "${CROSSFI_VERIFIER_URL}", chain = 4158 }
+crossfi_dev = { key = "no-key", url = "${CROSSFI_DEV_VERIFIER_URL}", chain = 4156 }
+crossfi_test = { key = "no-key", url = "${CROSSFI_TEST_VERIFIER_URL}", chain = 4157 }
+
+[profile.deploy]
+# More aggressive settings for deployment
+optimizer_runs = 1000000
+via_ir = true
+# Increase timeout for deployment
+timeout = 1000000
+
+# Retry settings
+retry = 5
+delay = 5 # 5 seconds between retries
