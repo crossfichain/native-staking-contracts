@@ -1,37 +1,48 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 /**
  * @title IOracle
- * @notice Interface for the Oracle contract
- * @dev Defines the oracle functionality for price data and reward rates
+ * @dev Interface for the Oracle that provides XFI/MPX price data and validator information
+ * This oracle bridges the gap between EVM contracts and Cosmos network information
  */
 interface IOracle {
-    // ============ Events ============
-    event OracleUpdated(address indexed newOracle);
-    event XFIPriceKeyUpdated(string newKey);
-    event RewardRateUpdated(uint256 newRate);
-    event RewardPeriodUpdated(uint256 start, uint256 end);
+    /**
+     * @dev Returns the current price of the given symbol
+     * @param symbol The symbol to get the price for (e.g., "XFI", "MPX")
+     * @return The price with 18 decimals of precision
+     */
+    function getPrice(string calldata symbol) external view returns (uint256);
     
-    // ============ Admin Functions ============
+    /**
+     * @dev Checks if a validator is active and valid for staking
+     * @param validator The validator address/ID to check
+     * @return True if the validator is active and valid for staking
+     */
+    function isValidatorActive(string calldata validator) external view returns (bool);
     
-    function setDIAOracle(address _diaOracle) external;
+    /**
+     * @dev Returns the total amount of XFI staked via the protocol (for APY model)
+     * @return The total amount of XFI staked with 18 decimals of precision
+     */
+    function getTotalStakedXFI() external view returns (uint256);
     
-    function setXFIPriceKey(string calldata _xfiPriceKey) external;
+    /**
+     * @dev Returns the current APR for staking with a specific validator
+     * @param validator The validator address/ID
+     * @return The current APR as a percentage with 18 decimals (e.g., 10% = 10 * 10^18)
+     */
+    function getValidatorAPR(string calldata validator) external view returns (uint256);
     
-    function updateRewardRate(uint256 _rewardRate) external;
+    /**
+     * @dev Returns the current APY for the compound staking model
+     * @return The current APY as a percentage with 18 decimals (e.g., 12% = 12 * 10^18)
+     */
+    function getCurrentAPY() external view returns (uint256);
     
-    function setRewardPeriod(uint256 _start, uint256 _end) external;
-    
-    // ============ View Functions ============
-    
-    function getXFIPrice() external view returns (uint256 price, uint256 timestamp);
-    
-    function getCurrentRewardRate() external view returns (uint256 rate, uint256 timestamp);
-    
-    function getCurrentAPR() external view returns (uint256);
-    
-    function isOracleFresh() external view returns (bool);
-    
-    function getRewardPeriod() external view returns (uint256 start, uint256 end);
+    /**
+     * @dev Returns the current unbonding period in seconds
+     * @return The unbonding period in seconds
+     */
+    function getUnbondingPeriod() external view returns (uint256);
 } 
