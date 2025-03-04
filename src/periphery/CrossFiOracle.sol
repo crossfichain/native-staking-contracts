@@ -10,8 +10,9 @@ import "../interfaces/IOracle.sol";
 
 /**
  * @title CrossFiOracle
- * @dev Oracle contract that provides price data and validator information
+ * @dev Oracle contract that provides price data and staking information
  * Serves as a bridge between the Cosmos chain and the EVM chain
+ * Validator information is now just informational as validation occurs off-chain
  * Implements the IOracle interface
  */
 contract CrossFiOracle is 
@@ -36,6 +37,7 @@ contract CrossFiOracle is
     mapping(string => uint256) private _validatorAPRs;
     uint256 private _totalStakedXFI;
     uint256 private _currentAPY;
+    uint256 private _currentAPR;
     uint256 private _unbondingPeriod;
     
     // Events
@@ -44,6 +46,7 @@ contract CrossFiOracle is
     event ValidatorAPRUpdated(string indexed validator, uint256 apr);
     event TotalStakedXFIUpdated(uint256 amount);
     event CurrentAPYUpdated(uint256 apy);
+    event CurrentAPRUpdated(uint256 apr);
     event UnbondingPeriodUpdated(uint256 period);
     
     /**
@@ -63,6 +66,10 @@ contract CrossFiOracle is
         
         // Default unbonding period (21 days in seconds)
         _unbondingPeriod = 21 days;
+        
+        // Default APR and APY values
+        _currentAPY = 8 * PRICE_PRECISION / 100;  // 8%
+        _currentAPR = 10 * PRICE_PRECISION / 100; // 10%
     }
     
     /**
@@ -79,7 +86,8 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Updates the active status of a validator
+     * @dev Updates the active status of a validator (informational only)
+     * This is now only for informational purposes as validation occurs off-chain
      * @param validator The validator address/ID
      * @param isActive Whether the validator is active
      * @param apr The APR with 18 decimals of precision
@@ -96,7 +104,8 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Updates multiple validators status at once
+     * @dev Updates multiple validators status at once (informational only)
+     * This is now only for informational purposes as validation occurs off-chain
      * @param validators Array of validator addresses/IDs
      * @param statuses Array of active statuses
      */
@@ -114,7 +123,8 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Updates the APR for a validator
+     * @dev Updates the APR for a validator (informational only)
+     * This is now only for informational purposes as validation occurs off-chain
      * @param validator The validator address/ID
      * @param apr The APR with 18 decimals of precision
      */
@@ -125,24 +135,6 @@ contract CrossFiOracle is
     {
         _validatorAPRs[validator] = apr;
         emit ValidatorAPRUpdated(validator, apr);
-    }
-    
-    /**
-     * @dev Updates multiple validators APR at once
-     * @param validators Array of validator addresses/IDs
-     * @param aprs Array of APRs
-     */
-    function bulkSetValidatorAPR(string[] calldata validators, uint256[] calldata aprs) 
-        external 
-        onlyRole(ORACLE_UPDATER_ROLE) 
-        whenNotPaused 
-    {
-        require(validators.length == aprs.length, "Length mismatch");
-        
-        for (uint256 i = 0; i < validators.length; i++) {
-            _validatorAPRs[validators[i]] = aprs[i];
-            emit ValidatorAPRUpdated(validators[i], aprs[i]);
-        }
     }
     
     /**
@@ -172,6 +164,19 @@ contract CrossFiOracle is
     }
     
     /**
+     * @dev Updates the current APR for the APR staking model
+     * @param apr The current APR as a percentage (e.g., 12 for 12%)
+     */
+    function setCurrentAPR(uint256 apr) 
+        external 
+        onlyRole(ORACLE_UPDATER_ROLE) 
+        whenNotPaused 
+    {
+        _currentAPR = apr * PRICE_PRECISION / 100; // Convert from percentage to 18 decimal precision
+        emit CurrentAPRUpdated(_currentAPR);
+    }
+    
+    /**
      * @dev Updates the unbonding period
      * @param period The unbonding period in seconds
      */
@@ -198,7 +203,8 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Checks if a validator is active and valid for staking
+     * @dev Checks if a validator is active (informational only)
+     * This is now only for informational purposes as validation occurs off-chain
      * @param validator The validator address/ID to check
      * @return True if the validator is active
      */
@@ -225,7 +231,8 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Returns the current APR for staking with a specific validator
+     * @dev Returns the current APR for staking with a specific validator (informational only)
+     * This is now only for informational purposes as validation occurs off-chain
      * @param validator The validator address/ID
      * @return The current APR as a percentage with 18 decimals
      */
@@ -249,6 +256,19 @@ contract CrossFiOracle is
         returns (uint256) 
     {
         return _currentAPY;
+    }
+    
+    /**
+     * @dev Returns the current APR for the compound staking model
+     * @return The current APR as a percentage with 18 decimals
+     */
+    function getCurrentAPR() 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        return _currentAPR;
     }
     
     /**

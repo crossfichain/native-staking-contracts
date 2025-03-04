@@ -3,7 +3,8 @@ pragma solidity 0.8.26;
 
 /**
  * @title INativeStaking
- * @dev Interface for the Native Staking contract that handles direct delegation to validators (APR model)
+ * @dev Interface for the Native Staking contract that handles staking operations
+ * Validator information is passed to events for off-chain processing
  */
 interface INativeStaking {
     /**
@@ -11,44 +12,40 @@ interface INativeStaking {
      * @param amount The amount of XFI staked
      * @param stakedAt The timestamp when the stake was created
      * @param unbondingAt The timestamp when unbonding was requested (0 if not unbonding)
-     * @param validator The validator address/ID this stake is delegated to
      */
     struct StakeInfo {
         uint256 amount;
         uint256 stakedAt;
         uint256 unbondingAt;
-        string validator;
     }
     
     /**
      * @dev Struct to track pending unstake requests
      * @param amount The amount to unstake
      * @param unlockTime The timestamp when funds can be claimed
-     * @param validator The validator address/ID this unstake is from
      * @param completed Whether the unstake has been completed (claimed)
      */
     struct UnstakeRequest {
         uint256 amount;
         uint256 unlockTime;
-        string validator;
         bool completed;
     }
     
     /**
-     * @dev Stakes XFI to a specified validator
+     * @dev Stakes XFI with validator information passed to events
      * @param user The user who is staking
      * @param amount The amount of XFI to stake
-     * @param validator The validator address/ID to stake to
+     * @param validator The validator address/ID (only used in events, not stored)
      * @param tokenAddress The address of token being staked (XFI or WXFI)
      * @return success Boolean indicating if the stake was successful
      */
     function stake(address user, uint256 amount, string calldata validator, address tokenAddress) external returns (bool success);
     
     /**
-     * @dev Requests to unstake XFI from a specified validator
+     * @dev Requests to unstake XFI with validator information passed to events
      * @param user The user who is unstaking
      * @param amount The amount of XFI to unstake
-     * @param validator The validator address/ID to unstake from
+     * @param validator The validator address/ID (only used in events, not stored)
      * @return requestId The ID of the unstake request
      */
     function requestUnstake(address user, uint256 amount, string calldata validator) external returns (uint256 requestId);

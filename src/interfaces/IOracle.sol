@@ -3,8 +3,8 @@ pragma solidity 0.8.26;
 
 /**
  * @title IOracle
- * @dev Interface for the Oracle that provides XFI/MPX price data and validator information
- * This oracle bridges the gap between EVM contracts and Cosmos network information
+ * @dev Interface for the Oracle that provides XFI/MPX price data and staking information
+ * Validator-specific functionality is now optional as validation occurs off-chain
  */
 interface IOracle {
     /**
@@ -15,7 +15,8 @@ interface IOracle {
     function getPrice(string calldata symbol) external view returns (uint256);
     
     /**
-     * @dev Checks if a validator is active and valid for staking
+     * @dev [OPTIONAL] Checks if a validator is active
+     * This is now only for informational purposes as validation occurs off-chain
      * @param validator The validator address/ID to check
      * @return True if the validator is active and valid for staking
      */
@@ -28,17 +29,24 @@ interface IOracle {
     function getTotalStakedXFI() external view returns (uint256);
     
     /**
-     * @dev Returns the current APR for staking with a specific validator
+     * @dev [OPTIONAL] Returns the current APR for staking with a specific validator
+     * This is now only for informational purposes as validation occurs off-chain
      * @param validator The validator address/ID
-     * @return The current APR as a percentage with 18 decimals (e.g., 10% = 10 * 10^18)
+     * @return The current APR as a percentage with 18 decimals
      */
     function getValidatorAPR(string calldata validator) external view returns (uint256);
     
     /**
      * @dev Returns the current APY for the compound staking model
-     * @return The current APY as a percentage with 18 decimals (e.g., 12% = 12 * 10^18)
+     * @return The current APY as a percentage with 18 decimals
      */
     function getCurrentAPY() external view returns (uint256);
+    
+    /**
+     * @dev Returns the current APR for the APR staking model
+     * @return The current APR as a percentage with 18 decimals
+     */
+    function getCurrentAPR() external view returns (uint256);
     
     /**
      * @dev Returns the current unbonding period in seconds

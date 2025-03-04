@@ -5,12 +5,13 @@ pragma solidity 0.8.26;
  * @title INativeStakingManager
  * @dev Interface for the Native Staking Manager contract that routes staking operations
  * to the appropriate staking contract (APR or APY)
+ * Validator information is now only passed to events for off-chain processing
  */
 interface INativeStakingManager {
     /**
-     * @dev Stakes XFI using the APR model (direct staking to a validator)
+     * @dev Stakes XFI using the APR model
      * @param amount The amount of XFI to stake
-     * @param validator The validator address/ID to stake to
+     * @param validator The validator address/ID (only for events, not stored on-chain)
      * @return success Boolean indicating if the stake was successful
      */
     function stakeAPR(uint256 amount, string calldata validator) external payable returns (bool success);
@@ -25,7 +26,7 @@ interface INativeStakingManager {
     /**
      * @dev Requests to unstake XFI from the APR model
      * @param amount The amount of XFI to unstake
-     * @param validator The validator address/ID to unstake from
+     * @param validator The validator address/ID (only for events, not stored on-chain)
      * @return requestId The ID of the unstake request
      */
     function unstakeAPR(uint256 amount, string calldata validator) external returns (uint256 requestId);

@@ -18,6 +18,7 @@ import "../interfaces/IWXFI.sol";
  * @dev Central router contract for the Native Staking system
  * Routes staking operations to the appropriate staking contract (APR or APY)
  * Handles both native XFI and wrapped XFI (WXFI)
+ * Validator information is now only passed to events for off-chain processing
  */
 contract NativeStakingManager is 
     Initializable, 
@@ -83,9 +84,10 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Stakes XFI using the APR model (direct staking to a validator)
+     * @dev Stakes XFI using the APR model
+     * Validator parameter is only used in events for off-chain processing
      * @param amount The amount of XFI to stake
-     * @param validator The validator address/ID to stake to
+     * @param validator The validator address/ID (only for events, not stored on-chain)
      * @return success Boolean indicating if the stake was successful
      */
     function stakeAPR(uint256 amount, string calldata validator) 
@@ -117,7 +119,7 @@ contract NativeStakingManager is
             tokenAddress = address(wxfi);
         }
         
-        // Call the APR staking contract
+        // Call the APR staking contract, passing validator for events
         success = aprContract.stake(msg.sender, amount, validator, tokenAddress);
         
         emit StakedAPR(msg.sender, amount, validator, success);
@@ -169,8 +171,9 @@ contract NativeStakingManager is
     
     /**
      * @dev Requests to unstake XFI from the APR model
+     * Validator parameter is only used in events for off-chain processing
      * @param amount The amount of XFI to unstake
-     * @param validator The validator address/ID to unstake from
+     * @param validator The validator address/ID (only for events, not stored on-chain)
      * @return requestId The ID of the unstake request
      */
     function unstakeAPR(uint256 amount, string calldata validator) 
@@ -180,6 +183,7 @@ contract NativeStakingManager is
         nonReentrant 
         returns (uint256 requestId) 
     {
+        // Call APR contract and pass validator for events
         requestId = aprContract.requestUnstake(msg.sender, amount, validator);
         
         emit UnstakedAPR(msg.sender, amount, validator, requestId);
