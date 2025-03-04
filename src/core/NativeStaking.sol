@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interfaces/INativeStaking.sol";
 import "../interfaces/IOracle.sol";
@@ -26,63 +25,48 @@ contract NativeStaking is
     UUPSUpgradeable,
     INativeStaking 
 {
-    using SafeERC20Upgradeable for IERC20;
-    
     // Constants
     uint256 private constant PRECISION = 1e18;
     
     // Custom roles
     bytes32 public constant STAKING_MANAGER_ROLE = keccak256("STAKING_MANAGER_ROLE");
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
     // State variables
-    address public stakingToken; // XFI or WXFI
+    IERC20 public stakingToken;
     IOracle public oracle;
-    
-    // Mapping of user -> array of stake IDs
-    mapping(address => uint256[]) private _userStakeIds;
-    
-    // Mapping of stakeId -> StakeInfo
-    mapping(uint256 => StakeInfo) private _stakes;
-    
-    // Mapping of user -> array of unstake request IDs
-    mapping(address => uint256[]) private _userUnstakeRequestIds;
-    
-    // Mapping of requestId -> UnstakeRequest
-    mapping(uint256 => UnstakeRequest) private _unstakeRequests;
-    
-    // Mapping of user -> unclaimed rewards
-    mapping(address => uint256) private _unclaimedRewards;
-    
-    // Counter for stake IDs
-    uint256 private _nextStakeId;
-    
-    // Counter for unstake request IDs
-    uint256 private _nextUnstakeRequestId;
-    
-    // Minimum stake amount
     uint256 public minStakeAmount;
-    
-    // Maximum number of concurrent stakes per user
     uint256 public maxStakesPerUser;
     
+    // Mappings
+    mapping(address => StakeInfo[]) private _userStakes;
+    mapping(address => UnstakeRequest[]) private _userUnstakeRequests;
+    mapping(address => uint256) private _totalStakedByUser;
+    mapping(address => uint256) private _lastClaimTime;
+    mapping(address => mapping(string => uint256)) private _totalStakedByUserPerValidator;
+    mapping(string => uint256) private _totalStakedPerValidator;
+    
     // Events
-    event Staked(address indexed user, uint256 indexed stakeId, string validator, uint256 amount, uint256 mpxEstimate);
-    event UnstakeRequested(address indexed user, uint256 indexed requestId, string validator, uint256 amount, uint256 unlockTime);
-    event UnstakeClaimed(address indexed user, uint256 indexed requestId, string validator, uint256 amount);
+    event Staked(address indexed user, uint256 amount, string validator);
+    event UnstakeRequested(address indexed user, uint256 amount, string validator, uint256 indexed requestId, uint256 unlockTime);
+    event UnstakeClaimed(address indexed user, uint256 amount, uint256 indexed requestId);
     event RewardsClaimed(address indexed user, uint256 amount);
-    event RewardsAdded(address indexed user, uint256 amount);
-    event MinStakeAmountUpdated(uint256 amount);
-    event MaxStakesPerUserUpdated(uint256 amount);
+    event RewardsAdded(string validator, uint256 amount);
+    event TreasuryUpdated(address newTreasury);
+    event ValidatorUpdated(string validator, bool isActive);
+    event MinStakeAmountUpdated(uint256 newAmount);
+    event MaxStakesPerUserUpdated(uint256 newLimit);
     
     /**
      * @dev Initializes the contract
-     * @param _stakingToken The address of the staking token (XFI or WXFI)
+     * @param _stakingToken The address of the staking token (WXFI)
      * @param _oracle The address of the oracle contract
      */
-    function initialize(address _stakingToken, address _oracle) external initializer {
+    function initialize(
+        address _stakingToken,
+        address _oracle
+    ) external initializer {
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
@@ -90,18 +74,15 @@ contract NativeStaking is
         
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(STAKING_MANAGER_ROLE, msg.sender);
-        _grantRole(OPERATOR_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(UPGRADER_ROLE, msg.sender);
         
-        stakingToken = _stakingToken;
+        stakingToken = IERC20(_stakingToken);
         oracle = IOracle(_oracle);
         
-        minStakeAmount = 1 * PRECISION; // 1 XFI
+        // Default values
+        minStakeAmount = 1 ether;
         maxStakesPerUser = 10;
-        
-        _nextStakeId = 1;
-        _nextUnstakeRequestId = 1;
     }
     
     /**
@@ -109,45 +90,43 @@ contract NativeStaking is
      * @param user The user who is staking
      * @param amount The amount of XFI to stake
      * @param validator The validator address/ID to stake to
-     * @param tokenAddress The address of the token being staked (must match stakingToken)
+     * @param tokenAddress The address of token being staked (XFI or WXFI)
      * @return success Boolean indicating if the stake was successful
      */
     function stake(address user, uint256 amount, string calldata validator, address tokenAddress) 
         external 
         override 
-        whenNotPaused 
-        nonReentrant 
         onlyRole(STAKING_MANAGER_ROLE) 
+        whenNotPaused 
         returns (bool success) 
     {
-        require(user != address(0), "Invalid user address");
         require(amount >= minStakeAmount, "Amount below minimum");
-        require(tokenAddress == stakingToken, "Invalid token");
+        require(_userStakes[user].length < maxStakesPerUser, "Max stakes reached");
         require(oracle.isValidatorActive(validator), "Validator not active");
-        require(_userStakeIds[user].length < maxStakesPerUser, "Max stakes reached");
         
-        // Store the stake information
-        uint256 stakeId = _nextStakeId++;
+        // Transfer tokens from the manager contract
+        bool transferred = IERC20(tokenAddress).transferFrom(msg.sender, address(this), amount);
+        require(transferred, "Transfer failed");
         
-        _stakes[stakeId] = StakeInfo({
+        // Add stake to user's stakes
+        StakeInfo memory newStake = StakeInfo({
             amount: amount,
             stakedAt: block.timestamp,
-            unbondingAt: 0, // 0 means not unbonding
+            unbondingAt: 0,
             validator: validator
         });
         
-        _userStakeIds[user].push(stakeId);
+        _userStakes[user].push(newStake);
+        _totalStakedByUser[user] += amount;
+        _totalStakedByUserPerValidator[user][validator] += amount;
+        _totalStakedPerValidator[validator] += amount;
         
-        // Calculate MPX estimate based on current prices
-        uint256 xfiPrice = oracle.getPrice("XFI");
-        uint256 mpxPrice = oracle.getPrice("MPX");
-        uint256 mpxEstimate = 0;
-        
-        if (mpxPrice > 0 && xfiPrice > 0) {
-            mpxEstimate = (amount * xfiPrice) / mpxPrice;
+        // Set initial claim time if first stake
+        if (_lastClaimTime[user] == 0) {
+            _lastClaimTime[user] = block.timestamp;
         }
         
-        emit Staked(user, stakeId, validator, amount, mpxEstimate);
+        emit Staked(user, amount, validator);
         
         return true;
     }
@@ -162,107 +141,65 @@ contract NativeStaking is
     function requestUnstake(address user, uint256 amount, string calldata validator) 
         external 
         override 
-        whenNotPaused 
-        nonReentrant 
         onlyRole(STAKING_MANAGER_ROLE) 
+        whenNotPaused 
         returns (uint256 requestId) 
     {
-        require(user != address(0), "Invalid user address");
-        require(amount > 0, "Amount must be positive");
+        require(amount > 0, "Amount must be > 0");
+        require(_totalStakedByUserPerValidator[user][validator] >= amount, "Insufficient staked amount");
         
-        // Find the stake with the matching validator and sufficient amount
-        (uint256 stakeId, uint256 remainingAmount) = _findAndUpdateStake(user, validator, amount);
+        // Find stakes for this validator and mark them for unbonding
+        uint256 remainingToUnbond = amount;
+        for (uint256 i = 0; i < _userStakes[user].length && remainingToUnbond > 0; i++) {
+            if (_stringEquals(_userStakes[user][i].validator, validator) && _userStakes[user][i].unbondingAt == 0) {
+                uint256 stakeAmount = _userStakes[user][i].amount;
+                uint256 amountToUnbond = stakeAmount <= remainingToUnbond ? stakeAmount : remainingToUnbond;
+                
+                if (amountToUnbond == stakeAmount) {
+                    // Mark entire stake for unbonding
+                    _userStakes[user][i].unbondingAt = block.timestamp;
+                } else {
+                    // Split stake: reduce existing stake and create new one for unbonding
+                    _userStakes[user][i].amount -= amountToUnbond;
+                    
+                    StakeInfo memory newStake = StakeInfo({
+                        amount: amountToUnbond,
+                        stakedAt: _userStakes[user][i].stakedAt,
+                        unbondingAt: block.timestamp,
+                        validator: validator
+                    });
+                    
+                    _userStakes[user].push(newStake);
+                }
+                
+                remainingToUnbond -= amountToUnbond;
+            }
+        }
         
-        // Calculate unlock time based on unbonding period
+        require(remainingToUnbond == 0, "Could not unstake full amount");
+        
+        // Create unstake request
         uint256 unbondingPeriod = oracle.getUnbondingPeriod();
         uint256 unlockTime = block.timestamp + unbondingPeriod;
         
-        // Create unstake request
-        requestId = _nextUnstakeRequestId++;
-        
-        _unstakeRequests[requestId] = UnstakeRequest({
+        UnstakeRequest memory request = UnstakeRequest({
             amount: amount,
             unlockTime: unlockTime,
             validator: validator,
             completed: false
         });
         
-        _userUnstakeRequestIds[user].push(requestId);
+        _userUnstakeRequests[user].push(request);
+        requestId = _userUnstakeRequests[user].length - 1;
         
-        // If stake is fully unstaked, mark it as unbonding
-        if (remainingAmount == 0) {
-            _stakes[stakeId].unbondingAt = block.timestamp;
-        }
+        // Update totals
+        _totalStakedByUser[user] -= amount;
+        _totalStakedByUserPerValidator[user][validator] -= amount;
+        _totalStakedPerValidator[validator] -= amount;
         
-        emit UnstakeRequested(user, requestId, validator, amount, unlockTime);
+        emit UnstakeRequested(user, amount, validator, requestId, unlockTime);
         
         return requestId;
-    }
-    
-    /**
-     * @dev Helper function to find and update a stake
-     * @param user The user address
-     * @param validator The validator to unstake from
-     * @param amount The amount to unstake
-     * @return stakeId The ID of the stake that was updated
-     * @return remainingAmount The amount remaining in the stake after unstaking
-     */
-    function _findAndUpdateStake(address user, string calldata validator, uint256 amount) 
-        private 
-        returns (uint256 stakeId, uint256 remainingAmount) 
-    {
-        uint256[] storage stakeIds = _userStakeIds[user];
-        require(stakeIds.length > 0, "No stakes found");
-        
-        bool found = false;
-        uint256 totalAvailable = 0;
-        
-        // First, calculate total staked with this validator
-        for (uint256 i = 0; i < stakeIds.length; i++) {
-            StakeInfo storage stake = _stakes[stakeIds[i]];
-            if (
-                keccak256(bytes(stake.validator)) == keccak256(bytes(validator)) && 
-                stake.unbondingAt == 0 // Not already unbonding
-            ) {
-                totalAvailable += stake.amount;
-            }
-        }
-        
-        require(totalAvailable >= amount, "Insufficient staked amount");
-        
-        // Now find a stake to update
-        uint256 amountToUnstake = amount;
-        
-        for (uint256 i = 0; i < stakeIds.length && amountToUnstake > 0; i++) {
-            stakeId = stakeIds[i];
-            StakeInfo storage stake = _stakes[stakeId];
-            
-            if (
-                keccak256(bytes(stake.validator)) == keccak256(bytes(validator)) && 
-                stake.unbondingAt == 0 // Not already unbonding
-            ) {
-                found = true;
-                
-                if (stake.amount <= amountToUnstake) {
-                    // Fully unstake this position
-                    amountToUnstake -= stake.amount;
-                    stake.amount = 0;
-                    remainingAmount = 0;
-                } else {
-                    // Partially unstake
-                    stake.amount -= amountToUnstake;
-                    amountToUnstake = 0;
-                    remainingAmount = stake.amount;
-                }
-                
-                if (amountToUnstake == 0) {
-                    break;
-                }
-            }
-        }
-        
-        require(found, "No matching stake found");
-        return (stakeId, remainingAmount);
     }
     
     /**
@@ -274,64 +211,46 @@ contract NativeStaking is
     function claimUnstake(address user, uint256 requestId) 
         external 
         override 
-        nonReentrant 
+        onlyRole(STAKING_MANAGER_ROLE) 
         returns (uint256 amount) 
     {
-        require(user != address(0), "Invalid user address");
-        require(_isUserUnstakeRequest(user, requestId), "Not user's request");
+        require(requestId < _userUnstakeRequests[user].length, "Invalid request ID");
+        UnstakeRequest storage request = _userUnstakeRequests[user][requestId];
         
-        UnstakeRequest storage request = _unstakeRequests[requestId];
         require(!request.completed, "Already claimed");
         require(block.timestamp >= request.unlockTime, "Still in unbonding period");
         
-        request.completed = true;
         amount = request.amount;
+        request.completed = true;
         
-        // Transfer the tokens back to the user
-        IERC20(stakingToken).safeTransfer(user, amount);
+        // Claim any pending rewards first
+        _claimRewards(user);
         
-        emit UnstakeClaimed(user, requestId, request.validator, amount);
+        // Transfer tokens back to the user via manager
+        bool transferred = stakingToken.transfer(msg.sender, amount);
+        require(transferred, "Transfer failed");
+        
+        emit UnstakeClaimed(user, amount, requestId);
         
         return amount;
     }
     
     /**
-     * @dev Helper function to check if an unstake request belongs to a user
-     * @param user The user address
-     * @param requestId The unstake request ID
-     * @return True if the request belongs to the user
-     */
-    function _isUserUnstakeRequest(address user, uint256 requestId) private view returns (bool) {
-        uint256[] storage requestIds = _userUnstakeRequestIds[user];
-        
-        for (uint256 i = 0; i < requestIds.length; i++) {
-            if (requestIds[i] == requestId) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * @dev Adds rewards for a user (called by the operator)
-     * @param user The user to add rewards for
+     * @dev Adds rewards to be distributed
+     * @param validator The validator that generated the rewards
      * @param amount The amount of rewards to add
-     * @return success Boolean indicating if the operation was successful
+     * @return success Boolean indicating if the addition was successful
      */
-    function addRewards(address user, uint256 amount) 
+    function addRewards(string calldata validator, uint256 amount) 
         external 
-        whenNotPaused 
-        nonReentrant 
-        onlyRole(OPERATOR_ROLE) 
+        onlyRole(STAKING_MANAGER_ROLE) 
         returns (bool success) 
     {
-        require(user != address(0), "Invalid user address");
-        require(amount > 0, "Amount must be positive");
+        // For APR model, rewards are claimed on-demand based on APR
+        // This function can be used to actually add extra rewards
+        // In a real implementation, this would update some internal reward state
         
-        _unclaimedRewards[user] += amount;
-        
-        emit RewardsAdded(user, amount);
+        emit RewardsAdded(validator, amount);
         
         return true;
     }
@@ -344,28 +263,49 @@ contract NativeStaking is
     function claimRewards(address user) 
         external 
         override 
-        nonReentrant 
+        onlyRole(STAKING_MANAGER_ROLE) 
         returns (uint256 amount) 
     {
-        require(user != address(0), "Invalid user address");
-        require(
-            msg.sender == user || 
-            hasRole(STAKING_MANAGER_ROLE, msg.sender) || 
-            hasRole(OPERATOR_ROLE, msg.sender), 
-            "Not authorized"
-        );
+        return _claimRewards(user);
+    }
+    
+    /**
+     * @dev Internal function to claim staking rewards
+     * @param user The user to claim rewards for
+     * @return amount The amount of rewards claimed
+     */
+    function _claimRewards(address user) private returns (uint256 amount) {
+        uint256 rewards = getUnclaimedRewards(user);
         
-        amount = _unclaimedRewards[user];
-        require(amount > 0, "No rewards to claim");
+        if (rewards > 0) {
+            _lastClaimTime[user] = block.timestamp;
+            
+            // Transfer rewards to the user via manager
+            bool transferred = stakingToken.transfer(msg.sender, rewards);
+            require(transferred, "Transfer failed");
+            
+            emit RewardsClaimed(user, rewards);
+        }
         
-        _unclaimedRewards[user] = 0;
-        
-        // Transfer the rewards to the user
-        IERC20(stakingToken).safeTransfer(user, amount);
-        
-        emit RewardsClaimed(user, amount);
-        
-        return amount;
+        return rewards;
+    }
+    
+    /**
+     * @dev Gets a specific stake for a user
+     * @param user The user to get the stake for
+     * @param index The index of the stake
+     * @return amount The amount staked
+     * @return validator The validator ID
+     * @return timestamp The stake timestamp
+     */
+    function getUserStake(address user, uint256 index) 
+        external 
+        view 
+        returns (uint256 amount, string memory validator, uint256 timestamp) 
+    {
+        require(index < _userStakes[user].length, "Invalid stake index");
+        StakeInfo storage stake = _userStakes[user][index];
+        return (stake.amount, stake.validator, stake.stakedAt);
     }
     
     /**
@@ -379,14 +319,7 @@ contract NativeStaking is
         override 
         returns (StakeInfo[] memory) 
     {
-        uint256[] storage stakeIds = _userStakeIds[user];
-        StakeInfo[] memory result = new StakeInfo[](stakeIds.length);
-        
-        for (uint256 i = 0; i < stakeIds.length; i++) {
-            result[i] = _stakes[stakeIds[i]];
-        }
-        
-        return result;
+        return _userStakes[user];
     }
     
     /**
@@ -400,14 +333,7 @@ contract NativeStaking is
         override 
         returns (UnstakeRequest[] memory) 
     {
-        uint256[] storage requestIds = _userUnstakeRequestIds[user];
-        UnstakeRequest[] memory result = new UnstakeRequest[](requestIds.length);
-        
-        for (uint256 i = 0; i < requestIds.length; i++) {
-            result[i] = _unstakeRequests[requestIds[i]];
-        }
-        
-        return result;
+        return _userUnstakeRequests[user];
     }
     
     /**
@@ -421,17 +347,7 @@ contract NativeStaking is
         override 
         returns (uint256) 
     {
-        uint256[] storage stakeIds = _userStakeIds[user];
-        uint256 total = 0;
-        
-        for (uint256 i = 0; i < stakeIds.length; i++) {
-            StakeInfo storage stake = _stakes[stakeIds[i]];
-            if (stake.unbondingAt == 0) { // Only count active stakes
-                total += stake.amount;
-            }
-        }
-        
-        return total;
+        return _totalStakedByUser[user];
     }
     
     /**
@@ -440,12 +356,36 @@ contract NativeStaking is
      * @return The total amount of unclaimed rewards
      */
     function getUnclaimedRewards(address user) 
-        external 
+        public 
         view 
         override 
         returns (uint256) 
     {
-        return _unclaimedRewards[user];
+        if (_totalStakedByUser[user] == 0 || _lastClaimTime[user] == 0) {
+            return 0;
+        }
+        
+        uint256 totalRewards = 0;
+        uint256 timeElapsed = block.timestamp - _lastClaimTime[user];
+        
+        // Calculate rewards for each active stake
+        for (uint256 i = 0; i < _userStakes[user].length; i++) {
+            StakeInfo storage stake = _userStakes[user][i];
+            
+            // Skip if stake is in unbonding
+            if (stake.unbondingAt > 0) {
+                continue;
+            }
+            
+            // Get validator APR (annual percentage rate)
+            uint256 validatorAPR = oracle.getValidatorAPR(stake.validator);
+            
+            // Calculate rewards: amount * APR * timeElapsed / 365 days
+            uint256 stakeRewards = stake.amount * validatorAPR * timeElapsed / (365 days) / PRECISION;
+            totalRewards += stakeRewards;
+        }
+        
+        return totalRewards;
     }
     
     /**
@@ -461,28 +401,26 @@ contract NativeStaking is
     }
     
     /**
-     * @dev Sets the maximum number of concurrent stakes per user
-     * @param max The new maximum number of stakes
+     * @dev Sets the maximum number of stakes per user
+     * @param limit The new maximum number of stakes
      */
-    function setMaxStakesPerUser(uint256 max) 
+    function setMaxStakesPerUser(uint256 limit) 
         external 
         onlyRole(DEFAULT_ADMIN_ROLE) 
     {
-        require(max > 0, "Max stakes must be positive");
-        maxStakesPerUser = max;
-        emit MaxStakesPerUserUpdated(max);
+        require(limit > 0, "Limit must be > 0");
+        maxStakesPerUser = limit;
+        emit MaxStakesPerUserUpdated(limit);
     }
     
     /**
-     * @dev Sets the oracle contract address
-     * @param _oracle The new oracle address
+     * @dev Helper function to compare strings
+     * @param a First string
+     * @param b Second string
+     * @return True if strings are equal
      */
-    function setOracle(address _oracle) 
-        external 
-        onlyRole(DEFAULT_ADMIN_ROLE) 
-    {
-        require(_oracle != address(0), "Invalid oracle address");
-        oracle = IOracle(_oracle);
+    function _stringEquals(string memory a, string memory b) private pure returns (bool) {
+        return keccak256(bytes(a)) == keccak256(bytes(b));
     }
     
     /**
@@ -512,7 +450,7 @@ contract NativeStaking is
     {
         // No additional logic needed
     }
-
+    
     /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.

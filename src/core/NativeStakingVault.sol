@@ -1,79 +1,70 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "../interfaces/INativeStakingVault.sol";
 import "../interfaces/IOracle.sol";
-import "../interfaces/IWXFI.sol";
 
 /**
  * @title NativeStakingVault
  * @dev Implementation of the APY staking model (compound vault)
- * Users stake XFI and receive vault shares that grow in value as rewards compound
- * Implements the ERC-4626 standard for tokenized vaults
+ * Users stake XFI and receive vault shares that appreciate in value
+ * Implements the INativeStakingVault interface and follows ERC-4626 standard
  */
 contract NativeStakingVault is 
-    Initializable, 
+    Initializable,
+    AccessControlUpgradeable,
+    ERC20Upgradeable,
     ERC4626Upgradeable,
-    AccessControlUpgradeable, 
-    PausableUpgradeable, 
+    PausableUpgradeable,
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable,
-    INativeStakingVault 
+    INativeStakingVault
 {
-    using SafeERC20Upgradeable for IERC20Upgradeable;
-    
     // Constants
     uint256 private constant PRECISION = 1e18;
+    uint256 private constant MAX_BPS = 10000; // 100% in basis points
     
     // Custom roles
     bytes32 public constant STAKING_MANAGER_ROLE = keccak256("STAKING_MANAGER_ROLE");
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant COMPOUNDER_ROLE = keccak256("COMPOUNDER_ROLE");
     
     // State variables
     IOracle public oracle;
-    
-    // Counter for withdrawal request IDs
-    uint256 private _nextWithdrawalRequestId;
-    
-    // Mapping of user -> array of withdrawal request IDs
-    mapping(address => uint256[]) private _userWithdrawalRequestIds;
-    
-    // Mapping of requestId -> WithdrawalRequest
-    mapping(uint256 => WithdrawalRequest) private _withdrawalRequests;
-    
-    // Amount of assets staked on Cosmos (not physically in this contract)
-    uint256 private _stakedAssets;
-    
-    // Maximum percentage of vault assets that can be liquid (not staked)
-    uint256 public maxLiquidityPercent;
-    
-    // Minimum withdrawal amount
+    uint256 public maxLiquidityPercent; // in basis points
     uint256 public minWithdrawalAmount;
     
+    // Withdrawal request tracking
+    mapping(address => uint256[]) private _userWithdrawalRequestIds;
+    mapping(uint256 => WithdrawalRequest) private _withdrawalRequests;
+    uint256 private _nextWithdrawalRequestId;
+    
+    // Mapping of last compound timestamp
+    uint256 private _lastCompoundTimestamp;
+    
+    // Mapping of total pending withdrawals
+    uint256 private _totalPendingWithdrawals;
+    
     // Events
-    event Deposited(address indexed user, uint256 assets, uint256 shares);
-    event WithdrawalRequested(address indexed user, uint256 indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime);
-    event WithdrawalClaimed(address indexed user, uint256 indexed requestId, uint256 assets);
-    event RewardsCompounded(uint256 rewardAmount);
-    event AssetsStaked(uint256 amount);
-    event AssetsUnstaked(uint256 amount);
-    event MaxLiquidityPercentUpdated(uint256 percent);
-    event MinWithdrawalAmountUpdated(uint256 amount);
+    event WithdrawalRequested(address indexed owner, address indexed receiver, uint256 indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime);
+    event WithdrawalClaimed(address indexed receiver, uint256 indexed requestId, uint256 assets);
+    event CompoundExecuted(uint256 rewardsAdded, uint256 timestamp);
+    event MaxLiquidityPercentUpdated(uint256 newPercent);
+    event MinWithdrawalAmountUpdated(uint256 newAmount);
     
     /**
      * @dev Initializes the contract
-     * @param _asset The address of the underlying asset (XFI or WXFI)
+     * @param _asset The address of the underlying asset (WXFI)
      * @param _oracle The address of the oracle contract
      * @param _name The name of the vault token
      * @param _symbol The symbol of the vault token
@@ -84,216 +75,134 @@ contract NativeStakingVault is
         string memory _name,
         string memory _symbol
     ) external initializer {
-        __ERC4626_init(IERC20Upgradeable(_asset));
-        __ERC20_init(_name, _symbol);
         __AccessControl_init();
+        __ERC20_init(_name, _symbol);
+        __ERC4626_init(IERC20(_asset));
         __Pausable_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
         
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(STAKING_MANAGER_ROLE, msg.sender);
-        _grantRole(OPERATOR_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(UPGRADER_ROLE, msg.sender);
+        _grantRole(COMPOUNDER_ROLE, msg.sender);
         
         oracle = IOracle(_oracle);
         
-        maxLiquidityPercent = 20; // 20% of assets can be liquid by default
-        minWithdrawalAmount = 0.1 * PRECISION; // 0.1 XFI
-        
+        // Default values
+        maxLiquidityPercent = 1000; // 10% in basis points
+        minWithdrawalAmount = 0.1 ether; // 0.1 XFI
         _nextWithdrawalRequestId = 1;
-        _stakedAssets = 0;
+        _lastCompoundTimestamp = block.timestamp;
     }
     
     /**
-     * @dev Override for totalAssets to include staked assets
-     * @return The total amount of the underlying asset managed by the vault
+     * @dev Override decimals function to resolve the inheritance conflict
+     * @return The number of decimals for the token
      */
-    function totalAssets() public view override(ERC4626Upgradeable, IERC4626) returns (uint256) {
-        return IERC20Upgradeable(asset()).balanceOf(address(this)) + _stakedAssets;
+    function decimals() public view override(ERC20Upgradeable, ERC4626Upgradeable, IERC20Metadata) returns (uint8) {
+        return ERC4626Upgradeable.decimals();
     }
     
     /**
-     * @dev Override deposit to ensure the contract is not paused
-     * @param assets The amount of assets to deposit
+     * @dev Overrides the deposit function to add additional checks
+     * @param assets The amount of underlying assets to deposit
      * @param receiver The address to receive the shares
      * @return shares The amount of shares minted
      */
     function deposit(uint256 assets, address receiver) 
         public 
-        override(ERC4626Upgradeable, IERC4626)
+        override(ERC4626Upgradeable, IERC4626) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 shares) 
     {
-        require(assets > 0, "Cannot deposit 0 assets");
+        require(assets > 0, "Deposit amount must be > 0");
         
-        // Call the parent deposit function
+        // Call the parent implementation
         shares = super.deposit(assets, receiver);
-        
-        emit Deposited(msg.sender, assets, shares);
-        
-        // If we have too much liquidity, stake the excess
-        _stakeExcessLiquidity();
         
         return shares;
     }
     
     /**
-     * @dev Override mint to ensure the contract is not paused
+     * @dev Overrides the mint function to add additional checks
      * @param shares The amount of shares to mint
      * @param receiver The address to receive the shares
-     * @return assets The amount of assets deposited
+     * @return assets The amount of assets used
      */
     function mint(uint256 shares, address receiver) 
         public 
-        override(ERC4626Upgradeable, IERC4626)
+        override(ERC4626Upgradeable, IERC4626) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 assets) 
     {
-        require(shares > 0, "Cannot mint 0 shares");
+        require(shares > 0, "Shares amount must be > 0");
         
-        // Call the parent mint function
+        // Call the parent implementation
         assets = super.mint(shares, receiver);
-        
-        emit Deposited(msg.sender, assets, shares);
-        
-        // If we have too much liquidity, stake the excess
-        _stakeExcessLiquidity();
         
         return assets;
     }
     
     /**
-     * @dev Override withdraw to handle insufficient liquidity case
-     * @param assets The amount of assets to withdraw
+     * @dev Overrides the withdraw function to add additional checks
+     * @param assets The amount of underlying assets to withdraw
      * @param receiver The address to receive the assets
-     * @param owner The owner of the shares
+     * @param owner The address that owns the shares
      * @return shares The amount of shares burned
      */
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) 
+    function withdraw(uint256 assets, address receiver, address owner) 
         public 
-        override(ERC4626Upgradeable, IERC4626)
+        override(ERC4626Upgradeable, IERC4626) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 shares) 
     {
         require(assets >= minWithdrawalAmount, "Amount below minimum");
         
-        uint256 liquidAssets = IERC20Upgradeable(asset()).balanceOf(address(this));
+        // Check if there's enough liquidity in the vault for immediate withdrawal
+        uint256 availableLiquidity = _maxWithdrawalLiquidity();
+        require(assets <= availableLiquidity, "Exceeds available liquidity");
         
-        if (assets > liquidAssets) {
-            // Not enough liquid assets, create a withdrawal request
-            return _createWithdrawalRequest(assets, receiver, owner);
-        }
-        
-        // If we have enough liquid assets, proceed with immediate withdrawal
+        // Call the parent implementation
         shares = super.withdraw(assets, receiver, owner);
         
         return shares;
     }
     
     /**
-     * @dev Override redeem to handle insufficient liquidity case
-     * @param shares The amount of shares to redeem
+     * @dev Overrides the redeem function to add additional checks
+     * @param shares The amount of shares to burn
      * @param receiver The address to receive the assets
-     * @param owner The owner of the shares
-     * @return assets The amount of assets withdrawn
+     * @param owner The address that owns the shares
+     * @return assets The amount of assets redeemed
      */
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) 
+    function redeem(uint256 shares, address receiver, address owner) 
         public 
-        override(ERC4626Upgradeable, IERC4626)
+        override(ERC4626Upgradeable, IERC4626) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 assets) 
     {
-        require(shares > 0, "Cannot redeem 0 shares");
-        
-        // Calculate how many assets these shares represent
         assets = previewRedeem(shares);
         require(assets >= minWithdrawalAmount, "Amount below minimum");
         
-        uint256 liquidAssets = IERC20Upgradeable(asset()).balanceOf(address(this));
+        // Check if there's enough liquidity in the vault for immediate withdrawal
+        uint256 availableLiquidity = _maxWithdrawalLiquidity();
+        require(assets <= availableLiquidity, "Exceeds available liquidity");
         
-        if (assets > liquidAssets) {
-            // Not enough liquid assets, create a withdrawal request
-            _createWithdrawalRequest(assets, receiver, owner);
-            return 0; // Assets will be delivered later
-        }
-        
-        // If we have enough liquid assets, proceed with immediate withdrawal
+        // Call the parent implementation
         assets = super.redeem(shares, receiver, owner);
         
         return assets;
     }
     
     /**
-     * @dev Creates a withdrawal request for delayed processing
-     * @param assets The amount of assets to withdraw
-     * @param receiver The address to receive the assets
-     * @param owner The owner of the shares
-     * @return shares The amount of shares that will be burned
-     */
-    function _createWithdrawalRequest(
-        uint256 assets,
-        address receiver,
-        address owner
-    ) 
-        private 
-        returns (uint256 shares) 
-    {
-        // Check allowance if not the owner
-        if (msg.sender != owner) {
-            _spendAllowance(owner, msg.sender, shares);
-        }
-        
-        // Calculate shares to burn
-        shares = previewWithdraw(assets);
-        
-        // Burn the shares now
-        _burn(owner, shares);
-        
-        // Calculate unlock time based on unbonding period
-        uint256 unbondingPeriod = oracle.getUnbondingPeriod();
-        uint256 unlockTime = block.timestamp + unbondingPeriod;
-        
-        // Create withdrawal request
-        uint256 requestId = _nextWithdrawalRequestId++;
-        
-        _withdrawalRequests[requestId] = WithdrawalRequest({
-            assets: assets,
-            shares: shares,
-            unlockTime: unlockTime,
-            owner: owner,
-            completed: false
-        });
-        
-        _userWithdrawalRequestIds[owner].push(requestId);
-        
-        // Request unstaking from Cosmos via operator
-        emit WithdrawalRequested(owner, requestId, assets, shares, unlockTime);
-        
-        // Reduce the staked assets amount
-        _stakedAssets -= assets;
-        
-        // Request unstaking of assets
-        emit AssetsUnstaked(assets);
-        
-        return shares;
-    }
-    
-    /**
-     * @dev Implements the requestWithdrawal function from INativeStakingVault
+     * @dev Requests a withdrawal, handling the unbonding period
+     * Called when there are not enough liquid assets in the vault
      * @param assets The amount of underlying assets to withdraw
      * @param receiver The address to receive the assets
      * @param owner The owner of the shares
@@ -305,22 +214,23 @@ contract NativeStakingVault is
         address owner
     ) 
         external 
-        override
+        override 
         whenNotPaused 
         nonReentrant 
         returns (uint256 requestId) 
     {
         require(assets >= minWithdrawalAmount, "Amount below minimum");
-        require(
-            msg.sender == owner || 
-            hasRole(STAKING_MANAGER_ROLE, msg.sender),
-            "Not authorized"
-        );
+        require(assets <= maxRedeem(owner), "Insufficient shares");
         
-        // Calculate shares to burn
         uint256 shares = previewWithdraw(assets);
         
-        // Burn the shares now
+        if (msg.sender != owner) {
+            uint256 currentAllowance = allowance(owner, msg.sender);
+            require(currentAllowance >= shares, "Insufficient allowance");
+            _approve(owner, msg.sender, currentAllowance - shares);
+        }
+        
+        // Burn the shares immediately
         _burn(owner, shares);
         
         // Calculate unlock time based on unbonding period
@@ -339,19 +249,9 @@ contract NativeStakingVault is
         });
         
         _userWithdrawalRequestIds[owner].push(requestId);
+        _totalPendingWithdrawals += assets;
         
-        // Request unstaking from Cosmos via operator
-        emit WithdrawalRequested(owner, requestId, assets, shares, unlockTime);
-        
-        // Reduce the staked assets amount
-        if (assets <= _stakedAssets) {
-            _stakedAssets -= assets;
-        } else {
-            _stakedAssets = 0;
-        }
-        
-        // Request unstaking of assets
-        emit AssetsUnstaked(assets);
+        emit WithdrawalRequested(owner, receiver, requestId, assets, shares, unlockTime);
         
         return requestId;
     }
@@ -368,22 +268,18 @@ contract NativeStakingVault is
         returns (uint256 assets) 
     {
         WithdrawalRequest storage request = _withdrawalRequests[requestId];
-        require(
-            msg.sender == request.owner || 
-            hasRole(STAKING_MANAGER_ROLE, msg.sender) || 
-            hasRole(OPERATOR_ROLE, msg.sender),
-            "Not authorized"
-        );
+        require(request.owner != address(0), "Invalid request ID");
         require(!request.completed, "Already claimed");
         require(block.timestamp >= request.unlockTime, "Still in unbonding period");
         
-        request.completed = true;
         assets = request.assets;
+        request.completed = true;
+        _totalPendingWithdrawals -= assets;
         
-        // Transfer the tokens to the owner
-        IERC20Upgradeable(asset()).safeTransfer(request.owner, assets);
+        // Transfer the assets to the user
+        IERC20(asset()).transfer(msg.sender, assets);
         
-        emit WithdrawalClaimed(request.owner, requestId, assets);
+        emit WithdrawalClaimed(msg.sender, requestId, assets);
         
         return assets;
     }
@@ -400,10 +296,24 @@ contract NativeStakingVault is
         returns (WithdrawalRequest[] memory) 
     {
         uint256[] storage requestIds = _userWithdrawalRequestIds[user];
-        WithdrawalRequest[] memory result = new WithdrawalRequest[](requestIds.length);
+        uint256 validCount = 0;
         
+        // Count valid requests
         for (uint256 i = 0; i < requestIds.length; i++) {
-            result[i] = _withdrawalRequests[requestIds[i]];
+            if (!_withdrawalRequests[requestIds[i]].completed) {
+                validCount++;
+            }
+        }
+        
+        WithdrawalRequest[] memory result = new WithdrawalRequest[](validCount);
+        uint256 index = 0;
+        
+        // Add valid requests to result
+        for (uint256 i = 0; i < requestIds.length && index < validCount; i++) {
+            if (!_withdrawalRequests[requestIds[i]].completed) {
+                result[index] = _withdrawalRequests[requestIds[i]];
+                index++;
+            }
         }
         
         return result;
@@ -411,69 +321,121 @@ contract NativeStakingVault is
     
     /**
      * @dev Compounds rewards into the vault
-     * Only callable by authorized roles (e.g., OPERATOR_ROLE)
-     * @param rewardAmount The amount of rewards to compound
+     * Only callable by accounts with the COMPOUNDER_ROLE
+     * @return success Boolean indicating if the compound was successful
+     */
+    function compound() 
+        external 
+        onlyRole(COMPOUNDER_ROLE) 
+        whenNotPaused 
+        nonReentrant 
+        returns (bool success) 
+    {
+        // In a real implementation, this would interact with the Cosmos staking
+        // and compound the rewards. For this implementation, we'll simulate it.
+        
+        // Calculate rewards based on APY since last compound
+        uint256 totalAssets = _calculateTotalAssetsWithCompounding();
+        uint256 currentAssets = super.totalAssets();
+        
+        if (totalAssets > currentAssets) {
+            uint256 rewardsAmount = totalAssets - currentAssets;
+            
+            // Update last compound timestamp
+            _lastCompoundTimestamp = block.timestamp;
+            
+            emit CompoundExecuted(rewardsAmount, block.timestamp);
+            
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * @dev Manually adds rewards to the vault
+     * @param rewardAmount The amount of rewards to add
      * @return success Boolean indicating if the compound was successful
      */
     function compoundRewards(uint256 rewardAmount) 
         external 
         override 
+        onlyRole(COMPOUNDER_ROLE) 
         whenNotPaused 
         nonReentrant 
-        onlyRole(OPERATOR_ROLE) 
         returns (bool success) 
     {
-        require(rewardAmount > 0, "Cannot compound 0 rewards");
+        // Transfer the rewards to the vault
+        IERC20(asset()).transferFrom(msg.sender, address(this), rewardAmount);
         
-        // Update the staked assets amount
-        _stakedAssets += rewardAmount;
+        // Update last compound timestamp
+        _lastCompoundTimestamp = block.timestamp;
         
-        emit RewardsCompounded(rewardAmount);
+        emit CompoundExecuted(rewardAmount, block.timestamp);
         
         return true;
     }
     
     /**
-     * @dev Staking assets on Cosmos
-     * Only callable by authorized roles (e.g., OPERATOR_ROLE)
-     * @param amount The amount of assets to stake
-     * @return success Boolean indicating if the stake was successful
+     * @dev Overrides the totalAssets function to include pending rewards
+     * @return The total assets in the vault, including pending rewards
      */
-    function stakeAssets(uint256 amount) 
-        external 
-        whenNotPaused 
-        nonReentrant 
-        onlyRole(OPERATOR_ROLE) 
-        returns (bool success) 
+    function totalAssets() 
+        public 
+        view 
+        override(ERC4626Upgradeable, IERC4626) 
+        returns (uint256) 
     {
-        require(amount > 0, "Cannot stake 0 assets");
-        
-        uint256 liquidAssets = IERC20Upgradeable(asset()).balanceOf(address(this));
-        require(amount <= liquidAssets, "Not enough liquid assets");
-        
-        // Update the staked assets amount
-        _stakedAssets += amount;
-        
-        emit AssetsStaked(amount);
-        
-        return true;
+        return _calculateTotalAssetsWithCompounding();
     }
     
     /**
-     * @dev Helper function to stake excess liquidity
-     * Called after deposits to maintain desired liquidity ratio
+     * @dev Calculates total assets with compounding
+     * @return The total assets including compound rewards
      */
-    function _stakeExcessLiquidity() private {
-        uint256 totalAssetsValue = totalAssets();
-        uint256 liquidAssets = IERC20Upgradeable(asset()).balanceOf(address(this));
-        uint256 maxLiquidity = (totalAssetsValue * maxLiquidityPercent) / 100;
+    function _calculateTotalAssetsWithCompounding() private view returns (uint256) {
+        uint256 currentAssets = super.totalAssets();
         
-        if (liquidAssets > maxLiquidity && liquidAssets > 0) {
-            uint256 excessLiquidity = liquidAssets - maxLiquidity;
-            _stakedAssets += excessLiquidity;
-            
-            emit AssetsStaked(excessLiquidity);
+        // If no assets in vault, return 0
+        if (currentAssets == 0) {
+            return 0;
         }
+        
+        // Calculate time since last compound
+        uint256 timeSinceLastCompound = block.timestamp - _lastCompoundTimestamp;
+        
+        // No rewards if compounded recently
+        if (timeSinceLastCompound < 1 hours) {
+            return currentAssets;
+        }
+        
+        // Get the current APY from oracle
+        uint256 apy = oracle.getCurrentAPY();
+        
+        // Calculate rewards: principal * (1 + APY)^(timeInYears) - principal
+        // For simplicity, use a linear approximation: principal * APY * timeInYears
+        uint256 timeInYears = timeSinceLastCompound * PRECISION / (365 days);
+        uint256 rewards = currentAssets * apy * timeInYears / (PRECISION * PRECISION);
+        
+        return currentAssets + rewards;
+    }
+    
+    /**
+     * @dev Gets the maximum amount of assets that can be withdrawn immediately
+     * @return The maximum amount of assets available for immediate withdrawal
+     */
+    function _maxWithdrawalLiquidity() private view returns (uint256) {
+        uint256 totalVaultAssets = super.totalAssets();
+        
+        // Subtract pending withdrawals
+        if (totalVaultAssets <= _totalPendingWithdrawals) {
+            return 0;
+        }
+        
+        uint256 availableAssets = totalVaultAssets - _totalPendingWithdrawals;
+        
+        // Apply max liquidity percent
+        return availableAssets * maxLiquidityPercent / MAX_BPS;
     }
     
     /**
@@ -490,7 +452,7 @@ contract NativeStakingVault is
     }
     
     /**
-     * @dev Gets the total staked amount in the vault (both in the contract and on Cosmos)
+     * @dev Gets the total staked amount in the vault
      * @return The total staked amount with 18 decimals
      */
     function getTotalStaked() 
@@ -499,18 +461,18 @@ contract NativeStakingVault is
         override 
         returns (uint256) 
     {
-        return totalAssets();
+        return super.totalAssets();
     }
     
     /**
-     * @dev Sets the maximum percentage of assets that can be liquid
-     * @param percent The new maximum liquidity percentage (0-100)
+     * @dev Sets the maximum liquidity percentage
+     * @param percent The new maximum liquidity percentage in basis points
      */
     function setMaxLiquidityPercent(uint256 percent) 
         external 
         onlyRole(DEFAULT_ADMIN_ROLE) 
     {
-        require(percent > 0 && percent <= 100, "Invalid percentage");
+        require(percent <= MAX_BPS, "Percent exceeds maximum");
         maxLiquidityPercent = percent;
         emit MaxLiquidityPercentUpdated(percent);
     }
@@ -525,18 +487,6 @@ contract NativeStakingVault is
     {
         minWithdrawalAmount = amount;
         emit MinWithdrawalAmountUpdated(amount);
-    }
-    
-    /**
-     * @dev Sets the oracle contract address
-     * @param _oracle The new oracle address
-     */
-    function setOracle(address _oracle) 
-        external 
-        onlyRole(DEFAULT_ADMIN_ROLE) 
-    {
-        require(_oracle != address(0), "Invalid oracle address");
-        oracle = IOracle(_oracle);
     }
     
     /**
@@ -566,7 +516,7 @@ contract NativeStakingVault is
     {
         // No additional logic needed
     }
-
+    
     /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.

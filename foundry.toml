@@ -2,20 +2,17 @@
 src = "src"
 out = "out"
 libs = ["lib"]
-solc = "0.8.20"
+solc = "0.8.26"
 remappings = [
-    "@openzeppelin/contracts=lib/openzeppelin-contracts/contracts"
+    "@openzeppelin/contracts=lib/openzeppelin-contracts/contracts",
+    "@openzeppelin/contracts-upgradeable=lib/openzeppelin-contracts-upgradeable/contracts"
 ]
 
 [rpc_endpoints]
-crossfi = "${CROSSFI_RPC}"
-crossfi_dev = "${CROSSFI_DEV_RPC}"
-crossfi_test = "${CROSSFI_TEST_RPC}"
+local = "http://localhost:8545"
 
 [etherscan]
-crossfi = { key = "no-key", url = "${CROSSFI_VERIFIER_URL}", chain = 4158 }
-crossfi_dev = { key = "no-key", url = "${CROSSFI_DEV_VERIFIER_URL}", chain = 4156 }
-crossfi_test = { key = "no-key", url = "${CROSSFI_TEST_VERIFIER_URL}", chain = 4157 }
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
 
 [fmt]
 line_length = 120

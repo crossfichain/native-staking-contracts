@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "../interfaces/IOracle.sol";
 
 /**
@@ -67,30 +67,32 @@ contract CrossFiOracle is
     
     /**
      * @dev Updates the price of a token
-     * @param symbol The token symbol (e.g., "XFI", "MPX")
      * @param price The price with 18 decimals of precision
      */
-    function setPrice(string calldata symbol, uint256 price) 
+    function setPrice(uint256 price) 
         external 
         onlyRole(ORACLE_UPDATER_ROLE) 
         whenNotPaused 
     {
-        _prices[symbol] = price;
-        emit PriceUpdated(symbol, price);
+        _prices["XFI"] = price;
+        emit PriceUpdated("XFI", price);
     }
     
     /**
      * @dev Updates the active status of a validator
      * @param validator The validator address/ID
      * @param isActive Whether the validator is active
+     * @param apr The APR with 18 decimals of precision
      */
-    function setValidatorStatus(string calldata validator, bool isActive) 
+    function setValidator(string calldata validator, bool isActive, uint256 apr) 
         external 
         onlyRole(ORACLE_UPDATER_ROLE) 
         whenNotPaused 
     {
         _activeValidators[validator] = isActive;
+        _validatorAPRs[validator] = apr * PRICE_PRECISION / 100; // Convert from percentage to 18 decimal precision
         emit ValidatorStatusUpdated(validator, isActive);
+        emit ValidatorAPRUpdated(validator, _validatorAPRs[validator]);
     }
     
     /**
@@ -158,15 +160,15 @@ contract CrossFiOracle is
     
     /**
      * @dev Updates the current APY for the compound staking model
-     * @param apy The current APY with 18 decimals of precision
+     * @param apy The current APY as a percentage (e.g., 12 for 12%)
      */
     function setCurrentAPY(uint256 apy) 
         external 
         onlyRole(ORACLE_UPDATER_ROLE) 
         whenNotPaused 
     {
-        _currentAPY = apy;
-        emit CurrentAPYUpdated(apy);
+        _currentAPY = apy * PRICE_PRECISION / 100; // Convert from percentage to 18 decimal precision
+        emit CurrentAPYUpdated(_currentAPY);
     }
     
     /**

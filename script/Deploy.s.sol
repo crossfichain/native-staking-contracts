@@ -1,32 +1,28 @@
-// SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+// // SPDX-License-Identifier: MIT
+// pragma solidity 0.8.26;
 
-import "forge-std/Script.sol";
-import "../src/deployment/DeploymentCoordinator.sol";
+// import {Script} from "forge-std/Script.sol";
+// import {DeploymentCoordinator} from "../src/deployment/DeploymentCoordinator.sol";
+// import {console} from "forge-std/console.sol";
 
-contract DeployScript is Script {
-    function run() external {
-        // Get deployment parameters from environment
-        address admin = vm.envAddress("ADMIN_ADDRESS");
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+// contract DeployScript is Script {
+//     function run() external {
+//         uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
+//         address deployer = vm.addr(deployerPrivateKey);
         
-        // Start broadcasting transactions
-        vm.startBroadcast(deployerPrivateKey);
+//         console.log("Deployer address:", deployer);
         
-        // Deploy the entire system using the coordinator
-        DeploymentCoordinator coordinator = new DeploymentCoordinator();
-        address managerProxy = coordinator.deploySystem(admin);
+//         vm.startBroadcast(deployerPrivateKey);
         
-        // Log important addresses
-        console.log("--- CrossFi Native Staking Deployment ---");
-        console.log("WXFI Address:", coordinator.wxfi());
-        console.log("Oracle Proxy:", coordinator.oracleProxy());
-        console.log("Native Staking (APR) Proxy:", coordinator.nativeStakingProxy());
-        console.log("Native Staking Vault (APY) Proxy:", coordinator.nativeStakingVaultProxy());
-        console.log("Native Staking Manager Proxy:", managerProxy);
-        console.log("Proxy Admin:", coordinator.proxyAdmin());
-        console.log("--------------------------------------");
+//         // Deploy the deployment coordinator
+//         DeploymentCoordinator coordinator = new DeploymentCoordinator();
         
-        vm.stopBroadcast();
-    }
-} 
+//         // Call deploy on the coordinator
+//         coordinator.deploy();
+        
+//         vm.stopBroadcast();
+        
+//         console.log("Deployment completed successfully!");
+//         console.log("DeploymentCoordinator deployed at:", address(coordinator));
+//     }
+// } 
