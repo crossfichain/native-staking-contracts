@@ -120,7 +120,8 @@ contract NativeStaking is
         }
         
         // Emit event with validator information for off-chain processing
-        emit Staked(user, amount, validator, _userStakes[user].length - 1);
+        uint256 stakeId = _userStakes[user].length - 1;
+        emit Staked(user, amount, validator, stakeId);
         
         return true;
     }
