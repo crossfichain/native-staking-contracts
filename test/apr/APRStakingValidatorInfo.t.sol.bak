@@ -8,8 +8,10 @@ import "./APRStakingBase.t.sol";
  * @dev Tests for validator info handling in the APR flow
  * Ensures that validator info is properly emitted in events for off-chain processing
  */
-contract APRStakingValidatorInfoTest is APRStakingBaseTest {
-    // Events are already defined in APRStakingBaseTest
+contract APRStakingValidatorInfoTest is APRStakingBase {
+    // Events for testing
+    event Staked(address indexed user, uint256 amount, string validator, uint256 requestId);
+    event UnstakeRequested(address indexed user, uint256 amount, string validator, uint256 requestId, uint256 unlockTime);
     
     function testValidatorInfoInStakeEvents() public {
         string memory validatorId = "cosmosvaloper1xwazl8ftks4gn00y5x3c47auquc62ssu";

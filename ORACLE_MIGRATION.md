@@ -2,9 +2,9 @@
 
 ## Overview
 
-This document outlines the migration path from the current CrossFiOracle and UnifiedOracle implementations to the new consolidated production-ready ProductionOracle. The ProductionOracle combines the best features of both implementations and provides robust integration with the DIA Oracle for price data.
+This document outlines the migration path from the original CrossFiOracle to the consolidated UnifiedOracle. The new UnifiedOracle provides robust integration with the DIA Oracle for price data and consolidates the best features of previous implementations.
 
-## Key Features of ProductionOracle
+## Key Features of UnifiedOracle
 
 1. **DIA Oracle Integration**: Properly handles the conversion of 8 decimal places from DIA to 18 decimals used internally.
 2. **Fallback Mechanism**: If the DIA Oracle price is unavailable or outdated, uses a fallback price stored in the Oracle.
@@ -22,15 +22,15 @@ This document outlines the migration path from the current CrossFiOracle and Uni
 // Deploy DIA Oracle (or get the address of the existing one)
 address diaOracleAddress = 0x...;
 
-// Deploy the ProductionOracle implementation
-ProductionOracle oracleImpl = new ProductionOracle();
+// Deploy the UnifiedOracle implementation
+UnifiedOracle oracleImpl = new UnifiedOracle();
 
 // Deploy the ProxyAdmin
-ProxyAdmin proxyAdmin = new ProxyAdmin();
+ProxyAdmin proxyAdmin = new ProxyAdmin(adminAddress);
 
 // Initialize data
 bytes memory oracleInitData = abi.encodeWithSelector(
-    ProductionOracle.initialize.selector,
+    UnifiedOracle.initialize.selector,
     diaOracleAddress
 );
 
@@ -42,7 +42,7 @@ TransparentUpgradeableProxy oracleProxy = new TransparentUpgradeableProxy(
 );
 
 // Get a reference to the Oracle
-ProductionOracle oracle = ProductionOracle(address(oracleProxy));
+UnifiedOracle oracle = UnifiedOracle(address(oracleProxy));
 ```
 
 ### 2. Set Up Initial Values
@@ -118,4 +118,4 @@ A: The conversion is handled automatically in the `getXFIPrice()` function: `pri
 
 ## Conclusion
 
-The new ProductionOracle is a significant improvement over the previous implementations, with better integration, more robust fallback mechanisms, and clearer role separation. This migration will ensure that the Native Staking system has a reliable source of price data and can accurately calculate and distribute rewards to users. 
+The new UnifiedOracle is a significant improvement, with better integration with DIA Oracle, more robust fallback mechanisms, and clearer role separation. This migration will ensure that the Native Staking system has a reliable source of price data and can accurately calculate and distribute rewards to users. 

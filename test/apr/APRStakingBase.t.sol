@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "../../src/core/NativeStaking.sol";
 import "../../src/core/NativeStakingManager.sol";
-import "../../src/periphery/ProductionOracle.sol"; 
+import "../../src/periphery/UnifiedOracle.sol"; 
 import "../../src/periphery/WXFI.sol";
 import "../utils/MockDIAOracle.sol";
 import "../../src/deployment/DeploymentCoordinator.sol";
@@ -25,7 +25,7 @@ contract APRStakingBase is Test {
     // Contracts
     WXFI public wxfi;
     MockDIAOracle public diaOracle;
-    ProductionOracle public oracle;
+    UnifiedOracle public oracle;
     NativeStaking public staking;
     NativeStakingManager public manager;
     ProxyAdmin public proxyAdmin;
@@ -45,11 +45,11 @@ contract APRStakingBase is Test {
         diaOracle.setPrice("XFI/USD", 1e8);
 
         // Deploy Oracle with DIA Oracle
-        ProductionOracle oracleImpl = new ProductionOracle();
-        proxyAdmin = new ProxyAdmin();
+        UnifiedOracle oracleImpl = new UnifiedOracle();
+        proxyAdmin = new ProxyAdmin(ADMIN);
         
         bytes memory oracleData = abi.encodeWithSelector(
-            ProductionOracle.initialize.selector,
+            UnifiedOracle.initialize.selector,
             address(diaOracle)
         );
         
@@ -59,7 +59,7 @@ contract APRStakingBase is Test {
             oracleData
         );
         
-        oracle = ProductionOracle(address(oracleProxy));
+        oracle = UnifiedOracle(address(oracleProxy));
         
         // Deploy NativeStaking (APR)
         NativeStaking stakingImpl = new NativeStaking();
@@ -145,7 +145,7 @@ contract APRStakingBase is Test {
         approveWXFI(from, amount);
         
         vm.startPrank(from);
-        manager.stakeForAPR(amount, true); // Use WXFI
+        manager.stakeAPR(amount, "validator1");
         vm.stopPrank();
     }
     
@@ -156,7 +156,7 @@ contract APRStakingBase is Test {
      */
     function unstakeRequest(address from, uint256 amount) internal {
         vm.startPrank(from);
-        manager.unstakeRequestAPR(amount);
+        manager.unstakeAPR(amount, "validator1");
         vm.stopPrank();
     }
     

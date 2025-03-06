@@ -2,21 +2,21 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
-import "../../src/periphery/ProductionOracle.sol";
+import "../../src/periphery/UnifiedOracle.sol";
 import "../utils/MockDIAOracle.sol";
 
 /**
- * @title ProductionOracleTest
- * @dev Test contract for ProductionOracle
+ * @title UnifiedOracleTest
+ * @dev Test contract for UnifiedOracle
  */
-contract ProductionOracleTest is Test {
+contract UnifiedOracleTest is Test {
     // Test constants
     address public constant ADMIN = address(0x1);
     address public constant USER = address(0x2);
     
     // Contracts
     MockDIAOracle public diaOracle;
-    ProductionOracle public oracle;
+    UnifiedOracle public oracle;
     
     function setUp() public {
         vm.startPrank(ADMIN);
@@ -27,7 +27,7 @@ contract ProductionOracleTest is Test {
         diaOracle.setPrice("XFI/USD", 1e8);
         
         // Deploy Oracle implementation
-        ProductionOracle oracleImpl = new ProductionOracle();
+        UnifiedOracle oracleImpl = new UnifiedOracle();
         // Initialize the oracle
         oracleImpl.initialize(address(diaOracle));
         

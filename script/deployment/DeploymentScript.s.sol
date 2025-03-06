@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "../core/NativeStaking.sol";
-import "../core/NativeStakingVault.sol";
-import "../core/NativeStakingManager.sol";
-import "../periphery/UnifiedOracle.sol";
-import "../periphery/WXFI.sol";
-import "../interfaces/INativeStakingManager.sol";
-import "../interfaces/IDIAOracle.sol";
+import "../../src/core/NativeStaking.sol";
+import "../../src/core/NativeStakingVault.sol";
+import "../../src/core/NativeStakingManager.sol";
+import "../../src/periphery/UnifiedOracle.sol";
+import "../../src/periphery/WXFI.sol";
+import "../../src/interfaces/INativeStakingManager.sol";
+import "../../src/interfaces/IDIAOracle.sol";
 
 /**
- * @title DeploymentCoordinator
- * @dev Centralizes the deployment logic for the Native Staking system
- * Uses TransparentUpgradeableProxy pattern to make contracts upgradeable
- * Note: This contract is not deployed, only used in the deployment script
+ * @title DeploymentScript
+ * @dev Forge script for deploying the Native Staking system using proxies
  */
-contract DeploymentCoordinator {
+contract DeploymentScript is Script {
     // Deployed contract addresses
     address public wxfi;
     address public oracleProxy;
@@ -30,13 +30,48 @@ contract DeploymentCoordinator {
     // ProxyAdmin
     address public proxyAdmin;
     
+    function run() external {
+        // Get deployer private key from environment variable
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
+        
+        console.log("Deployer address:", deployer);
+        
+        // Get DIA Oracle address from environment or use a default for testing
+        address diaOracleAddress;
+        try vm.envAddress("DIA_ORACLE_ADDRESS") returns (address dia) {
+            diaOracleAddress = dia;
+        } catch {
+            revert("DIA_ORACLE_ADDRESS environment variable not set");
+        }
+        
+        console.log("DIA Oracle address:", diaOracleAddress);
+        
+        // Start broadcasting transactions
+        vm.startBroadcast(deployerPrivateKey);
+        
+        // Deploy the full system
+        deploySystem(deployer, diaOracleAddress);
+        
+        // Stop broadcasting
+        vm.stopBroadcast();
+        
+        // Log deployed addresses
+        console.log("Deployment completed successfully!");
+        console.log("WXFI deployed at:", wxfi);
+        console.log("Oracle Proxy deployed at:", oracleProxy);
+        console.log("NativeStaking Proxy deployed at:", nativeStakingProxy);
+        console.log("NativeStakingVault Proxy deployed at:", nativeStakingVaultProxy);
+        console.log("NativeStakingManager Proxy deployed at:", nativeStakingManagerProxy);
+        console.log("ProxyAdmin deployed at:", proxyAdmin);
+    }
+    
     /**
      * @dev Deploys the entire Native Staking system with proper proxies
      * @param adminAddress The address that will be the admin of the system
      * @param diaOracleAddress The address of the DIA Oracle contract for price data
-     * @return The address of the NativeStakingManager proxy (the main entry point)
      */
-    function deploySystem(address adminAddress, address diaOracleAddress) external returns (address) {
+    function deploySystem(address adminAddress, address diaOracleAddress) internal {
         require(adminAddress != address(0), "Invalid admin address");
         require(diaOracleAddress != address(0), "Invalid DIA Oracle address");
         
@@ -116,15 +151,13 @@ contract DeploymentCoordinator {
         
         // Step 7: Setup roles
         setupRoles(adminAddress);
-        
-        return nativeStakingManagerProxy;
     }
     
     /**
      * @dev Sets up roles for the deployed contracts
      * @param adminAddress The address that will have admin rights
      */
-    function setupRoles(address adminAddress) private {
+    function setupRoles(address adminAddress) internal {
         // Grant the STAKING_MANAGER_ROLE to the manager contract
         NativeStaking aprContract = NativeStaking(nativeStakingProxy);
         NativeStakingVault apyContract = NativeStakingVault(nativeStakingVaultProxy);

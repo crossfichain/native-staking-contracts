@@ -157,7 +157,7 @@ contract MockUnifiedOracle is IUnifiedOracle, IOracle {
      * @dev Checks if unstaking is frozen (for testing purposes)
      * @return True if unstaking is frozen, false otherwise
      */
-    function isUnstakingFrozen() external view override returns (bool) {
+    function isUnstakingFrozen() external view returns (bool) {
         return _isUnstakingFrozen;
     }
     

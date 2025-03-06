@@ -1,28 +1,18 @@
-// // SPDX-License-Identifier: MIT
-// pragma solidity 0.8.26;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
 
-// import {Script} from "forge-std/Script.sol";
-// import {DeploymentCoordinator} from "../src/deployment/DeploymentCoordinator.sol";
-// import {console} from "forge-std/console.sol";
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import "./deployment/DeploymentScript.s.sol";
 
-// contract DeployScript is Script {
-//     function run() external {
-//         uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
-//         address deployer = vm.addr(deployerPrivateKey);
+contract Deploy is Script {
+    function run() external {
+        console.log("Starting Native Staking deployment...");
         
-//         console.log("Deployer address:", deployer);
+        // Run the deployment script
+        DeploymentScript deployment = new DeploymentScript();
+        deployment.run();
         
-//         vm.startBroadcast(deployerPrivateKey);
-        
-//         // Deploy the deployment coordinator
-//         DeploymentCoordinator coordinator = new DeploymentCoordinator();
-        
-//         // Call deploy on the coordinator
-//         coordinator.deploy();
-        
-//         vm.stopBroadcast();
-        
-//         console.log("Deployment completed successfully!");
-//         console.log("DeploymentCoordinator deployed at:", address(coordinator));
-//     }
-// } 
+        console.log("Deployment complete!");
+    }
+} 

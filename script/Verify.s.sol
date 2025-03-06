@@ -1,59 +1,44 @@
-// // SPDX-License-Identifier: MIT
-// pragma solidity 0.8.26;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
 
-// import {Script} from "forge-std/Script.sol";
-// import {NativeStaking} from "../src/core/NativeStaking.sol";
-// import {CrossFiOracle} from "../src/periphery/CrossFiOracle.sol";
-// import {MockDIAOracle} from "../test/mocks/MockDIAOracle.sol";
-// import {console} from "forge-std/console.sol";
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
-// contract VerifyScript is Script {
-//     function run() external {
-//         // Addresses from the deployment (replace with your actual deployed addresses)
-//         address mockDiaOracle = 0x6BB7eb1996a1F2EdF073886d08d81e3b29f50DfE;
-//         address oracle = 0x619Fa7497172Fb48E77B845577c4e83FDFE15490;
-//         address staking = 0xDbe735426C7DC01F0F153F9C769582a3b48784EC;
-
-//         // Get constructor arguments
-//         address deployer = vm.addr(vm.envUint("DEV_PRIVATE_KEY"));
-//         address operator = deployer;
-//         address emergency = deployer;
-
-//         // Verify each contract
-//         string memory verifyMockDiaOracle = string.concat(
-//             "forge verify-contract ",
-//             vm.toString(mockDiaOracle),
-//             " test/mocks/MockDIAOracle.sol:MockDIAOracle",
-//             " --chain-id 4156",
-//             " --verifier-url $CROSSFI_VERIFIER_URL",
-//             " --compiler-version v0.8.20+commit.a1b79de6"
-//         );
-
-//         string memory verifyOracle = string.concat(
-//             "forge verify-contract ",
-//             vm.toString(oracle),
-//             " src/periphery/CrossFiOracle.sol:CrossFiOracle",
-//             " --chain-id 4156",
-//             " --verifier-url $CROSSFI_VERIFIER_URL",
-//             " --compiler-version v0.8.20+commit.a1b79de6",
-//             " --constructor-args ",
-//             vm.toString(abi.encode(deployer))
-//         );
-
-//         string memory verifyStaking = string.concat(
-//             "forge verify-contract ",
-//             vm.toString(staking),
-//             " src/core/NativeStaking.sol:NativeStaking",
-//             " --chain-id 4156",
-//             " --verifier-url $CROSSFI_VERIFIER_URL",
-//             " --compiler-version v0.8.20+commit.a1b79de6",
-//             " --constructor-args ",
-//             vm.toString(abi.encode(oracle, operator, emergency))
-//         );
-
-//         console.log("Verification commands:");
-//         console.log("MockDIAOracle:", verifyMockDiaOracle);
-//         console.log("\nCrossFiOracle:", verifyOracle);
-//         console.log("\nNativeStaking:", verifyStaking);
-//     }
-// } 
+/**
+ * @title Verify
+ * @dev Helper script for verifying deployed contracts on block explorers
+ */
+contract Verify is Script {
+    using Strings for address;
+    
+    // Configuration
+    address public wxfi;
+    address public oracleProxy;
+    address public nativeStakingProxy;
+    address public nativeStakingVaultProxy;
+    address public nativeStakingManagerProxy;
+    
+    function run() external {
+        // Fetch addresses from environment variables
+        wxfi = vm.envAddress("WXFI_ADDRESS");
+        oracleProxy = vm.envAddress("ORACLE_PROXY_ADDRESS");
+        nativeStakingProxy = vm.envAddress("NATIVE_STAKING_PROXY_ADDRESS");
+        nativeStakingVaultProxy = vm.envAddress("NATIVE_STAKING_VAULT_PROXY_ADDRESS");
+        nativeStakingManagerProxy = vm.envAddress("NATIVE_STAKING_MANAGER_PROXY_ADDRESS");
+        
+        // Log addresses for verification
+        console.log("Contract addresses for verification:");
+        console.log("WXFI:", wxfi);
+        console.log("Oracle Proxy:", oracleProxy);
+        console.log("NativeStaking Proxy:", nativeStakingProxy);
+        console.log("NativeStakingVault Proxy:", nativeStakingVaultProxy);
+        console.log("NativeStakingManager Proxy:", nativeStakingManagerProxy);
+        
+        // Instructions for verifying contracts
+        console.log("\nTo verify contracts, run:");
+        console.log("forge verify-contract --chain [CHAIN_ID]", wxfi, "src/periphery/WXFI.sol:WXFI");
+        
+        console.log("\nFor proxy contracts, you need to verify their implementations. Look at the contract interfaces to understand the initialization parameters.");
+    }
+} 

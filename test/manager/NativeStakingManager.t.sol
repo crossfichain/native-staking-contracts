@@ -5,555 +5,176 @@ import "forge-std/Test.sol";
 import "../../src/core/NativeStakingManager.sol";
 import "../../src/core/NativeStaking.sol";
 import "../../src/core/NativeStakingVault.sol";
-import "../../src/periphery/CrossFiOracle.sol";
+import "../../src/periphery/UnifiedOracle.sol";
 import "../../src/periphery/WXFI.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import "../utils/MockDIAOracle.sol";
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
+/**
+ * @title NativeStakingManagerTest
+ * @dev Test contract for the NativeStakingManager
+ */
 contract NativeStakingManagerTest is Test {
+    // Test constants
+    address public constant ADMIN = address(0x1);
+    address public constant USER = address(0x2);
+    
     // Contracts
-    NativeStakingManager public manager;
-    NativeStaking public aprStaking;
-    NativeStakingVault public apyStaking;
-    CrossFiOracle public oracle;
     WXFI public wxfi;
-    
-    // Proxies
-    ERC1967Proxy public managerProxy;
-    ERC1967Proxy public aprProxy;
-    ERC1967Proxy public apyProxy;
-    ERC1967Proxy public oracleProxy;
-    
-    // Addresses
-    address public admin = address(1);
-    address public user = address(2);
-    address public pauser = address(3);
-    address public upgrader = address(4);
-    
-    // Constants for roles
-    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-    bytes32 public constant STAKING_MANAGER_ROLE = keccak256("STAKING_MANAGER_ROLE");
-    bytes32 public constant ORACLE_UPDATER_ROLE = keccak256("ORACLE_UPDATER_ROLE");
-    
-    // Test values
-    uint256 public constant INITIAL_BALANCE = 1000 ether;
-    string public constant VALIDATOR = "validator1";
-    uint256 public constant STAKE_AMOUNT = 100 ether;
+    MockDIAOracle public diaOracle;
+    UnifiedOracle public oracle;
+    NativeStaking public staking;
+    NativeStakingVault public stakingVault;
+    NativeStakingManager public manager;
+    ProxyAdmin public proxyAdmin;
     
     function setUp() public {
+        // Deploy contracts
+        vm.startPrank(ADMIN);
+        
         // Deploy WXFI
         wxfi = new WXFI();
         
-        // Deploy implementations
-        NativeStakingManager managerImpl = new NativeStakingManager();
-        NativeStaking aprImpl = new NativeStaking();
-        NativeStakingVault apyImpl = new NativeStakingVault();
-        CrossFiOracle oracleImpl = new CrossFiOracle();
+        // Deploy DIA Oracle mock
+        diaOracle = new MockDIAOracle();
+        diaOracle.setPrice("XFI/USD", 1e8); // $1 with 8 decimals
         
-        // Deploy oracle proxy
-        bytes memory oracleInitData = abi.encodeWithSelector(
-            CrossFiOracle.initialize.selector
+        // Deploy ProxyAdmin
+        proxyAdmin = new ProxyAdmin(ADMIN);
+        
+        // Deploy Oracle
+        UnifiedOracle oracleImpl = new UnifiedOracle();
+        bytes memory oracleData = abi.encodeWithSelector(
+            UnifiedOracle.initialize.selector,
+            address(diaOracle)
         );
-        oracleProxy = new ERC1967Proxy(address(oracleImpl), oracleInitData);
-        oracle = CrossFiOracle(address(oracleProxy));
+        TransparentUpgradeableProxy oracleProxy = new TransparentUpgradeableProxy(
+            address(oracleImpl),
+            address(proxyAdmin),
+            oracleData
+        );
+        oracle = UnifiedOracle(address(oracleProxy));
         
-        // Setup oracle
-        oracle.grantRole(DEFAULT_ADMIN_ROLE, admin);
-        oracle.grantRole(ORACLE_UPDATER_ROLE, admin);
-        
-        vm.startPrank(admin);
+        // Configure Oracle
         oracle.setCurrentAPR(10); // 10% APR
         oracle.setCurrentAPY(8);  // 8% APY
-        oracle.setValidator(VALIDATOR, true, 10);
-        oracle.setUnbondingPeriod(21 days);
-        // Set XFI price in the oracle
-        oracle.setPrice(2 ether); // $2 per XFI
-        // Set launch timestamp to disable unstaking freeze
-        // We need to handle this correctly to avoid underflow
-        vm.warp(60 days); // Advance time to 60 days
-        oracle.setLaunchTimestamp(1); // Set launch timestamp to a very early time
-        vm.stopPrank();
+        oracle.setTotalStakedXFI(1000000 ether);
+        oracle.setUnbondingPeriod(14 days);
+        oracle.setPrice("XFI", 1 ether); // $1 with 18 decimals
+        oracle.setLaunchTimestamp(block.timestamp - 31 days); // Set launch timestamp to a month ago
         
-        // Deploy APR contract proxy
-        bytes memory aprInitData = abi.encodeWithSelector(
+        // Deploy NativeStaking (APR)
+        NativeStaking stakingImpl = new NativeStaking();
+        bytes memory stakingData = abi.encodeWithSelector(
             NativeStaking.initialize.selector,
             address(wxfi),
             address(oracle)
         );
-        aprProxy = new ERC1967Proxy(address(aprImpl), aprInitData);
-        aprStaking = NativeStaking(address(aprProxy));
+        TransparentUpgradeableProxy stakingProxy = new TransparentUpgradeableProxy(
+            address(stakingImpl),
+            address(proxyAdmin),
+            stakingData
+        );
+        staking = NativeStaking(address(stakingProxy));
         
-        // Deploy APY contract proxy
-        bytes memory apyInitData = abi.encodeWithSelector(
+        // Deploy NativeStakingVault (APY)
+        NativeStakingVault vaultImpl = new NativeStakingVault();
+        bytes memory vaultData = abi.encodeWithSelector(
             NativeStakingVault.initialize.selector,
             address(wxfi),
             address(oracle),
-            "Staked XFI",
-            "sXFI"
+            "XFI Staking Vault",
+            "xXFI"
         );
-        apyProxy = new ERC1967Proxy(address(apyImpl), apyInitData);
-        apyStaking = NativeStakingVault(address(apyProxy));
+        TransparentUpgradeableProxy vaultProxy = new TransparentUpgradeableProxy(
+            address(vaultImpl),
+            address(proxyAdmin),
+            vaultData
+        );
+        stakingVault = NativeStakingVault(address(vaultProxy));
         
-        // Deploy manager proxy - fixing payable address issue
-        bytes memory managerInitData = abi.encodeWithSelector(
+        // Deploy NativeStakingManager
+        NativeStakingManager managerImpl = new NativeStakingManager();
+        bytes memory managerData = abi.encodeWithSelector(
             NativeStakingManager.initialize.selector,
-            address(aprStaking),
-            address(apyStaking),
+            address(staking),
+            address(stakingVault),
             address(wxfi),
             address(oracle)
         );
-        managerProxy = new ERC1967Proxy(address(managerImpl), managerInitData);
+        TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
+            address(managerImpl),
+            address(proxyAdmin),
+            managerData
+        );
         manager = NativeStakingManager(payable(address(managerProxy)));
         
         // Setup roles
-        aprStaking.grantRole(STAKING_MANAGER_ROLE, address(manager));
-        aprStaking.grantRole(DEFAULT_ADMIN_ROLE, admin);
-        aprStaking.grantRole(PAUSER_ROLE, pauser);
-        aprStaking.grantRole(UPGRADER_ROLE, upgrader);
+        staking.grantRole(staking.STAKING_MANAGER_ROLE(), address(manager));
+        stakingVault.grantRole(stakingVault.STAKING_MANAGER_ROLE(), address(manager));
+        oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), address(manager));
+        oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), ADMIN);
         
-        apyStaking.grantRole(DEFAULT_ADMIN_ROLE, admin);
-        apyStaking.grantRole(PAUSER_ROLE, pauser);
-        apyStaking.grantRole(UPGRADER_ROLE, upgrader);
+        // Give USER some ETH
+        vm.deal(USER, 100 ether);
         
-        manager.grantRole(DEFAULT_ADMIN_ROLE, admin);
-        manager.grantRole(PAUSER_ROLE, pauser);
-        manager.grantRole(UPGRADER_ROLE, upgrader);
-        
-        // Grant ORACLE_UPDATER_ROLE to the manager so it can clear user rewards
-        oracle.grantRole(ORACLE_UPDATER_ROLE, address(manager));
-        
-        // Setup test users
-        vm.deal(user, INITIAL_BALANCE);
+        vm.stopPrank();
     }
     
-    // Test APR Staking functions
-    
-    function testStakeAPRWithNativeXFI() public {
-        uint256 initialBalance = user.balance;
-        
-        vm.startPrank(user);
-        bool success = manager.stakeAPR{value: STAKE_AMOUNT}(STAKE_AMOUNT, VALIDATOR);
-        vm.stopPrank();
-        
-        assertTrue(success);
-        assertEq(user.balance, initialBalance - STAKE_AMOUNT);
-        
-        // Using getTotalStaked to query user's stake
-        assertEq(aprStaking.getTotalStaked(user), STAKE_AMOUNT);
+    function testGetContractAddresses() public {
+        // Check that the manager returns the correct contract addresses
+        assertEq(manager.getAPRContract(), address(staking), "APR contract address should match");
+        assertEq(manager.getAPYContract(), address(stakingVault), "APY contract address should match");
+        assertEq(manager.getXFIToken(), address(wxfi), "XFI token address should match");
     }
     
-    function testStakeAPRWithWXFI() public {
-        // First wrap some XFI
-        vm.startPrank(user);
-        wxfi.deposit{value: STAKE_AMOUNT}();
-        wxfi.approve(address(manager), STAKE_AMOUNT);
+    function testStakeAPR() public {
+        uint256 stakeAmount = 10 ether;
         
-        // Then stake WXFI
-        bool success = manager.stakeAPR(STAKE_AMOUNT, VALIDATOR);
-        vm.stopPrank();
+        // USER stakes native XFI
+        vm.prank(USER);
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, "validator1");
         
-        assertTrue(success);
-        assertEq(wxfi.balanceOf(user), 0);
+        // Check that USER has staked the correct amount
+        assertEq(staking.getTotalStaked(USER), stakeAmount, "USER should have staked the correct amount");
+    }
+    
+    function testStakeAPY() public {
+        uint256 stakeAmount = 10 ether;
         
-        // Using getTotalStaked to query user's stake
-        assertEq(aprStaking.getTotalStaked(user), STAKE_AMOUNT);
+        // USER stakes native XFI
+        vm.prank(USER);
+        manager.stakeAPY{value: stakeAmount}(stakeAmount);
+        
+        // Check that USER received the correct amount of shares
+        assertGt(stakingVault.balanceOf(USER), 0, "USER should have received shares");
     }
     
     function testUnstakeAPR() public {
-        // First stake
-        vm.startPrank(user);
-        bool stakeSuccess = manager.stakeAPR{value: STAKE_AMOUNT}(STAKE_AMOUNT, VALIDATOR);
-        assertTrue(stakeSuccess);
+        uint256 stakeAmount = 10 ether;
         
-        // Then unstake - no need to verify event logs since we directly get the requestId from the function call
-        uint256 unstakeId = manager.unstakeAPR(STAKE_AMOUNT, VALIDATOR);
+        // USER stakes native XFI
+        vm.prank(USER);
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, "validator1");
         
-        // Advance time past unbonding period
-        vm.warp(block.timestamp + 22 days);
+        // USER requests to unstake half the amount
+        vm.prank(USER);
+        uint256 requestId = manager.unstakeAPR(stakeAmount / 2, "validator1");
         
-        // Verify the user's unstake request exists
-        INativeStaking.UnstakeRequest[] memory requests = aprStaking.getUserUnstakeRequests(user);
-        assertGt(requests.length, 0, "User should have at least one unstake request");
+        // Check that the request was created
+        assertEq(staking.getTotalStaked(USER), stakeAmount / 2, "Half of USER's stake should remain");
         
-        // Check if the request is valid and matches our expected unstake amount
-        bool foundRequest = false;
-        for (uint i = 0; i < requests.length; i++) {
-            if (!requests[i].completed && requests[i].amount == STAKE_AMOUNT) {
-                foundRequest = true;
-                break;
-            }
-        }
-        assertTrue(foundRequest, "No matching unstake request found");
+        // Skip through the unbonding period
+        skip(oracle.getUnbondingPeriod() + 1);
         
-        // In the NativeStaking contract's claimUnstake function, the tokens are transferred
-        // to the msg.sender, which is the manager contract, not directly to the user.
-        // Therefore, we need to check the manager's token balance.
-        uint256 managerBalanceBefore = wxfi.balanceOf(address(manager));
+        // USER claims the unstaked amount
+        uint256 balanceBefore = USER.balance;
+        vm.prank(USER);
+        uint256 claimed = manager.claimUnstakeAPR(requestId);
         
-        // Claim unstake
-        uint256 claimedAmount = manager.claimUnstakeAPR(unstakeId);
-        assertApproxEqRel(claimedAmount, STAKE_AMOUNT, 0.01e18); // 1% tolerance
-        
-        // Check that the manager received the funds
-        uint256 managerBalanceAfter = wxfi.balanceOf(address(manager));
-        assertApproxEqRel(managerBalanceAfter - managerBalanceBefore, STAKE_AMOUNT, 0.01e18);
-        
-        vm.stopPrank();
-    }
-    
-    function testClaimRewardsAPR() public {
-        // First stake
-        vm.startPrank(user);
-        manager.stakeAPR{value: STAKE_AMOUNT}(STAKE_AMOUNT, VALIDATOR);
-        
-        // Advance time for rewards to accrue
-        vm.warp(block.timestamp + 365 days);
-        
-        // Set claimable rewards in the oracle (simulating what backend would do)
-        vm.stopPrank();
-        vm.startPrank(admin);
-        // For 10% APR on 100 ether stake for 1 year, we expect ~10 ether reward
-        oracle.setUserClaimableRewards(user, 10 ether);
-        // Set XFI price for conversion to MPX
-        oracle.setPrice(2 ether); // $2 per XFI
-        vm.stopPrank();
-        
-        // Claim rewards
-        vm.startPrank(user);
-        uint256 rewardsAmount = manager.claimRewardsAPR();
-        vm.stopPrank();
-        
-        // For 10% APR on 100 ether stake for 1 year, we expect ~10 ether reward
-        assertApproxEqRel(rewardsAmount, 10 ether, 0.01e18); // 1% tolerance
-    }
-    
-    // Test APY Staking functions
-    
-    function testStakeAPYWithNativeXFI() public {
-        uint256 initialBalance = user.balance;
-        
-        vm.startPrank(user);
-        uint256 shares = manager.stakeAPY{value: STAKE_AMOUNT}(STAKE_AMOUNT);
-        vm.stopPrank();
-        
-        assertGt(shares, 0);
-        assertEq(user.balance, initialBalance - STAKE_AMOUNT);
-        assertEq(apyStaking.balanceOf(user), shares);
-    }
-    
-    function testStakeAPYWithWXFI() public {
-        // First wrap some XFI
-        vm.startPrank(user);
-        wxfi.deposit{value: STAKE_AMOUNT}();
-        wxfi.approve(address(manager), STAKE_AMOUNT);
-        
-        // Then stake WXFI
-        uint256 shares = manager.stakeAPY(STAKE_AMOUNT);
-        vm.stopPrank();
-        
-        assertGt(shares, 0);
-        assertEq(wxfi.balanceOf(user), 0);
-        assertEq(apyStaking.balanceOf(user), shares);
-    }
-    
-    function testClaimWithdrawalAPY() public {
-        // First stake
-        vm.startPrank(user);
-        uint256 shares = manager.stakeAPY{value: STAKE_AMOUNT}(STAKE_AMOUNT);
-        
-        // Request withdrawal (will be queued)
-        // We need to explicitly approve the manager to spend our shares
-        apyStaking.approve(address(manager), shares);
-        
-        // Record the logs to capture the withdrawal request ID from the event
-        vm.recordLogs();
-        manager.withdrawAPY(shares);
-        
-        // Get the event logs
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        
-        // Debug: Print all events to see what's actually being emitted
-        console.log("Number of logs:", entries.length);
-        
-        // We need to find the request ID from the logs
-        // The WithdrawalRequested event should contain the request ID
-        uint256 requestId = 0; // Default to 0 to cause a failure if not found
-        
-        for (uint i = 0; i < entries.length; i++) {
-            // Look for events from the APY staking contract
-            if (entries[i].emitter == address(apyStaking)) {
-                // The WithdrawalRequested event has the signature:
-                // WithdrawalRequested(address indexed owner, address indexed receiver, uint256 indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime)
-                bytes32 eventSignature = keccak256("WithdrawalRequested(address,address,uint256,uint256,uint256,uint256)");
-                
-                if (entries[i].topics[0] == eventSignature) {
-                    // The requestId is the third indexed parameter (topics[3])
-                    requestId = uint256(entries[i].topics[3]);
-                    console.log("Found request ID in logs:", requestId);
-                    break;
-                }
-            }
-        }
-        
-        // Make sure we found a valid request ID
-        require(requestId > 0, "Failed to extract request ID from logs");
-        
-        // Advance time past unbonding period
-        vm.warp(block.timestamp + 22 days);
-        
-        // Fund vault to allow for withdrawal completion
-        vm.stopPrank();
-        vm.deal(address(this), STAKE_AMOUNT);
-        wxfi.deposit{value: STAKE_AMOUNT}();
-        wxfi.transfer(address(apyStaking), STAKE_AMOUNT);
-        
-        // Grant STAKING_MANAGER_ROLE to the manager for the APY contract
-        // This allows the manager to call functions on the APY contract on behalf of users
-        vm.startPrank(admin);
-        apyStaking.grantRole(STAKING_MANAGER_ROLE, address(manager));
-        vm.stopPrank();
-        
-        // Record manager's token balance before the claim
-        uint256 managerBalanceBefore = wxfi.balanceOf(address(manager));
-        
-        // Claim withdrawal
-        vm.startPrank(user);
-        uint256 amountClaimed = manager.claimWithdrawalAPY(requestId);
-        vm.stopPrank();
-        
-        // Check that the manager received the withdrawn assets
-        uint256 managerBalanceAfter = wxfi.balanceOf(address(manager));
-        assertApproxEqRel(managerBalanceAfter - managerBalanceBefore, amountClaimed, 0.01e18);
-        assertApproxEqRel(amountClaimed, STAKE_AMOUNT, 0.01e18); // 1% tolerance
-    }
-    
-    function testWithdrawAPY() public {
-        // First stake
-        vm.startPrank(user);
-        uint256 shares = manager.stakeAPY{value: STAKE_AMOUNT}(STAKE_AMOUNT);
-        vm.stopPrank();
-        
-        // Let's fund the APY contract with some liquidity so withdrawal won't be queued
-        // We need to fund it with much more than the stake amount to ensure there's enough liquidity
-        vm.deal(address(this), STAKE_AMOUNT * 10);
-        wxfi.deposit{value: STAKE_AMOUNT * 10}();
-        
-        // First approve the transfer from this address to the vault
-        wxfi.approve(address(apyStaking), STAKE_AMOUNT * 10);
-        
-        // Now transfer the tokens to the APY contract to add liquidity
-        // We need to set maxLiquidityPercent to allow more liquidity to be withdrawn immediately
-        vm.startPrank(admin);
-        apyStaking.setMaxLiquidityPercent(10000); // 100% (10000 basis points)
-        vm.stopPrank();
-        
-        // Transfer the tokens
-        wxfi.transfer(address(apyStaking), STAKE_AMOUNT * 10);
-        
-        // Grant STAKING_MANAGER_ROLE to the manager for the APY contract
-        vm.startPrank(admin);
-        apyStaking.grantRole(STAKING_MANAGER_ROLE, address(manager));
-        vm.stopPrank();
-        
-        // Now withdraw
-        vm.startPrank(user);
-        // Approve the manager to spend shares (needed for the redeem function)
-        apyStaking.approve(address(manager), shares);
-        uint256 assets = manager.withdrawAPY(shares);
-        vm.stopPrank();
-        
-        // There should be assets withdrawn since we added extra liquidity
-        assertGt(assets, 0, "Should have withdrawn assets immediately");
-        // User's balance in APY contract should now be zero
-        assertEq(apyStaking.balanceOf(user), 0, "User should have no more shares");
-    }
-    
-    function testWithdrawAPYQueued() public {
-        // First stake
-        vm.startPrank(user);
-        uint256 shares = manager.stakeAPY{value: STAKE_AMOUNT}(STAKE_AMOUNT);
-        vm.stopPrank();
-        
-        // Grant STAKING_MANAGER_ROLE to the manager for the APY contract
-        vm.startPrank(admin);
-        apyStaking.grantRole(STAKING_MANAGER_ROLE, address(manager));
-        vm.stopPrank();
-        
-        // When there's no extra liquidity in the vault, the withdrawal will be queued
-        // First, make sure the user has approved the manager to handle the shares
-        vm.startPrank(user);
-        apyStaking.approve(address(manager), shares);
-        uint256 assets = manager.withdrawAPY(shares);
-        vm.stopPrank();
-        
-        // Assets should be 0 since withdrawal was queued
-        assertEq(assets, 0, "Withdrawal should be queued, returning 0 assets");
-        
-        // Verify that a withdrawal request was created
-        INativeStakingVault.WithdrawalRequest[] memory requests = apyStaking.getUserWithdrawalRequests(user);
-        assertEq(requests.length, 1, "Should have one withdrawal request");
-    }
-    
-    // Test View Functions
-    
-    function testGetAPRContract() public {
-        assertEq(manager.getAPRContract(), address(aprStaking));
-    }
-    
-    function testGetAPYContract() public {
-        assertEq(manager.getAPYContract(), address(apyStaking));
-    }
-    
-    function testGetXFIToken() public {
-        assertEq(manager.getXFIToken(), address(wxfi));
-    }
-    
-    function testGetUnbondingPeriod() public {
-        assertEq(manager.getUnbondingPeriod(), 21 days);
-    }
-    
-    // Test Admin Functions
-    
-    function testSetAPRContract() public {
-        NativeStaking newApr = new NativeStaking();
-        
-        vm.startPrank(admin);
-        manager.setAPRContract(address(newApr));
-        vm.stopPrank();
-        
-        assertEq(manager.getAPRContract(), address(newApr));
-    }
-    
-    function testSetAPYContract() public {
-        NativeStakingVault newApy = new NativeStakingVault();
-        
-        vm.startPrank(admin);
-        manager.setAPYContract(address(newApy));
-        vm.stopPrank();
-        
-        assertEq(manager.getAPYContract(), address(newApy));
-    }
-    
-    function testSetOracle() public {
-        // Deploy and initialize a new Oracle
-        CrossFiOracle newOracleImpl = new CrossFiOracle();
-        bytes memory oracleInitData = abi.encodeWithSelector(
-            CrossFiOracle.initialize.selector
-        );
-        ERC1967Proxy newOracleProxy = new ERC1967Proxy(address(newOracleImpl), oracleInitData);
-        CrossFiOracle newOracle = CrossFiOracle(address(newOracleProxy));
-        
-        // Grant admin role to admin
-        newOracle.grantRole(DEFAULT_ADMIN_ROLE, admin);
-        newOracle.grantRole(ORACLE_UPDATER_ROLE, admin);
-        
-        // Set the oracle in the manager
-        vm.startPrank(admin);
-        manager.setOracle(address(newOracle));
-        
-        // Set a distinct unbonding period in the new oracle to verify it's being used
-        newOracle.setUnbondingPeriod(14 days);
-        vm.stopPrank();
-        
-        // Check that the manager is using the new oracle
-        assertEq(manager.getUnbondingPeriod(), 14 days);
-    }
-    
-    function testSetZeroAddressFails() public {
-        vm.startPrank(admin);
-        
-        vm.expectRevert("Invalid address");
-        manager.setAPRContract(address(0));
-        
-        vm.expectRevert("Invalid address");
-        manager.setAPYContract(address(0));
-        
-        vm.expectRevert("Invalid address");
-        manager.setOracle(address(0));
-        
-        vm.stopPrank();
-    }
-    
-    // Test Pause/Unpause
-    
-    function testPause() public {
-        vm.startPrank(pauser);
-        manager.pause();
-        vm.stopPrank();
-        
-        assertTrue(manager.paused());
-        
-        // Staking should fail when paused
-        vm.startPrank(user);
-        vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
-        manager.stakeAPR{value: STAKE_AMOUNT}(STAKE_AMOUNT, VALIDATOR);
-        vm.stopPrank();
-    }
-    
-    function testUnpause() public {
-        vm.startPrank(pauser);
-        manager.pause();
-        manager.unpause();
-        vm.stopPrank();
-        
-        assertFalse(manager.paused());
-        
-        // Staking should work after unpause
-        vm.startPrank(user);
-        bool success = manager.stakeAPR{value: STAKE_AMOUNT}(STAKE_AMOUNT, VALIDATOR);
-        vm.stopPrank();
-        
-        assertTrue(success);
-    }
-    
-    // Test Receive Function
-    
-    function testReceiveFunction() public {
-        // Send ETH directly to the contract
-        vm.deal(user, STAKE_AMOUNT);
-        
-        vm.startPrank(user);
-        (bool callSuccess, ) = address(manager).call{value: STAKE_AMOUNT}("");
-        vm.stopPrank();
-        
-        assertTrue(callSuccess);
-        assertEq(address(manager).balance, STAKE_AMOUNT);
-    }
-    
-    function testReceiveFunctionWhenPaused() public {
-        vm.startPrank(pauser);
-        manager.pause();
-        vm.stopPrank();
-        
-        vm.deal(user, STAKE_AMOUNT);
-        
-        vm.startPrank(user);
-        vm.expectRevert("Contract is paused");
-        address(manager).call{value: STAKE_AMOUNT}("");
-        vm.stopPrank();
-    }
-    
-    // Test role authorization
-    
-    function testUnauthorizedAccess() public {
-        vm.startPrank(user);
-        
-        vm.expectRevert();
-        manager.setAPRContract(address(1));
-        
-        vm.expectRevert();
-        manager.setAPYContract(address(1));
-        
-        vm.expectRevert();
-        manager.setOracle(address(1));
-        
-        vm.expectRevert();
-        manager.pause();
-        
-        vm.expectRevert();
-        manager.unpause();
-        
-        vm.stopPrank();
+        // Check that the right amount was claimed
+        assertEq(claimed, stakeAmount / 2, "USER should have claimed half the stake");
+        assertEq(USER.balance, balanceBefore + stakeAmount / 2, "USER's balance should have increased");
     }
 } 

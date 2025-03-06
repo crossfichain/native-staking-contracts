@@ -83,4 +83,22 @@ interface INativeStakingManager {
      * @return The unbonding period in seconds
      */
     function getUnbondingPeriod() external view returns (uint256);
+    
+    /**
+     * @dev Checks if unstaking is frozen (during the initial freeze period after launch)
+     * @return True if unstaking is still frozen
+     */
+    function isUnstakingFrozen() external view returns (bool);
+    
+    /**
+     * @dev Gets the unstaking freeze time in seconds
+     * @return The unstaking freeze time in seconds
+     */
+    function getUnstakeFreezeTime() external view returns (uint256);
+    
+    /**
+     * @dev Gets the launch timestamp
+     * @return The launch timestamp
+     */
+    function getLaunchTimestamp() external view returns (uint256);
 } 

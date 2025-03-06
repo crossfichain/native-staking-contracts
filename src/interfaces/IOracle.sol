@@ -73,12 +73,6 @@ interface IOracle {
      * @return amount The claimable reward amount
      */
     function getUserClaimableRewards(address user) external view returns (uint256);
-    
-    /**
-     * @dev Checks if unstaking is frozen (first month after launch)
-     * @return True if unstaking is still frozen
-     */
-    function isUnstakingFrozen() external view returns (bool);
 
     /**
      * @dev Clears claimable rewards for a user after they have been claimed
