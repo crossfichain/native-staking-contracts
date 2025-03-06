@@ -431,34 +431,37 @@ contract UnifiedOracle is
     }
     
     /**
-     * @dev Checks if a validator is active
-     * This is a legacy function since validation occurs off-chain
-     * @param validator The validator ID to check (unused)
-     * @return Always returns true since validation occurs off-chain
+     * @dev [OPTIONAL] Checks if a validator is active
+     * This is now only for informational purposes as validation occurs off-chain
+     * @return True if the validator is active and valid for staking
+     * 
+     * Note: The validator parameter is not used in this implementation
      */
-    function isValidatorActive(string calldata validator) 
+    function isValidatorActive(string calldata /* validator */) 
         external 
         pure 
         override 
         returns (bool) 
     {
-        // Always return true as validation is now handled off-chain
+        // In a real implementation, this would check against the DIA Oracle
+        // For now, just return a fixed value
         return true;
     }
     
     /**
-     * @dev Returns the APR for a specific validator
-     * This is a legacy function since validation occurs off-chain
-     * @param validator The validator ID (unused)
-     * @return The current global APR with 18 decimals
+     * @dev [OPTIONAL] Returns the current APR for a specific validator
+     * This is now only for informational purposes as validation occurs off-chain
+     * @return The current APR as a percentage with 18 decimals
+     * 
+     * Note: The validator parameter is not used in this implementation
      */
-    function getValidatorAPR(string calldata validator) 
+    function getValidatorAPR(string calldata /* validator */) 
         external 
         view 
         override 
         returns (uint256) 
     {
-        // Return the global APR since validator-specific APRs are handled off-chain
+        // Just return the default APR for now
         return _currentAPR;
     }
     

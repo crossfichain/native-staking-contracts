@@ -296,8 +296,9 @@ contract NativeStakingManager is
         // Check if unstaking is frozen (first month after launch)
         require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
         
-        // Call APR contract and pass validator for events
-        uint256 unstakeReqId = aprContract.requestUnstake(msg.sender, amount, validator);
+        // Call the APR staking contract to request unstake
+        // The returned unstake request ID is not used locally since we track with our own ID system
+        aprContract.requestUnstake(msg.sender, amount, validator);
         
         // Create a request record
         requestId = _createRequest(
@@ -374,7 +375,10 @@ contract NativeStakingManager is
         } catch {
             // Not enough liquid assets, use delayed withdrawal
             uint256 previewAssets = apyContract.previewRedeem(shares);
-            uint256 vaultRequestId = apyContract.requestWithdrawal(previewAssets, msg.sender, msg.sender);
+            
+            // Make the vault withdrawal request
+            // The vault maintains its own request ID system internally
+            apyContract.requestWithdrawal(previewAssets, msg.sender, msg.sender);
             
             // Assets will be delivered later
             assets = 0;
@@ -471,10 +475,12 @@ contract NativeStakingManager is
         onlyRole(FULFILLER_ROLE) 
         returns (bool success) 
     {
-        require(requestId > 0 && requestId < _nextRequestId, "Invalid request ID");
-        require(status != RequestStatus.PENDING, "Cannot set status to PENDING");
-        
+        // With our new hashing-based request ID system, we verify the request exists
+        // by checking if its timestamp is non-zero rather than comparing against _nextRequestId
         Request storage request = _requests[requestId];
+        require(request.timestamp > 0, "Invalid request ID");
+        
+        require(status != RequestStatus.PENDING, "Cannot set status to PENDING");
         
         // Request must be pending
         require(request.status == RequestStatus.PENDING, "Request not pending");
@@ -504,9 +510,20 @@ contract NativeStakingManager is
         RequestType requestType
     ) 
         internal
-        returns (uint256) 
+        returns (uint256 requestId) 
     {
-        uint256 requestId = _nextRequestId++;
+        // Generate a unique request ID using deterministic hashing
+        requestId = uint256(keccak256(abi.encodePacked(
+            user,
+            amount,
+            validator,
+            requestType,
+            block.timestamp,
+            _nextRequestId
+        )));
+        
+        // Increment the counter for added uniqueness in future requests
+        _nextRequestId++;
         
         _requests[requestId] = Request({
             user: user,
@@ -545,9 +562,9 @@ contract NativeStakingManager is
             string memory statusReason
         ) 
     {
-        require(requestId > 0 && requestId < _nextRequestId, "Invalid request ID");
-        
+        // Check if the request exists by verifying its timestamp is non-zero
         Request storage request = _requests[requestId];
+        require(request.timestamp > 0, "Invalid request ID");
         
         return (
             request.user,
@@ -790,6 +807,35 @@ contract NativeStakingManager is
         }
         
         return count;
+    }
+    
+    /**
+     * @dev Allows users to predict what their request ID will be
+     * This is useful for tracking purposes, especially with the new hashing mechanism
+     * @param user The user who will make the request
+     * @param amount The amount that will be involved in the request
+     * @param validator The validator for the request
+     * @param requestType The type of request
+     * @return The predicted request ID
+     */
+    function predictRequestId(
+        address user,
+        uint256 amount,
+        string calldata validator,
+        RequestType requestType
+    ) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return uint256(keccak256(abi.encodePacked(
+            user,
+            amount,
+            validator,
+            requestType,
+            block.timestamp,
+            _nextRequestId
+        )));
     }
     
     /**

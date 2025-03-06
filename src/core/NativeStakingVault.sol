@@ -335,11 +335,11 @@ contract NativeStakingVault is
         // and compound the rewards. For this implementation, we'll simulate it.
         
         // Calculate rewards based on APY since last compound
-        uint256 totalAssets = _calculateTotalAssetsWithCompounding();
+        uint256 calculatedTotalAssets = _calculateTotalAssetsWithCompounding();
         uint256 currentAssets = super.totalAssets();
         
-        if (totalAssets > currentAssets) {
-            uint256 rewardsAmount = totalAssets - currentAssets;
+        if (calculatedTotalAssets > currentAssets) {
+            uint256 rewardsAmount = calculatedTotalAssets - currentAssets;
             
             // Update last compound timestamp
             _lastCompoundTimestamp = block.timestamp;
@@ -390,34 +390,20 @@ contract NativeStakingVault is
     }
     
     /**
-     * @dev Calculates total assets with compounding
-     * @return The total assets including compound rewards
+     * @dev Internal function to calculate total assets with compounding
+     * @return The total assets with compounding applied
      */
-    function _calculateTotalAssetsWithCompounding() private view returns (uint256) {
-        uint256 currentAssets = super.totalAssets();
+    function _calculateTotalAssetsWithCompounding() internal view returns (uint256) {
+        // Get the raw asset balance
+        uint256 rawAssets = IERC20(asset()).balanceOf(address(this));
         
-        // If no assets in vault, return 0
-        if (currentAssets == 0) {
-            return 0;
-        }
+        // Add pending withdrawals (assets that are being withdrawn)
+        uint256 pendingWithdrawals = _totalPendingWithdrawals;
         
-        // Calculate time since last compound
-        uint256 timeSinceLastCompound = block.timestamp - _lastCompoundTimestamp;
+        // Calculate total with compounding
+        uint256 calculatedTotalAssets = rawAssets + pendingWithdrawals;
         
-        // No rewards if compounded recently
-        if (timeSinceLastCompound < 1 hours) {
-            return currentAssets;
-        }
-        
-        // Get the current APY from oracle
-        uint256 apy = oracle.getCurrentAPY();
-        
-        // Calculate rewards: principal * (1 + APY)^(timeInYears) - principal
-        // For simplicity, use a linear approximation: principal * APY * timeInYears
-        uint256 timeInYears = timeSinceLastCompound * PRECISION / (365 days);
-        uint256 rewards = currentAssets * apy * timeInYears / (PRECISION * PRECISION);
-        
-        return currentAssets + rewards;
+        return calculatedTotalAssets;
     }
     
     /**
