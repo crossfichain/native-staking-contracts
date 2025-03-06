@@ -61,9 +61,10 @@ interface INativeStaking {
     /**
      * @dev Claims staking rewards for a user
      * @param user The user to claim rewards for
+     * @param rewardAmount The amount of rewards to claim (determined by oracle)
      * @return amount The amount of rewards claimed
      */
-    function claimRewards(address user) external returns (uint256 amount);
+    function claimRewards(address user, uint256 rewardAmount) external returns (uint256 amount);
     
     /**
      * @dev Gets all active stakes for a user

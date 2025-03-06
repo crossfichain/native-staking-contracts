@@ -67,6 +67,12 @@ contract NativeStakingManagerTest is Test {
         oracle.setCurrentAPY(8);  // 8% APY
         oracle.setValidator(VALIDATOR, true, 10);
         oracle.setUnbondingPeriod(21 days);
+        // Set XFI price in the oracle
+        oracle.setPrice(2 ether); // $2 per XFI
+        // Set launch timestamp to disable unstaking freeze
+        // We need to handle this correctly to avoid underflow
+        vm.warp(60 days); // Advance time to 60 days
+        oracle.setLaunchTimestamp(1); // Set launch timestamp to a very early time
         vm.stopPrank();
         
         // Deploy APR contract proxy
@@ -113,6 +119,9 @@ contract NativeStakingManagerTest is Test {
         manager.grantRole(DEFAULT_ADMIN_ROLE, admin);
         manager.grantRole(PAUSER_ROLE, pauser);
         manager.grantRole(UPGRADER_ROLE, upgrader);
+        
+        // Grant ORACLE_UPDATER_ROLE to the manager so it can clear user rewards
+        oracle.grantRole(ORACLE_UPDATER_ROLE, address(manager));
         
         // Setup test users
         vm.deal(user, INITIAL_BALANCE);
@@ -201,7 +210,17 @@ contract NativeStakingManagerTest is Test {
         // Advance time for rewards to accrue
         vm.warp(block.timestamp + 365 days);
         
+        // Set claimable rewards in the oracle (simulating what backend would do)
+        vm.stopPrank();
+        vm.startPrank(admin);
+        // For 10% APR on 100 ether stake for 1 year, we expect ~10 ether reward
+        oracle.setUserClaimableRewards(user, 10 ether);
+        // Set XFI price for conversion to MPX
+        oracle.setPrice(2 ether); // $2 per XFI
+        vm.stopPrank();
+        
         // Claim rewards
+        vm.startPrank(user);
         uint256 rewardsAmount = manager.claimRewardsAPR();
         vm.stopPrank();
         
@@ -254,24 +273,31 @@ contract NativeStakingManagerTest is Test {
         // Get the event logs
         Vm.Log[] memory entries = vm.getRecordedLogs();
         
-        // Look for the WithdrawalRequestedAPY event to extract the request ID
-        uint256 requestId;
+        // Debug: Print all events to see what's actually being emitted
+        console.log("Number of logs:", entries.length);
+        
+        // We need to find the request ID from the logs
+        // The WithdrawalRequested event should contain the request ID
+        uint256 requestId = 0; // Default to 0 to cause a failure if not found
+        
         for (uint i = 0; i < entries.length; i++) {
-            // The WithdrawalRequestedAPY event has the signature:
-            // WithdrawalRequestedAPY(address sender, uint256 assets, uint256 requestId)
-            // It's emitted from the NativeStakingManager contract
-            if (entries[i].emitter == address(manager)) {
-                bytes32 eventSignature = keccak256("WithdrawalRequestedAPY(address,uint256,uint256)");
+            // Look for events from the APY staking contract
+            if (entries[i].emitter == address(apyStaking)) {
+                // The WithdrawalRequested event has the signature:
+                // WithdrawalRequested(address indexed owner, address indexed receiver, uint256 indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime)
+                bytes32 eventSignature = keccak256("WithdrawalRequested(address,address,uint256,uint256,uint256,uint256)");
+                
                 if (entries[i].topics[0] == eventSignature) {
-                    // The requestId is the 3rd parameter, which is in the data field
-                    // topics[0] is the event signature, topics[1] is the indexed sender
-                    // The data field contains the non-indexed parameters
-                    (, uint256 reqId) = abi.decode(entries[i].data, (uint256, uint256));
-                    requestId = reqId;
+                    // The requestId is the third indexed parameter (topics[3])
+                    requestId = uint256(entries[i].topics[3]);
+                    console.log("Found request ID in logs:", requestId);
                     break;
                 }
             }
         }
+        
+        // Make sure we found a valid request ID
+        require(requestId > 0, "Failed to extract request ID from logs");
         
         // Advance time past unbonding period
         vm.warp(block.timestamp + 22 days);
@@ -287,11 +313,6 @@ contract NativeStakingManagerTest is Test {
         vm.startPrank(admin);
         apyStaking.grantRole(STAKING_MANAGER_ROLE, address(manager));
         vm.stopPrank();
-        
-        // The claimWithdrawal function in NativeStakingVault transfers assets to msg.sender (the manager)
-        // But the manager doesn't transfer them to the user. This is a design issue in the manager contract.
-        // In a real implementation, the manager should transfer the assets to the user.
-        // For this test, we'll just verify that the manager receives the assets.
         
         // Record manager's token balance before the claim
         uint256 managerBalanceBefore = wxfi.balanceOf(address(manager));

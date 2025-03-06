@@ -49,6 +49,11 @@ contract UnifiedOracle is
     uint256 private _currentAPY;
     uint256 private _unbondingPeriod;
     
+    // Added variables
+    mapping(address => uint256) private _userClaimableRewards;
+    uint256 private _launchTimestamp;
+    uint256 private constant MPX_PRICE_USD = 4 * 1e16; // $0.04 in 18 decimals
+    
     // Events
     event PriceUpdated(string indexed symbol, uint256 price);
     event DiaOracleUpdated(address indexed newOracle);
@@ -57,6 +62,8 @@ contract UnifiedOracle is
     event CurrentAPRUpdated(uint256 apr);
     event CurrentAPYUpdated(uint256 apy);
     event UnbondingPeriodUpdated(uint256 period);
+    event UserRewardsUpdated(address indexed user, uint256 amount);
+    event LaunchTimestampSet(uint256 timestamp);
     
     /**
      * @dev Initializes the contract
@@ -82,6 +89,9 @@ contract UnifiedOracle is
         // Default APR and APY
         _currentAPR = 10 * PRICE_PRECISION / 100; // 10%
         _currentAPY = 8 * PRICE_PRECISION / 100;  // 8%
+        
+        // Set launch timestamp to current time
+        _launchTimestamp = block.timestamp;
     }
     
     /**
@@ -344,6 +354,131 @@ contract UnifiedOracle is
         onlyRole(UPGRADER_ROLE) 
     {
         // No additional logic needed
+    }
+
+    /**
+     * @dev Returns the fixed price of MPX in USD
+     * @return The MPX price with 18 decimals of precision
+     */
+    function getMPXPrice() 
+        external 
+        pure 
+        override 
+        returns (uint256) 
+    {
+        return MPX_PRICE_USD;
+    }
+    
+    /**
+     * @dev Converts XFI amount to MPX amount based on current prices
+     * @param xfiAmount The amount of XFI to convert
+     * @return mpxAmount The equivalent amount of MPX
+     */
+    function convertXFItoMPX(uint256 xfiAmount) 
+        external 
+        view 
+        override 
+        returns (uint256 mpxAmount) 
+    {
+        // MPX amount = (XFI amount ? XFI price in USD) ? MPX price ($0.04)
+        (uint256 xfiPriceUSD,) = getXFIPrice();
+        require(xfiPriceUSD > 0, "XFI price not available");
+        
+        mpxAmount = (xfiAmount * xfiPriceUSD) / MPX_PRICE_USD;
+        return mpxAmount;
+    }
+    
+    /**
+     * @dev Sets the launch timestamp for the unstaking freeze period
+     * @param timestamp The launch timestamp
+     */
+    function setLaunchTimestamp(uint256 timestamp) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _launchTimestamp = timestamp;
+        emit LaunchTimestampSet(timestamp);
+    }
+    
+    /**
+     * @dev Checks if unstaking is frozen (first month after launch)
+     * @return True if unstaking is still frozen
+     */
+    function isUnstakingFrozen() 
+        external 
+        view 
+        override 
+        returns (bool) 
+    {
+        return (block.timestamp < _launchTimestamp + 30 days);
+    }
+    
+    /**
+     * @dev Sets claimable rewards for a specific user
+     * @param user The user address
+     * @param amount The claimable reward amount
+     */
+    function setUserClaimableRewards(address user, uint256 amount) 
+        external 
+        onlyRole(ORACLE_UPDATER_ROLE) 
+        whenNotPaused 
+    {
+        _userClaimableRewards[user] = amount;
+        emit UserRewardsUpdated(user, amount);
+    }
+    
+    /**
+     * @dev Gets claimable rewards for a specific user
+     * @param user The user address
+     * @return amount The claimable reward amount
+     */
+    function getUserClaimableRewards(address user) 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        return _userClaimableRewards[user];
+    }
+    
+    /**
+     * @dev Clears claimable rewards for a user after they have been claimed
+     * @param user The user address
+     * @return amount The amount that was cleared
+     */
+    function clearUserClaimableRewards(address user) 
+        external 
+        override 
+        onlyRole(ORACLE_UPDATER_ROLE) 
+        whenNotPaused 
+        returns (uint256 amount) 
+    {
+        amount = _userClaimableRewards[user];
+        _userClaimableRewards[user] = 0;
+        emit UserRewardsUpdated(user, 0);
+        return amount;
+    }
+    
+    /**
+     * @dev Decreases claimable rewards for a user by a specific amount
+     * @param user The user address
+     * @param amount The amount to decrease by
+     * @return newAmount The new reward amount after decrease
+     */
+    function decreaseUserClaimableRewards(address user, uint256 amount) 
+        external 
+        override 
+        onlyRole(ORACLE_UPDATER_ROLE) 
+        whenNotPaused 
+        returns (uint256 newAmount) 
+    {
+        require(_userClaimableRewards[user] >= amount, "Insufficient rewards");
+        
+        _userClaimableRewards[user] -= amount;
+        newAmount = _userClaimableRewards[user];
+        
+        emit UserRewardsUpdated(user, newAmount);
+        return newAmount;
     }
 
     /**

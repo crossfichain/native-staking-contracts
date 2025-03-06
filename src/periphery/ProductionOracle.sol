@@ -7,15 +7,15 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "../interfaces/IOracle.sol";
+import "../interfaces/IDIAOracle.sol";
 
 /**
- * @title CrossFiOracle
- * @dev Oracle contract that provides price data and staking information
- * Serves as a bridge between the Cosmos chain and the EVM chain
- * Validator information is now just informational as validation occurs off-chain
- * Implements the IOracle interface
+ * @title ProductionOracle
+ * @dev Production-ready Oracle that integrates with DIA Oracle for pricing data
+ * and provides necessary functionality for the Native Staking system.
+ * This Oracle serves as a bridge between the Cosmos chain (via DIA Oracle) and the EVM chain.
  */
-contract CrossFiOracle is 
+contract ProductionOracle is 
     Initializable, 
     AccessControlUpgradeable, 
     PausableUpgradeable, 
@@ -25,40 +25,43 @@ contract CrossFiOracle is
 {
     // Constants
     uint256 private constant PRICE_PRECISION = 1e18;
+    uint256 private constant DIA_PRECISION = 1e8;    // DIA Oracle returns prices with 8 decimals
     uint256 private constant MPX_PRICE_USD = 4 * 1e16; // $0.04 in 18 decimals (4 * 10^16)
+    uint256 private constant PRICE_FRESHNESS_THRESHOLD = 1 hours;
     
     // Custom roles for access control
     bytes32 public constant ORACLE_UPDATER_ROLE = keccak256("ORACLE_UPDATER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
+    // External oracle reference
+    IDIAOracle public diaOracle;
+    
     // State variables
-    mapping(string => uint256) private _prices;
-    mapping(string => bool) private _activeValidators;
-    mapping(string => uint256) private _validatorAPRs;
-    mapping(address => uint256) private _userClaimableRewards; // Added: Claimable rewards per user
+    mapping(string => uint256) private _prices;  // Fallback prices with 18 decimals
+    uint256 private _lastPriceUpdateTimestamp;
+    mapping(address => uint256) private _userClaimableRewards;
     uint256 private _totalStakedXFI;
     uint256 private _currentAPY;
     uint256 private _currentAPR;
     uint256 private _unbondingPeriod;
-    uint256 private _launchTimestamp; // Added: Timestamp of product launch for unstaking freeze
+    uint256 private _launchTimestamp;
     
     // Events
     event PriceUpdated(string indexed symbol, uint256 price);
-    event ValidatorStatusUpdated(string indexed validator, bool isActive);
-    event ValidatorAPRUpdated(string indexed validator, uint256 apr);
+    event DiaOracleUpdated(address indexed newOracle);
     event TotalStakedXFIUpdated(uint256 amount);
     event CurrentAPYUpdated(uint256 apy);
     event CurrentAPRUpdated(uint256 apr);
     event UnbondingPeriodUpdated(uint256 period);
-    event UserRewardsUpdated(address indexed user, uint256 amount); // Added: Event for user rewards
-    event LaunchTimestampSet(uint256 timestamp); // Added: Event for launch timestamp
+    event UserRewardsUpdated(address indexed user, uint256 amount);
+    event LaunchTimestampSet(uint256 timestamp);
     
     /**
      * @dev Initializes the contract
-     * Sets up roles and default values
+     * @param _diaOracle The address of the DIA Oracle contract
      */
-    function initialize() public initializer {
+    function initialize(address _diaOracle) public initializer {
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
@@ -68,6 +71,9 @@ contract CrossFiOracle is
         _grantRole(ORACLE_UPDATER_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(UPGRADER_ROLE, msg.sender);
+        
+        // Set DIA Oracle
+        diaOracle = IDIAOracle(_diaOracle);
         
         // Default unbonding period (21 days in seconds)
         _unbondingPeriod = 21 days;
@@ -81,68 +87,73 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Updates the price of a token
+     * @dev Gets the current XFI price from the DIA Oracle
+     * @return price The price of XFI in USD with 18 decimals
+     * @return timestamp The timestamp when the price was updated
+     */
+    function getXFIPrice() public view returns (uint256 price, uint256 timestamp) {
+        (uint128 diaPrice, uint128 diaTimestamp) = diaOracle.getValue("XFI/USD");
+        
+        // Convert from DIA 8 decimals to our 18 decimals
+        price = uint256(diaPrice) * PRICE_PRECISION / DIA_PRECISION;
+        timestamp = diaTimestamp;
+        
+        // If price is zero or too old, use fallback price
+        if (price == 0 || block.timestamp - timestamp > PRICE_FRESHNESS_THRESHOLD) {
+            price = _prices["XFI"];
+            timestamp = _lastPriceUpdateTimestamp;
+            
+            // Ensure we still have a valid price
+            require(price > 0, "XFI price not available");
+        }
+        
+        return (price, timestamp);
+    }
+    
+    /**
+     * @dev Returns the current price of the given symbol
+     * @param symbol The symbol to get the price for
+     * @return The price with 18 decimals of precision
+     */
+    function getPrice(string calldata symbol) 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        if (keccak256(bytes(symbol)) == keccak256(bytes("XFI"))) {
+            (uint256 price,) = getXFIPrice();
+            return price;
+        }
+        return _prices[symbol];
+    }
+    
+    /**
+     * @dev Manually sets the fallback price of a token
+     * @param symbol The symbol to update the price for
      * @param price The price with 18 decimals of precision
      */
-    function setPrice(uint256 price) 
+    function setPrice(string calldata symbol, uint256 price) 
         external 
         onlyRole(ORACLE_UPDATER_ROLE) 
         whenNotPaused 
     {
-        _prices["XFI"] = price;
-        emit PriceUpdated("XFI", price);
+        _prices[symbol] = price;
+        _lastPriceUpdateTimestamp = block.timestamp;
+        emit PriceUpdated(symbol, price);
     }
     
     /**
-     * @dev Updates the active status of a validator (informational only)
-     * This is now only for informational purposes as validation occurs off-chain
-     * @param validator The validator address/ID
-     * @param isActive Whether the validator is active
-     * @param apr The APR with 18 decimals of precision
+     * @dev Sets the DIA Oracle address
+     * @param _diaOracle The address of the DIA Oracle contract
      */
-    function setValidator(string calldata validator, bool isActive, uint256 apr) 
+    function setDIAOracle(address _diaOracle) 
         external 
-        onlyRole(ORACLE_UPDATER_ROLE) 
-        whenNotPaused 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
     {
-        _activeValidators[validator] = isActive;
-        _validatorAPRs[validator] = apr * PRICE_PRECISION / 100; // Convert from percentage to 18 decimal precision
-        emit ValidatorStatusUpdated(validator, isActive);
-        emit ValidatorAPRUpdated(validator, _validatorAPRs[validator]);
-    }
-    
-    /**
-     * @dev Updates multiple validators status at once (informational only)
-     * This is now only for informational purposes as validation occurs off-chain
-     * @param validators Array of validator addresses/IDs
-     * @param statuses Array of active statuses
-     */
-    function bulkSetValidatorStatus(string[] calldata validators, bool[] calldata statuses) 
-        external 
-        onlyRole(ORACLE_UPDATER_ROLE) 
-        whenNotPaused 
-    {
-        require(validators.length == statuses.length, "Length mismatch");
-        
-        for (uint256 i = 0; i < validators.length; i++) {
-            _activeValidators[validators[i]] = statuses[i];
-            emit ValidatorStatusUpdated(validators[i], statuses[i]);
-        }
-    }
-    
-    /**
-     * @dev Updates the APR for a validator (informational only)
-     * This is now only for informational purposes as validation occurs off-chain
-     * @param validator The validator address/ID
-     * @param apr The APR with 18 decimals of precision
-     */
-    function setValidatorAPR(string calldata validator, uint256 apr) 
-        external 
-        onlyRole(ORACLE_UPDATER_ROLE) 
-        whenNotPaused 
-    {
-        _validatorAPRs[validator] = apr;
-        emit ValidatorAPRUpdated(validator, apr);
+        require(_diaOracle != address(0), "Invalid oracle address");
+        diaOracle = IDIAOracle(_diaOracle);
+        emit DiaOracleUpdated(_diaOracle);
     }
     
     /**
@@ -197,35 +208,6 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Returns the current price of the given symbol
-     * @param symbol The symbol to get the price for
-     * @return The price with 18 decimals of precision
-     */
-    function getPrice(string calldata symbol) 
-        external 
-        view 
-        override 
-        returns (uint256) 
-    {
-        return _prices[symbol];
-    }
-    
-    /**
-     * @dev Checks if a validator is active (informational only)
-     * This is now only for informational purposes as validation occurs off-chain
-     * @param validator The validator address/ID to check
-     * @return True if the validator is active
-     */
-    function isValidatorActive(string calldata validator) 
-        external 
-        view 
-        override 
-        returns (bool) 
-    {
-        return _activeValidators[validator];
-    }
-    
-    /**
      * @dev Returns the total amount of XFI staked via the protocol
      * @return The total amount of XFI staked
      */
@@ -236,21 +218,6 @@ contract CrossFiOracle is
         returns (uint256) 
     {
         return _totalStakedXFI;
-    }
-    
-    /**
-     * @dev Returns the current APR for staking with a specific validator (informational only)
-     * This is now only for informational purposes as validation occurs off-chain
-     * @param validator The validator address/ID
-     * @return The current APR as a percentage with 18 decimals
-     */
-    function getValidatorAPR(string calldata validator) 
-        external 
-        view 
-        override 
-        returns (uint256) 
-    {
-        return _validatorAPRs[validator];
     }
     
     /**
@@ -267,7 +234,7 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Returns the current APR for the compound staking model
+     * @dev Returns the current APR for the APR staking model
      * @return The current APR as a percentage with 18 decimals
      */
     function getCurrentAPR() 
@@ -293,34 +260,6 @@ contract CrossFiOracle is
     }
     
     /**
-     * @dev Pauses the contract
-     * Only callable by accounts with the PAUSER_ROLE
-     */
-    function pause() external onlyRole(PAUSER_ROLE) {
-        _pause();
-    }
-    
-    /**
-     * @dev Unpauses the contract
-     * Only callable by accounts with the PAUSER_ROLE
-     */
-    function unpause() external onlyRole(PAUSER_ROLE) {
-        _unpause();
-    }
-    
-    /**
-     * @dev Function that authorizes an upgrade
-     * Only callable by accounts with the UPGRADER_ROLE
-     */
-    function _authorizeUpgrade(address newImplementation) 
-        internal 
-        override 
-        onlyRole(UPGRADER_ROLE) 
-    {
-        // No additional logic needed
-    }
-
-    /**
      * @dev Sets the launch timestamp for the unstaking freeze period
      * @param timestamp The launch timestamp
      */
@@ -330,6 +269,19 @@ contract CrossFiOracle is
     {
         _launchTimestamp = timestamp;
         emit LaunchTimestampSet(timestamp);
+    }
+    
+    /**
+     * @dev Checks if unstaking is frozen (first month after launch)
+     * @return True if unstaking is still frozen
+     */
+    function isUnstakingFrozen() 
+        external 
+        view 
+        override 
+        returns (bool) 
+    {
+        return (block.timestamp < _launchTimestamp + 30 days);
     }
     
     /**
@@ -367,26 +319,15 @@ contract CrossFiOracle is
     /**
      * @dev Gets claimable rewards for a specific user
      * @param user The user address
-     * @return amount The claimable reward amount
+     * @return The claimable reward amount
      */
     function getUserClaimableRewards(address user) 
         external 
         view 
+        override
         returns (uint256) 
     {
         return _userClaimableRewards[user];
-    }
-    
-    /**
-     * @dev Checks if unstaking is frozen (first month after launch)
-     * @return True if unstaking is still frozen
-     */
-    function isUnstakingFrozen() 
-        external 
-        view 
-        returns (bool) 
-    {
-        return (block.timestamp < _launchTimestamp + 30 days);
     }
     
     /**
@@ -395,7 +336,8 @@ contract CrossFiOracle is
      */
     function getMPXPrice() 
         external 
-        pure 
+        pure
+        override
         returns (uint256) 
     {
         return MPX_PRICE_USD;
@@ -408,13 +350,15 @@ contract CrossFiOracle is
      */
     function convertXFItoMPX(uint256 xfiAmount) 
         external 
-        view 
+        view
+        override
         returns (uint256 mpxAmount) 
     {
-        // MPX amount = (XFI amount ? XFI price in USD) ? MPX price ($0.04)
-        uint256 xfiPriceUSD = _prices["XFI"];
+        // Get current XFI price with 18 decimals
+        (uint256 xfiPriceUSD,) = getXFIPrice();
         require(xfiPriceUSD > 0, "XFI price not available");
         
+        // Calculate MPX amount: (XFI amount * XFI price in USD) / MPX price ($0.04)
         mpxAmount = (xfiAmount * xfiPriceUSD) / MPX_PRICE_USD;
         return mpxAmount;
     }
@@ -426,6 +370,7 @@ contract CrossFiOracle is
      */
     function clearUserClaimableRewards(address user) 
         external 
+        override
         onlyRole(ORACLE_UPDATER_ROLE) 
         whenNotPaused 
         returns (uint256 amount) 
@@ -444,6 +389,7 @@ contract CrossFiOracle is
      */
     function decreaseUserClaimableRewards(address user, uint256 amount) 
         external 
+        override
         onlyRole(ORACLE_UPDATER_ROLE) 
         whenNotPaused 
         returns (uint256 newAmount) 
@@ -458,9 +404,69 @@ contract CrossFiOracle is
     }
     
     /**
+     * @dev Pauses the contract
+     * Only callable by accounts with the PAUSER_ROLE
+     */
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+    
+    /**
+     * @dev Unpauses the contract
+     * Only callable by accounts with the PAUSER_ROLE
+     */
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+    
+    /**
+     * @dev Function that authorizes an upgrade
+     * Only callable by accounts with the UPGRADER_ROLE
+     */
+    function _authorizeUpgrade(address newImplementation) 
+        internal 
+        override 
+        onlyRole(UPGRADER_ROLE) 
+    {
+        // No additional logic needed
+    }
+    
+    /**
+     * @dev Checks if a validator is active
+     * This is a legacy function since validation occurs off-chain
+     * @param validator The validator ID to check (unused)
+     * @return Always returns true since validation occurs off-chain
+     */
+    function isValidatorActive(string calldata validator) 
+        external 
+        pure 
+        override 
+        returns (bool) 
+    {
+        // Always return true as validation is now handled off-chain
+        return true;
+    }
+    
+    /**
+     * @dev Returns the APR for a specific validator
+     * This is a legacy function since validation occurs off-chain
+     * @param validator The validator ID (unused)
+     * @return The current global APR with 18 decimals
+     */
+    function getValidatorAPR(string calldata validator) 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        // Return the global APR since validator-specific APRs are handled off-chain
+        return _currentAPR;
+    }
+    
+    /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[50] private __gap;
+    uint256[40] private __gap;
 } 

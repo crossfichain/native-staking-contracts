@@ -46,14 +46,14 @@ contract NativeStakingManager is
     event APRContractUpdated(address indexed newContract);
     event APYContractUpdated(address indexed newContract);
     event OracleUpdated(address indexed newOracle);
-    event StakedAPR(address indexed user, uint256 amount, string validator, bool success);
-    event StakedAPY(address indexed user, uint256 amount, uint256 shares);
-    event UnstakedAPR(address indexed user, uint256 amount, string validator, uint256 requestId);
-    event WithdrawnAPY(address indexed user, uint256 shares, uint256 assets);
-    event WithdrawalRequestedAPY(address indexed user, uint256 assets, uint256 requestId);
-    event UnstakeClaimedAPR(address indexed user, uint256 requestId, uint256 amount);
-    event WithdrawalClaimedAPY(address indexed user, uint256 requestId, uint256 amount);
-    event RewardsClaimedAPR(address indexed user, uint256 amount);
+    event StakedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, bool success);
+    event StakedAPY(address indexed user, uint256 xfiAmount, uint256 mpxAmount, uint256 shares);
+    event UnstakedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, uint256 requestId);
+    event WithdrawnAPY(address indexed user, uint256 shares, uint256 xfiAssets, uint256 mpxAssets);
+    event WithdrawalRequestedAPY(address indexed user, uint256 xfiAssets, uint256 mpxAssets, uint256 requestId);
+    event UnstakeClaimedAPR(address indexed user, uint256 requestId, uint256 xfiAmount, uint256 mpxAmount);
+    event WithdrawalClaimedAPY(address indexed user, uint256 requestId, uint256 xfiAmount, uint256 mpxAmount);
+    event RewardsClaimedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount);
     
     /**
      * @dev Initializes the contract
@@ -122,7 +122,10 @@ contract NativeStakingManager is
         // Call the APR staking contract, passing validator for events
         success = aprContract.stake(msg.sender, amount, validator, tokenAddress);
         
-        emit StakedAPR(msg.sender, amount, validator, success);
+        // Convert XFI to MPX for the event
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
+        
+        emit StakedAPR(msg.sender, amount, mpxAmount, validator, success);
         
         return success;
     }
@@ -149,22 +152,19 @@ contract NativeStakingManager is
             
             // Approve APY contract to spend WXFI
             IERC20(address(wxfi)).approve(address(apyContract), amount);
-            
-            // Deposit into the vault
-            shares = apyContract.deposit(amount, msg.sender);
         } else {
             // User is staking WXFI
-            // Transfer WXFI from user to this contract
             IERC20(address(wxfi)).transferFrom(msg.sender, address(this), amount);
-            
-            // Approve APY contract to spend WXFI
             IERC20(address(wxfi)).approve(address(apyContract), amount);
-            
-            // Deposit into the vault
-            shares = apyContract.deposit(amount, msg.sender);
         }
         
-        emit StakedAPY(msg.sender, amount, shares);
+        // Deposit to the APY staking contract (vault)
+        shares = apyContract.deposit(amount, msg.sender);
+        
+        // Convert XFI to MPX for the event
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
+        
+        emit StakedAPY(msg.sender, amount, mpxAmount, shares);
         
         return shares;
     }
@@ -183,10 +183,16 @@ contract NativeStakingManager is
         nonReentrant 
         returns (uint256 requestId) 
     {
+        // Check if unstaking is frozen (first month after launch)
+        require(!oracle.isUnstakingFrozen(), "Unstaking is frozen for the first month");
+        
         // Call APR contract and pass validator for events
         requestId = aprContract.requestUnstake(msg.sender, amount, validator);
         
-        emit UnstakedAPR(msg.sender, amount, validator, requestId);
+        // Convert XFI to MPX for the event
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
+        
+        emit UnstakedAPR(msg.sender, amount, mpxAmount, validator, requestId);
         
         return requestId;
     }
@@ -204,7 +210,10 @@ contract NativeStakingManager is
     {
         amount = aprContract.claimUnstake(msg.sender, requestId);
         
-        emit UnstakeClaimedAPR(msg.sender, requestId, amount);
+        // Convert XFI to MPX for the event
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
+        
+        emit UnstakeClaimedAPR(msg.sender, requestId, amount, mpxAmount);
         
         return amount;
     }
@@ -223,11 +232,18 @@ contract NativeStakingManager is
         nonReentrant 
         returns (uint256 assets) 
     {
+        // Check if unstaking is frozen (first month after launch)
+        require(!oracle.isUnstakingFrozen(), "Unstaking is frozen for the first month");
+        
         // First try a direct withdrawal
         try apyContract.redeem(shares, msg.sender, msg.sender) returns (uint256 redeemedAssets) {
             // Immediate withdrawal successful
             assets = redeemedAssets;
-            emit WithdrawnAPY(msg.sender, shares, assets);
+            
+            // Convert XFI to MPX for the event
+            uint256 mpxAssets = oracle.convertXFItoMPX(assets);
+            
+            emit WithdrawnAPY(msg.sender, shares, assets, mpxAssets);
         } catch {
             // Not enough liquid assets, use delayed withdrawal
             uint256 previewAssets = apyContract.previewRedeem(shares);
@@ -236,7 +252,10 @@ contract NativeStakingManager is
             // Assets will be delivered later
             assets = 0;
             
-            emit WithdrawalRequestedAPY(msg.sender, previewAssets, requestId);
+            // Convert XFI to MPX for the event
+            uint256 mpxAssets = oracle.convertXFItoMPX(previewAssets);
+            
+            emit WithdrawalRequestedAPY(msg.sender, previewAssets, mpxAssets, requestId);
         }
         
         return assets;
@@ -255,7 +274,10 @@ contract NativeStakingManager is
     {
         assets = apyContract.claimWithdrawal(requestId);
         
-        emit WithdrawalClaimedAPY(msg.sender, requestId, assets);
+        // Convert XFI to MPX for the event
+        uint256 mpxAssets = oracle.convertXFItoMPX(assets);
+        
+        emit WithdrawalClaimedAPY(msg.sender, requestId, assets, mpxAssets);
         
         return assets;
     }
@@ -270,9 +292,20 @@ contract NativeStakingManager is
         nonReentrant 
         returns (uint256 amount) 
     {
-        amount = aprContract.claimRewards(msg.sender);
+        // Get claimable rewards from the oracle (set by backend)
+        amount = oracle.getUserClaimableRewards(msg.sender);
+        require(amount > 0, "No rewards to claim");
         
-        emit RewardsClaimedAPR(msg.sender, amount);
+        // Clear rewards on oracle to prevent reentrancy
+        oracle.clearUserClaimableRewards(msg.sender);
+        
+        // Call APR contract to handle the claim, passing the amount from oracle
+        amount = aprContract.claimRewards(msg.sender, amount);
+        
+        // Convert XFI to MPX for the event
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
+        
+        emit RewardsClaimedAPR(msg.sender, amount, mpxAmount);
         
         return amount;
     }

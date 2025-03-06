@@ -53,4 +53,45 @@ interface IOracle {
      * @return The unbonding period in seconds
      */
     function getUnbondingPeriod() external view returns (uint256);
+
+    /**
+     * @dev Returns the fixed price of MPX in USD
+     * @return The MPX price with 18 decimals of precision
+     */
+    function getMPXPrice() external pure returns (uint256);
+    
+    /**
+     * @dev Converts XFI amount to MPX amount based on current prices
+     * @param xfiAmount The amount of XFI to convert
+     * @return mpxAmount The equivalent amount of MPX
+     */
+    function convertXFItoMPX(uint256 xfiAmount) external view returns (uint256 mpxAmount);
+    
+    /**
+     * @dev Gets claimable rewards for a specific user
+     * @param user The user address
+     * @return amount The claimable reward amount
+     */
+    function getUserClaimableRewards(address user) external view returns (uint256);
+    
+    /**
+     * @dev Checks if unstaking is frozen (first month after launch)
+     * @return True if unstaking is still frozen
+     */
+    function isUnstakingFrozen() external view returns (bool);
+
+    /**
+     * @dev Clears claimable rewards for a user after they have been claimed
+     * @param user The user address
+     * @return amount The amount that was cleared
+     */
+    function clearUserClaimableRewards(address user) external returns (uint256 amount);
+    
+    /**
+     * @dev Decreases claimable rewards for a user by a specific amount
+     * @param user The user address
+     * @param amount The amount to decrease by
+     * @return newAmount The new reward amount after decrease
+     */
+    function decreaseUserClaimableRewards(address user, uint256 amount) external returns (uint256 newAmount);
 } 

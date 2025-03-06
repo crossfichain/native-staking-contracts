@@ -1,188 +1,191 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Test} from "forge-std/Test.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {NativeStaking} from "../../src/core/NativeStaking.sol";
-import {NativeStakingManager} from "../../src/core/NativeStakingManager.sol";
-import {NativeStakingVault} from "../../src/core/NativeStakingVault.sol";
-import {UnifiedOracle} from "../../src/periphery/UnifiedOracle.sol";
-import {MockDIAOracle} from "../mocks/MockDIAOracle.sol";
-import {MockUnifiedOracle} from "../mocks/MockUnifiedOracle.sol";
-import {WXFI} from "../../src/periphery/WXFI.sol";
-import {INativeStaking} from "../../src/interfaces/INativeStaking.sol";
+import "forge-std/Test.sol";
+import "../../src/core/NativeStaking.sol";
+import "../../src/core/NativeStakingManager.sol";
+import "../../src/periphery/ProductionOracle.sol"; 
+import "../../src/periphery/WXFI.sol";
+import "../utils/MockDIAOracle.sol";
+import "../../src/deployment/DeploymentCoordinator.sol";
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 /**
- * @title APRStakingBaseTest
- * @dev Base contract for testing the Native Staking APR flow
- * Provides common setup and utility functions for all APR-related tests
+ * @title APRStakingBase
+ * @dev Base contract for all APR staking related tests
+ * Sets up the necessary contracts for testing NativeStaking with the APR model
  */
-contract APRStakingBaseTest is Test {
+contract APRStakingBase is Test {
+    // Test constants
+    address public constant ADMIN = address(0x1);
+    address public constant USER = address(0x2);
+    address public constant SECOND_USER = address(0x3);
+
     // Contracts
-    NativeStaking public nativeStaking;
-    NativeStakingManager public stakingManager;
-    NativeStakingVault public stakingVault;
-    UnifiedOracle public oracle;
-    MockDIAOracle public diaOracle;
     WXFI public wxfi;
-    
-    // Mock contracts for isolated testing
-    MockUnifiedOracle public mockOracle;
-    
-    // Test accounts
-    address public admin = address(this);
-    address public treasury = address(0x1);
-    address public user1 = address(0x100);
-    address public user2 = address(0x200);
-    address public user3 = address(0x300);
-    
-    // Constants
-    uint256 public constant INITIAL_BALANCE = 1000 ether;
-    uint256 public constant MIN_STAKE_AMOUNT = 1 ether;
-    uint256 public constant APR = 10e16; // 10% with 18 decimals
-    uint256 public constant APY = 8e16;  // 8% with 18 decimals
-    uint256 public constant UNBONDING_PERIOD = 14 days;
-    
-    // Events (from INativeStaking)
-    event Staked(address indexed user, uint256 amount, string validator, uint256 stakeId);
-    event UnstakeRequested(address indexed user, uint256 amount, string validator, uint256 indexed requestId, uint256 unlockTime);
-    event UnstakeClaimed(address indexed user, uint256 amount, uint256 indexed requestId);
-    event RewardsClaimed(address indexed user, uint256 amount);
-    
+    MockDIAOracle public diaOracle;
+    ProductionOracle public oracle;
+    NativeStaking public staking;
+    NativeStakingManager public manager;
+    ProxyAdmin public proxyAdmin;
+
+    /**
+     * @dev Test set up function
+     */
     function setUp() public virtual {
-        // Label accounts for easier debugging
-        vm.label(admin, "Admin");
-        vm.label(treasury, "Treasury");
-        vm.label(user1, "User1");
-        vm.label(user2, "User2");
-        vm.label(user3, "User3");
-        
-        // Set up initial balances
-        vm.deal(user1, INITIAL_BALANCE);
-        vm.deal(user2, INITIAL_BALANCE);
-        vm.deal(user3, INITIAL_BALANCE);
-        vm.deal(treasury, INITIAL_BALANCE);
-        
-        // Deploy mock DIA Oracle
-        diaOracle = new MockDIAOracle();
-        diaOracle.setPrice("XFI/USD", 1e8); // $1 price
-        
-        // Deploy WXFI token
+        // Deploy contracts directly
+        vm.startPrank(ADMIN);
+
         wxfi = new WXFI();
+
+        // Deploy DIA Oracle mock
+        diaOracle = new MockDIAOracle();
+        // Set XFI price to $1 with 8 decimals in the DIA Oracle
+        diaOracle.setPrice("XFI/USD", 1e8);
+
+        // Deploy Oracle with DIA Oracle
+        ProductionOracle oracleImpl = new ProductionOracle();
+        proxyAdmin = new ProxyAdmin();
         
-        // Deploy and initialize Oracle
-        oracle = new UnifiedOracle();
-        oracle.initialize(address(diaOracle));
-        oracle.setTotalStakedXFI(1000000 ether); // Initial total staked
-        oracle.setCurrentAPR(10); // 10%
-        oracle.setCurrentAPY(8);  // 8%
-        oracle.setUnbondingPeriod(UNBONDING_PERIOD);
-        
-        // Deploy stakingVault with WXFI token
-        stakingVault = new NativeStakingVault();
-        stakingVault.initialize(
-            address(wxfi),
-            address(oracle),
-            "XFI Staking Vault",
-            "xXFI"
+        bytes memory oracleData = abi.encodeWithSelector(
+            ProductionOracle.initialize.selector,
+            address(diaOracle)
         );
         
-        // Deploy Native Staking
-        nativeStaking = new NativeStaking();
-        nativeStaking.initialize(
-            address(wxfi),
-            address(oracle)
+        TransparentUpgradeableProxy oracleProxy = new TransparentUpgradeableProxy(
+            address(oracleImpl),
+            address(proxyAdmin),
+            oracleData
         );
         
-        // Deploy staking manager
-        stakingManager = new NativeStakingManager();
-        stakingManager.initialize(
-            payable(address(nativeStaking)),
-            address(stakingVault),
+        oracle = ProductionOracle(address(oracleProxy));
+        
+        // Deploy NativeStaking (APR)
+        NativeStaking stakingImpl = new NativeStaking();
+        
+        bytes memory stakingData = abi.encodeWithSelector(
+            NativeStaking.initialize.selector,
             address(wxfi),
             address(oracle)
         );
         
-        // Setup roles
-        _setupRoles();
-        
-        // Deploy mock oracle for isolated testing
-        mockOracle = new MockUnifiedOracle();
-    }
-    
-    /**
-     * @dev Setup roles for contracts
-     */
-    function _setupRoles() internal {
-        // Grant staking manager role to the manager contract
-        bytes32 stakingManagerRole = nativeStaking.STAKING_MANAGER_ROLE();
-        nativeStaking.grantRole(stakingManagerRole, address(stakingManager));
-        
-        // Grant admin roles
-        nativeStaking.grantRole(nativeStaking.DEFAULT_ADMIN_ROLE(), admin);
-        stakingManager.grantRole(stakingManager.DEFAULT_ADMIN_ROLE(), admin);
-        stakingVault.grantRole(stakingVault.DEFAULT_ADMIN_ROLE(), admin);
-        oracle.grantRole(oracle.DEFAULT_ADMIN_ROLE(), admin);
-        
-        // Oracle updater role
-        oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), admin);
-    }
-    
-    /**
-     * @dev Helper to perform a direct stake for testing
-     */
-    function _stakeDirectXFI(address user, uint256 amount, string memory validator) internal {
-        vm.deal(user, address(user).balance + amount);
-        vm.prank(user);
-        (bool success, ) = address(stakingManager).call{value: amount}(
-            abi.encodeWithSignature("stakeAPR(uint256,string)", amount, validator)
+        TransparentUpgradeableProxy stakingProxy = new TransparentUpgradeableProxy(
+            address(stakingImpl),
+            address(proxyAdmin),
+            stakingData
         );
-        require(success, "Stake failed");
-    }
-    
-    /**
-     * @dev Helper to advance time and get updated rewards
-     */
-    function _advanceTimeAndUpdateAPR(uint256 timeToAdvance, uint256 newAPR) internal {
-        skip(timeToAdvance);
-        oracle.setCurrentAPR(newAPR);
-    }
-    
-    /**
-     * @dev Helper to check staking information
-     */
-    function _checkStake(
-        address user,
-        uint256 stakeIndex,
-        uint256 expectedAmount,
-        uint256 expectedStakedAt,
-        uint256 expectedUnbondingAt
-    ) internal {
-        INativeStaking.StakeInfo[] memory stakes = nativeStaking.getUserStakes(user);
-        assertGe(stakes.length, stakeIndex + 1, "Stake doesn't exist");
         
-        INativeStaking.StakeInfo memory stake = stakes[stakeIndex];
-        assertEq(stake.amount, expectedAmount, "Stake amount incorrect");
-        assertEq(stake.stakedAt, expectedStakedAt, "StakedAt timestamp incorrect");
-        assertEq(stake.unbondingAt, expectedUnbondingAt, "UnbondingAt timestamp incorrect");
+        staking = NativeStaking(address(stakingProxy));
+        
+        // Deploy NativeStakingManager
+        NativeStakingManager managerImpl = new NativeStakingManager();
+        
+        bytes memory managerData = abi.encodeWithSelector(
+            NativeStakingManager.initialize.selector,
+            address(staking),     // NativeStaking address
+            address(0),           // NativeStakingVault address (not used in APR tests)
+            address(wxfi),
+            address(oracle)
+        );
+        
+        TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
+            address(managerImpl),
+            address(proxyAdmin),
+            managerData
+        );
+        
+        manager = NativeStakingManager(payable(address(managerProxy)));
+        
+        // Grant roles
+        staking.grantRole(staking.STAKING_MANAGER_ROLE(), address(manager));
+        oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), address(manager));
+        
+        // Set up initial values
+        // Set current APR to 10% (with 18 decimals) - 0.10 * 10^18
+        oracle.setCurrentAPR(10); // Takes percentage value (10 = 10%)
+        
+        // Set XFI price to $1 with 18 decimals in our oracle
+        oracle.setPrice("XFI", 1 ether); // 1 * 10^18
+        
+        // Set launch timestamp to a month ago to disable unstaking freeze
+        oracle.setLaunchTimestamp(block.timestamp - 31 days);
+        
+        vm.stopPrank();
     }
     
     /**
-     * @dev Helper to check unstake request information
+     * @dev Helper function to mint WXFI to the given address
+     * @param to Address to mint to
+     * @param amount Amount to mint
      */
-    function _checkUnstakeRequest(
-        address user,
-        uint256 requestIndex,
-        uint256 expectedAmount,
-        uint256 expectedUnlockTime,
-        bool expectedCompleted
-    ) internal {
-        INativeStaking.UnstakeRequest[] memory requests = nativeStaking.getUserUnstakeRequests(user);
-        assertGe(requests.length, requestIndex + 1, "Unstake request doesn't exist");
+    function mintWXFI(address to, uint256 amount) internal {
+        // Use deal to set the WXFI balance of the address
+        deal(address(wxfi), to, amount);
+    }
+    
+    /**
+     * @dev Helper function to approve WXFI to be spent by the manager
+     * @param from Address giving approval
+     * @param amount Amount to approve
+     */
+    function approveWXFI(address from, uint256 amount) internal {
+        vm.startPrank(from);
+        wxfi.approve(address(manager), amount);
+        vm.stopPrank();
+    }
+    
+    /**
+     * @dev Helper function to make a user stake XFI with given amount
+     * @param from User address
+     * @param amount Amount to stake
+     */
+    function stake(address from, uint256 amount) internal {
+        mintWXFI(from, amount);
+        approveWXFI(from, amount);
         
-        INativeStaking.UnstakeRequest memory request = requests[requestIndex];
-        assertEq(request.amount, expectedAmount, "Unstake amount incorrect");
-        assertEq(request.unlockTime, expectedUnlockTime, "Unlock time incorrect");
-        assertEq(request.completed, expectedCompleted, "Completed status incorrect");
+        vm.startPrank(from);
+        manager.stakeForAPR(amount, true); // Use WXFI
+        vm.stopPrank();
+    }
+    
+    /**
+     * @dev Helper function to make a user request to unstake XFI
+     * @param from User address
+     * @param amount Amount to unstake
+     */
+    function unstakeRequest(address from, uint256 amount) internal {
+        vm.startPrank(from);
+        manager.unstakeRequestAPR(amount);
+        vm.stopPrank();
+    }
+    
+    /**
+     * @dev Helper function to fulfill an unstake request
+     * @param from User address
+     * @param requestId Request ID to fulfill
+     */
+    function fulfillUnstakeRequest(address from, uint256 requestId) internal {
+        vm.startPrank(from);
+        manager.claimUnstakeAPR(requestId);
+        vm.stopPrank();
+    }
+    
+    /**
+     * @dev Helper function to advance time and update block timestamp
+     * @param secondsToAdvance Number of seconds to advance
+     */
+    function advanceTime(uint256 secondsToAdvance) internal {
+        vm.warp(block.timestamp + secondsToAdvance);
+    }
+    
+    /**
+     * @dev Helper function to claim rewards
+     * @param from User address
+     */
+    function claimRewards(address from) internal {
+        vm.startPrank(from);
+        manager.claimRewardsAPR();
+        vm.stopPrank();
     }
 } 

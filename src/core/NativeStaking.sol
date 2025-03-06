@@ -214,7 +214,11 @@ contract NativeStaking is
         request.completed = true;
         
         // Claim any pending rewards first
-        _claimRewards(user);
+        // We calculate pending rewards separately for unstaking
+        uint256 pendingRewards = getUnclaimedRewards(user);
+        if (pendingRewards > 0) {
+            _claimRewards(user, pendingRewards);
+        }
         
         // Transfer tokens back to the user via manager
         bool transferred = stakingToken.transfer(msg.sender, amount);
@@ -248,36 +252,47 @@ contract NativeStaking is
     /**
      * @dev Claims staking rewards for a user
      * @param user The user to claim rewards for
+     * @param rewardAmount The amount of rewards to claim (determined by oracle)
      * @return amount The amount of rewards claimed
      */
-    function claimRewards(address user) 
+    function claimRewards(address user, uint256 rewardAmount) 
         external 
         override 
         onlyRole(STAKING_MANAGER_ROLE) 
         returns (uint256 amount) 
     {
-        return _claimRewards(user);
+        // The reward amount is now provided by the manager based on oracle data
+        return _claimRewards(user, rewardAmount);
     }
     
     /**
      * @dev Internal function to claim staking rewards
      * @param user The user to claim rewards for
+     * @param rewardAmount The amount of rewards to claim
      * @return amount The amount of rewards claimed
      */
-    function _claimRewards(address user) private returns (uint256 amount) {
-        uint256 rewards = getUnclaimedRewards(user);
+    function _claimRewards(address user, uint256 rewardAmount) private returns (uint256 amount) {
+        // Note: We are no longer using the internal calculation for rewards
+        // Instead, the amount is passed from the manager which gets it from the oracle
+        // The oracle's value is set by the backend system parsing Cosmos chain data
         
-        if (rewards > 0) {
-            _lastClaimTime[user] = block.timestamp;
-            
-            // Transfer rewards to the user via manager
-            bool transferred = stakingToken.transfer(msg.sender, rewards);
-            require(transferred, "Transfer failed");
-            
-            emit RewardsClaimed(user, rewards);
-        }
+        // Update last claim time to now regardless of reward amount
+        _lastClaimTime[user] = block.timestamp;
         
-        return rewards;
+        // The amount is already determined by the manager based on oracle data
+        // We just transfer the provided amount
+        amount = rewardAmount;
+        
+        // This assumes the manager has already verified there are rewards to claim
+        // and the contract has enough balance to cover them
+        
+        // Transfer rewards to the user via manager
+        bool transferred = stakingToken.transfer(msg.sender, amount);
+        require(transferred, "Transfer failed");
+        
+        emit RewardsClaimed(user, amount);
+        
+        return amount;
     }
     
     /**
