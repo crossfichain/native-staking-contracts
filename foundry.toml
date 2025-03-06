@@ -22,12 +22,19 @@ optimizer_runs = 1000
 fuzz_runs = 1
 fuzz_max_global_rejects = 65536
 fuzz_max_local_rejects = 1024
+fs_permissions = [{ access = "write", path = "./*" }]
+
 
 [rpc_endpoints]
-local = "http://localhost:8545"
+crossfi = "${CROSSFI_RPC}"
+crossfi_dev = "${CROSSFI_DEV_RPC}"
+crossfi_test = "${CROSSFI_TEST_RPC}"
 
 [etherscan]
-mainnet = { key = "${ETHERSCAN_API_KEY}" }
+crossfi = { key = "no-key", url = "${CROSSFI_VERIFIER_URL}", chain = 4158}
+crossfi_dev = { key = "ABCDEFG", url = "${CROSSFI_DEV_VERIFIER_URL}", chain = 4156}
+crossfi_test = { key = "ABCDEFG", url = "${CROSSFI_TEST_VERIFIER_URL}", chain = 4157}
+
 
 [fmt]
 line_length = 120
