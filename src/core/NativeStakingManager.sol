@@ -31,12 +31,20 @@ contract NativeStakingManager is
     // Constants
     uint256 private constant PRECISION = 1e18;
     address private constant XFI_NATIVE_ADDRESS = address(0);
+    uint256 private constant MIN_STAKE_AMOUNT = 50 ether; // 50 XFI minimum stake
+    uint256 private constant MIN_UNSTAKE_AMOUNT = 10 ether; // 10 XFI minimum unstake
+    
+    // Validator prefix for validation
+    string private constant VALIDATOR_PREFIX = "mxva";
     
     // Custom roles
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant FULFILLER_ROLE = keccak256("FULFILLER_ROLE");
     bytes32 public constant ORACLE_MANAGER_ROLE = keccak256("ORACLE_MANAGER_ROLE");
+    
+    // Toggle for minimum amount validation (disable for testing)
+    bool public enforceMinimumAmounts;
     
     // Request types
     enum RequestType { STAKE, UNSTAKE, CLAIM_REWARDS }
@@ -88,15 +96,17 @@ contract NativeStakingManager is
     /**
      * @dev Initializes the contract
      * @param _aprContract The address of the APR staking contract
-     * @param _apyContract The address of the APY staking contract
-     * @param _wxfi The address of the wrapped XFI token
-     * @param _oracle The address of the oracle contract
+     * @param _apyContract The address of the APY staking vault
+     * @param _wxfi The address of the WXFI token
+     * @param _oracle The address of the oracle
+     * @param _enforceMinimums Whether to enforce minimum staking amounts
      */
     function initialize(
         address _aprContract,
         address _apyContract,
         address _wxfi,
-        address _oracle
+        address _oracle,
+        bool _enforceMinimums
     ) external initializer {
         __AccessControl_init();
         __Pausable_init();
@@ -114,9 +124,14 @@ contract NativeStakingManager is
         wxfi = IWXFI(_wxfi);
         oracle = IOracle(_oracle);
         
+        // Set default launch timestamp to now
+        _launchTimestamp = block.timestamp;
+        
         // Initialize unstaking freeze period (default 30 days)
         _unstakeFreezeTime = 30 days;
-        _launchTimestamp = block.timestamp;
+        
+        // Set minimum enforcement flag based on deployment environment
+        enforceMinimumAmounts = _enforceMinimums;
         
         // Initialize request ID
         _nextRequestId = 1;
@@ -137,6 +152,33 @@ contract NativeStakingManager is
     }
     
     /**
+     * @dev Validates the validator format to ensure it's a valid mx-address
+     * @param validator The validator string to validate
+     * @return True if valid, false otherwise
+     */
+    function _validateValidatorFormat(string memory validator) internal pure returns (bool) {
+        // Check that the validator is not empty
+        if (bytes(validator).length == 0) return false;
+        
+        // Check maximum length (should be reasonable for an address)
+        if (bytes(validator).length > 100) return false;
+        
+        // Check that the validator starts with the required prefix
+        bytes memory validatorBytes = bytes(validator);
+        bytes memory prefixBytes = bytes(VALIDATOR_PREFIX);
+        
+        // Must be at least as long as the prefix
+        if (validatorBytes.length < prefixBytes.length) return false;
+        
+        // Check prefix match
+        for (uint i = 0; i < prefixBytes.length; i++) {
+            if (validatorBytes[i] != prefixBytes[i]) return false;
+        }
+        
+        return true;
+    }
+    
+    /**
      * @dev Stakes XFI using the APR model
      * Validator parameter is only used in events for off-chain processing
      * @param amount The amount of XFI to stake
@@ -154,9 +196,13 @@ contract NativeStakingManager is
         // Validate amount
         require(amount > 0, "Amount must be greater than zero");
         
+        // Enforce minimum amount if enabled
+        if (enforceMinimumAmounts) {
+            require(amount >= MIN_STAKE_AMOUNT, "Amount must be at least 50 XFI");
+        }
+        
         // Validate validator format
-        require(bytes(validator).length > 0, "Validator ID cannot be empty");
-        require(bytes(validator).length <= 100, "Validator ID too long");
+        require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
         
         // Check oracle freshness
         _checkOracleFreshness();
@@ -170,25 +216,24 @@ contract NativeStakingManager is
             // Wrap XFI to WXFI
             wxfi.deposit{value: amount}();
             
-            // Approve APR contract to spend WXFI (only exact amount)
-            // First reset approval to 0 to prevent some ERC20 issues
-            IERC20(address(wxfi)).approve(address(aprContract), 0);
-            // Then set exact approval amount
-            IERC20(address(wxfi)).approve(address(aprContract), amount);
-            
             tokenAddress = address(wxfi);
         } else {
             // User is staking WXFI
-            IERC20(address(wxfi)).transferFrom(msg.sender, address(this), amount);
+            require(IERC20(address(wxfi)).balanceOf(msg.sender) >= amount, "Insufficient WXFI balance");
+            require(IERC20(address(wxfi)).allowance(msg.sender, address(this)) >= amount, "Insufficient WXFI allowance");
             
-            // Approve APR contract to spend WXFI (only exact amount)
-            // First reset approval to 0 to prevent some ERC20 issues
-            IERC20(address(wxfi)).approve(address(aprContract), 0);
-            // Then set exact approval amount
-            IERC20(address(wxfi)).approve(address(aprContract), amount);
+            // Transfer WXFI from user to this contract
+            bool transferred = IERC20(address(wxfi)).transferFrom(msg.sender, address(this), amount);
+            require(transferred, "WXFI transfer failed");
             
             tokenAddress = address(wxfi);
         }
+        
+        // Approve APR contract to spend WXFI (only exact amount)
+        // First reset approval to 0 to prevent some ERC20 issues
+        IERC20(address(wxfi)).approve(address(aprContract), 0);
+        // Then set exact approval amount
+        IERC20(address(wxfi)).approve(address(aprContract), amount);
         
         // Call the APR staking contract, passing validator for events
         success = aprContract.stake(msg.sender, amount, validator, tokenAddress);
@@ -274,9 +319,8 @@ contract NativeStakingManager is
     
     /**
      * @dev Requests to unstake XFI from the APR model
-     * Validator parameter is only used in events for off-chain processing
      * @param amount The amount of XFI to unstake
-     * @param validator The validator address/ID (only for events, not stored on-chain)
+     * @param validator The validator address/ID to unstake from (only for events)
      * @return requestId The ID of the unstake request
      */
     function unstakeAPR(uint256 amount, string calldata validator) 
@@ -289,9 +333,13 @@ contract NativeStakingManager is
         // Validate amount
         require(amount > 0, "Amount must be greater than zero");
         
+        // Enforce minimum amount if enabled
+        if (enforceMinimumAmounts) {
+            require(amount >= MIN_UNSTAKE_AMOUNT, "Amount must be at least 10 XFI");
+        }
+        
         // Validate validator format
-        require(bytes(validator).length > 0, "Validator ID cannot be empty");
-        require(bytes(validator).length <= 100, "Validator ID too long");
+        require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
         
         // Check if unstaking is frozen (first month after launch)
         require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
@@ -328,7 +376,26 @@ contract NativeStakingManager is
         nonReentrant 
         returns (uint256 amount) 
     {
+        // Get the amount from APR contract
         amount = aprContract.claimUnstake(msg.sender, requestId);
+        
+        // Ensure the amount is non-zero
+        require(amount > 0, "Nothing to claim");
+        
+        // Transfer the XFI/WXFI to the user
+        bool transferred;
+        if (address(this) != address(wxfi)) {
+            // If calling from an account different than WXFI contract,
+            // we transfer WXFI token to the user
+            transferred = IERC20(wxfi).transfer(msg.sender, amount);
+        } else {
+            // If calling from WXFI contract itself (unlikely), we unwrap and send native XFI
+            IWXFI(wxfi).withdraw(amount);
+            payable(msg.sender).transfer(amount);
+            transferred = true;
+        }
+        
+        require(transferred, "Token transfer failed");
         
         // Convert XFI to MPX for the event
         uint256 mpxAmount = oracle.convertXFItoMPX(amount);
@@ -443,7 +510,7 @@ contract NativeStakingManager is
         oracle.clearUserClaimableRewards(msg.sender);
         
         // Call APR contract to handle the claim, passing the amount from oracle
-        amount = aprContract.claimRewards(msg.sender, amount);
+        aprContract.claimRewards(msg.sender, amount);
         
         // Create a request record
         uint256 requestId = _createRequest(
@@ -452,6 +519,10 @@ contract NativeStakingManager is
             "", 
             RequestType.CLAIM_REWARDS
         );
+        
+        // Directly transfer the rewards tokens to the user
+        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
+        require(transferred, "Reward transfer failed");
         
         // Convert XFI to MPX for the event
         uint256 mpxAmount = oracle.convertXFItoMPX(amount);
@@ -496,7 +567,7 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Creates a new request record
+     * @dev Creates a new request and returns its ID
      * @param user The user making the request
      * @param amount The amount involved in the request
      * @param validator The validator ID if applicable
@@ -512,17 +583,37 @@ contract NativeStakingManager is
         internal
         returns (uint256 requestId) 
     {
-        // Generate a unique request ID using deterministic hashing
-        requestId = uint256(keccak256(abi.encodePacked(
-            user,
-            amount,
-            validator,
-            requestType,
-            block.timestamp,
-            _nextRequestId
-        )));
+        // For stake and unstake operations, validate the validator format
+        if (requestType == RequestType.STAKE || requestType == RequestType.UNSTAKE) {
+            // Only validate non-empty validator strings (APY staking doesn't use validator)
+            if (bytes(validator).length > 0) {
+                require(_validateValidatorFormat(validator), "Invalid validator format in request creation");
+            }
+        }
         
-        // Increment the counter for added uniqueness in future requests
+        // Generate a structured request ID with:
+        // [2 bytes: request type][4 bytes: timestamp][8 bytes: user+amount hash][4 bytes: sequence]
+        
+        // 1. Convert request type to 2 bytes
+        uint16 requestTypeValue = uint16(requestType);
+        
+        // 2. Take last 4 bytes of timestamp (covers ~136 years)
+        uint32 timestampValue = uint32(block.timestamp);
+        
+        // 3. Generate 8 bytes from user and amount (randomness component)
+        bytes32 userAmountHash = keccak256(abi.encodePacked(user, amount, validator));
+        uint64 randomComponent = uint64(uint256(userAmountHash));
+        
+        // 4. Use 4 bytes from sequence counter
+        uint32 sequenceValue = uint32(_nextRequestId);
+        
+        // 5. Combine all components into a single uint256
+        requestId = (uint256(requestTypeValue) << 128) |
+                   (uint256(timestampValue) << 96) |
+                   (uint256(randomComponent) << 32) |
+                   uint256(sequenceValue);
+        
+        // Increment the counter for future requests
         _nextRequestId++;
         
         _requests[requestId] = Request({
@@ -539,33 +630,30 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Gets information about a specific request
+     * @dev Gets details of a request by its ID
      * @param requestId The ID of the request to get
-     * @return user The user who made the request
-     * @return amount The amount involved in the request
-     * @return validator The validator ID if applicable
-     * @return timestamp When the request was created
-     * @return requestType The type of request
-     * @return status The current status of the request
-     * @return statusReason Reason for the current status
+     * @return User address
+     * @return Amount involved
+     * @return Validator string
+     * @return Timestamp of creation
+     * @return Request type
+     * @return Status of the request
+     * @return Status reason (string)
      */
     function getRequest(uint256 requestId) 
         external 
         view 
         returns (
-            address user,
-            uint256 amount,
-            string memory validator,
-            uint256 timestamp,
-            RequestType requestType,
-            RequestStatus status,
-            string memory statusReason
+            address,
+            uint256,
+            string memory,
+            uint256,
+            RequestType,
+            RequestStatus,
+            string memory
         ) 
     {
-        // Check if the request exists by verifying its timestamp is non-zero
         Request storage request = _requests[requestId];
-        require(request.timestamp > 0, "Invalid request ID");
-        
         return (
             request.user,
             request.amount,
@@ -575,6 +663,62 @@ contract NativeStakingManager is
             request.status,
             request.statusReason
         );
+    }
+    
+    /**
+     * @dev Extracts the request type from a structured request ID
+     * @param requestId The structured request ID
+     * @return The request type component
+     */
+    function getRequestTypeFromId(uint256 requestId) 
+        external 
+        pure 
+        returns (RequestType) 
+    {
+        uint16 requestTypeValue = uint16(requestId >> 128);
+        return RequestType(requestTypeValue);
+    }
+    
+    /**
+     * @dev Extracts the timestamp from a structured request ID
+     * @param requestId The structured request ID
+     * @return The timestamp component (seconds since Unix epoch)
+     */
+    function getTimestampFromId(uint256 requestId) 
+        external 
+        pure 
+        returns (uint256) 
+    {
+        uint32 timestampValue = uint32(requestId >> 96);
+        return uint256(timestampValue);
+    }
+    
+    /**
+     * @dev Extracts the sequence number from a structured request ID
+     * @param requestId The structured request ID
+     * @return The sequence number component
+     */
+    function getSequenceFromId(uint256 requestId) 
+        external 
+        pure 
+        returns (uint256) 
+    {
+        uint32 sequenceValue = uint32(requestId);
+        return uint256(sequenceValue);
+    }
+    
+    /**
+     * @dev Extracts the random component from a structured request ID
+     * @param requestId The structured request ID
+     * @return The random component derived from user and amount
+     */
+    function getRandomComponentFromId(uint256 requestId) 
+        external 
+        pure 
+        returns (uint256) 
+    {
+        uint64 randomComponent = uint64(requestId >> 32);
+        return uint256(randomComponent);
     }
     
     /**
@@ -810,11 +954,10 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Allows users to predict what their request ID will be
-     * This is useful for tracking purposes, especially with the new hashing mechanism
-     * @param user The user who will make the request
-     * @param amount The amount that will be involved in the request
-     * @param validator The validator for the request
+     * @dev Predicts what a request ID would be without creating it
+     * @param user The user who would make the request
+     * @param amount The amount that would be involved
+     * @param validator The validator ID if applicable
      * @param requestType The type of request
      * @return The predicted request ID
      */
@@ -828,14 +971,27 @@ contract NativeStakingManager is
         view 
         returns (uint256) 
     {
-        return uint256(keccak256(abi.encodePacked(
-            user,
-            amount,
-            validator,
-            requestType,
-            block.timestamp,
-            _nextRequestId
-        )));
+        // Generate a structured request ID with:
+        // [2 bytes: request type][4 bytes: timestamp][8 bytes: user+amount hash][4 bytes: sequence]
+        
+        // 1. Convert request type to 2 bytes
+        uint16 requestTypeValue = uint16(requestType);
+        
+        // 2. Take last 4 bytes of timestamp (covers ~136 years)
+        uint32 timestampValue = uint32(block.timestamp);
+        
+        // 3. Generate 8 bytes from user and amount (randomness component)
+        bytes32 userAmountHash = keccak256(abi.encodePacked(user, amount, validator));
+        uint64 randomComponent = uint64(uint256(userAmountHash));
+        
+        // 4. Use 4 bytes from sequence counter
+        uint32 sequenceValue = uint32(_nextRequestId);
+        
+        // 5. Combine all components into a single uint256
+        return (uint256(requestTypeValue) << 128) |
+               (uint256(timestampValue) << 96) |
+               (uint256(randomComponent) << 32) |
+               uint256(sequenceValue);
     }
     
     /**

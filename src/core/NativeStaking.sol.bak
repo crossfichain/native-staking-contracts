@@ -39,9 +39,6 @@ contract NativeStaking is
     uint256 public minStakeAmount;
     uint256 public maxStakesPerUser;
     
-    // Counter for generating request IDs
-    uint256 private _nextRequestId;
-    
     // Mappings - simplified to remove validator-specific storage
     mapping(address => StakeInfo[]) private _userStakes;
     mapping(address => UnstakeRequest[]) private _userUnstakeRequests;
@@ -83,9 +80,6 @@ contract NativeStaking is
         // Default values
         minStakeAmount = 1 ether;
         maxStakesPerUser = 10;
-        
-        // Initialize the request ID counter
-        _nextRequestId = 1;
     }
     
     /**
@@ -104,7 +98,7 @@ contract NativeStaking is
         returns (bool success) 
     {
         require(amount >= minStakeAmount, "Amount below minimum");
-        require(getActiveStakeCount(user) < maxStakesPerUser, "Max stakes reached");
+        require(_userStakes[user].length < maxStakesPerUser, "Max stakes reached");
         
         // Transfer tokens from the manager contract
         bool transferred = IERC20(tokenAddress).transferFrom(msg.sender, address(this), amount);
@@ -152,41 +146,15 @@ contract NativeStaking is
         // Calculate unlock time based on unbonding period
         uint256 unlockTime = block.timestamp + oracle.getUnbondingPeriod();
         
-        // Create unstake request
+        // Create unstake request (simplified, validator only in event)
         UnstakeRequest memory request = UnstakeRequest({
             amount: amount,
             unlockTime: unlockTime,
             completed: false
         });
         
-        // Store the request in the array
         _userUnstakeRequests[user].push(request);
-        uint256 arrayIndex = _userUnstakeRequests[user].length - 1;
-        
-        // Generate a structured request ID with:
-        // [2 bytes: type (0 = unstake)][4 bytes: timestamp][8 bytes: user+amount hash][4 bytes: sequence]
-        
-        // 1. Convert request type to 2 bytes (0 = unstake)
-        uint16 requestTypeValue = 0;
-        
-        // 2. Take last 4 bytes of timestamp (covers ~136 years)
-        uint32 timestampValue = uint32(block.timestamp);
-        
-        // 3. Generate 8 bytes from user and amount (randomness component)
-        bytes32 userAmountHash = keccak256(abi.encodePacked(user, amount, validator));
-        uint64 randomComponent = uint64(uint256(userAmountHash));
-        
-        // 4. Use array index as the sequence value (4 bytes)
-        uint32 sequenceValue = uint32(arrayIndex);
-        
-        // 5. Combine all components into a single uint256
-        requestId = (uint256(requestTypeValue) << 128) |
-                   (uint256(timestampValue) << 96) |
-                   (uint256(randomComponent) << 32) |
-                   uint256(sequenceValue);
-        
-        // Increment the counter for future requests
-        _nextRequestId++;
+        requestId = _userUnstakeRequests[user].length - 1;
         
         // Find stakes to mark as unbonding
         uint256 remainingAmount = amount;
@@ -369,20 +337,7 @@ contract NativeStaking is
         override 
         returns (StakeInfo[] memory) 
     {
-        uint256 activeStakeCount = getActiveStakeCount(user);
-        
-        // Create an array with just the active stakes
-        StakeInfo[] memory activeStakes = new StakeInfo[](activeStakeCount);
-        uint256 currentIndex = 0;
-        
-        for (uint256 i = 0; i < _userStakes[user].length && currentIndex < activeStakeCount; i++) {
-            if (_userStakes[user][i].unbondingAt == 0 && _userStakes[user][i].amount > 0) {
-                activeStakes[currentIndex] = _userStakes[user][i];
-                currentIndex++;
-            }
-        }
-        
-        return activeStakes;
+        return _userStakes[user];
     }
     
     /**
@@ -502,90 +457,6 @@ contract NativeStaking is
         onlyRole(UPGRADER_ROLE) 
     {
         // No additional logic needed
-    }
-    
-    /**
-     * @dev Extracts the request type from a structured request ID
-     * @param requestId The structured request ID
-     * @return The request type component (0 = unstake for this contract)
-     */
-    function getRequestTypeFromId(uint256 requestId) 
-        public 
-        pure 
-        returns (uint16) 
-    {
-        return uint16(requestId >> 128);
-    }
-    
-    /**
-     * @dev Extracts the timestamp from a structured request ID
-     * @param requestId The structured request ID
-     * @return The timestamp component (seconds since Unix epoch)
-     */
-    function getTimestampFromId(uint256 requestId) 
-        public 
-        pure 
-        returns (uint256) 
-    {
-        return uint256(uint32(requestId >> 96));
-    }
-    
-    /**
-     * @dev Extracts the sequence number (array index) from a structured request ID
-     * @param requestId The structured request ID
-     * @return The sequence number component
-     */
-    function getSequenceFromId(uint256 requestId) 
-        public 
-        pure 
-        returns (uint256) 
-    {
-        return uint256(uint32(requestId));
-    }
-    
-    /**
-     * @dev Extracts the random component from a structured request ID
-     * @param requestId The structured request ID
-     * @return The random component derived from user and amount
-     */
-    function getRandomComponentFromId(uint256 requestId) 
-        public 
-        pure 
-        returns (uint256) 
-    {
-        return uint256(uint64(requestId >> 32));
-    }
-    
-    /**
-     * @dev Checks if a requestId is in the new structured format
-     * @param requestId The request ID to check
-     * @return True if the requestId is in structured format, false if legacy
-     */
-    function isStructuredRequestId(uint256 requestId) 
-        public 
-        pure 
-        returns (bool) 
-    {
-        return requestId >= 4294967296; // 2^32
-    }
-    
-    /**
-     * @dev Gets the count of active stakes for a user (not in unbonding)
-     * @param user The user to get the count for
-     * @return The count of active stakes
-     */
-    function getActiveStakeCount(address user) 
-        public 
-        view 
-        returns (uint256) 
-    {
-        uint256 activeStakeCount = 0;
-        for (uint256 i = 0; i < _userStakes[user].length; i++) {
-            if (_userStakes[user][i].unbondingAt == 0 && _userStakes[user][i].amount > 0) {
-                activeStakeCount++;
-            }
-        }
-        return activeStakeCount;
     }
     
     /**

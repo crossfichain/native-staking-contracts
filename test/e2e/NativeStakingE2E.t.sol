@@ -36,7 +36,7 @@ contract NativeStakingE2ETest is Test {
     address public user2 = address(0x3);
     
     // Test constants
-    string public constant VALIDATOR_ID = "validator1";
+    string public constant VALIDATOR_ID = "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
     uint256 public constant INITIAL_USER_BALANCE = 10000 ether;
     
     // For event capturing
@@ -123,7 +123,8 @@ contract NativeStakingE2ETest is Test {
             address(aprStaking),
             address(apyStaking),
             address(wxfi),
-            address(oracle)
+            address(oracle),
+            false // enforceMinimumAmounts set to false for tests
         );
         
         TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
@@ -588,6 +589,43 @@ contract NativeStakingE2ETest is Test {
         assertEq(userRewardsAfter, 0, "Rewards should be cleared from oracle after claiming");
         
         console.log("APR rewards claiming test completed successfully");
+    }
+    
+    /**
+     * @dev Tests validator format validation
+     */
+    function testValidatorFormatValidation() public {
+        console.log("Testing validator format validation");
+        
+        // Valid validator format should succeed
+        string memory validValidator = "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+        
+        // Invalid validator formats should fail
+        string memory invalidValidator1 = "validator1"; // Doesn't start with mxva
+        string memory invalidValidator2 = ""; // Empty
+        string memory invalidValidator3 = "abc"; // Too short
+        
+        // Try to stake with a valid validator
+        vm.startPrank(user1);
+        uint256 stakeAmount = 1 ether;
+        bool success = stakingManager.stakeAPR{value: stakeAmount}(stakeAmount, validValidator);
+        assertTrue(success, "Stake with valid validator should succeed");
+        
+        // Try to stake with an invalid validator - should revert
+        vm.expectRevert("Invalid validator format: must start with 'mxva'");
+        stakingManager.stakeAPR{value: stakeAmount}(stakeAmount, invalidValidator1);
+        
+        // Try to stake with an empty validator - should revert
+        vm.expectRevert("Invalid validator format: must start with 'mxva'");
+        stakingManager.stakeAPR{value: stakeAmount}(stakeAmount, invalidValidator2);
+        
+        // Try to stake with a too short validator - should revert
+        vm.expectRevert("Invalid validator format: must start with 'mxva'");
+        stakingManager.stakeAPR{value: stakeAmount}(stakeAmount, invalidValidator3);
+        
+        vm.stopPrank();
+        
+        console.log("Validator format validation test completed successfully");
     }
     
     receive() external payable {}

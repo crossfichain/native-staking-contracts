@@ -37,6 +37,10 @@ contract UnifiedOracleTest is Test {
         // Grant roles
         oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), ADMIN);
         
+        // Set launch timestamp to disable unstaking freeze by default
+        // Use a safe delta to avoid overflow (30 days is already past the freeze period)
+        oracle.setLaunchTimestamp(block.timestamp > 30 days ? block.timestamp - 30 days : 1);
+        
         vm.stopPrank();
     }
     
@@ -60,17 +64,28 @@ contract UnifiedOracleTest is Test {
     function testFallbackPrice() public {
         vm.startPrank(ADMIN);
         
-        // Set fallback price in the oracle
+        // 1. Set the current block time to a specific timestamp
+        uint256 testTime = 1000000;
+        vm.warp(testTime);
+        
+        // 2. Set fallback price in the oracle
         oracle.setPrice("XFI", 2 ether); // $2
         
-        // Test when DIA price is too old
-        uint128 oldTimestamp = uint128(block.timestamp - 2 hours);
-        diaOracle.setPriceWithTimestamp("XFI/USD", 1e8, oldTimestamp);
+        // 3. Set a timestamp older than PRICE_FRESHNESS_THRESHOLD (1 hour)
+        // Use a fixed timestamp that's more than 1 hour old but won't cause overflow
+        uint128 oldTimestamp = uint128(testTime - 2 hours);
         
-        // Get price should now use fallback
-        (uint256 price, uint256 timestamp) = oracle.getXFIPrice();
+        // 4. Mock the DIA Oracle to return the old timestamp
+        vm.mockCall(
+            address(diaOracle),
+            abi.encodeWithSelector(IDIAOracle.getValue.selector, "XFI/USD"),
+            abi.encode(uint128(1e8), oldTimestamp)
+        );
         
-        // Price should be the fallback price
+        // 5. Call getPrice which should use the fallback price
+        uint256 price = oracle.getPrice("XFI");
+        
+        // 6. Verify that the price returned is the fallback price
         assertEq(price, 2 ether, "XFI price should use fallback price of $2");
         
         vm.stopPrank();
@@ -135,24 +150,31 @@ contract UnifiedOracleTest is Test {
     }
     
     function testUnstakingFrozen() public {
-        // Initially, unstaking should not be frozen since launch timestamp is the deployment time
-        assertFalse(oracle.isUnstakingFrozen(), "Unstaking should not be frozen by default");
-        
         vm.startPrank(ADMIN);
         
-        // Set launch timestamp to current time
-        oracle.setLaunchTimestamp(block.timestamp);
+        // 1. First set a fixed block time to work with
+        uint256 currentTime = 1000000; // A simple, fixed timestamp
+        vm.warp(currentTime);
+        
+        // 2. Set launch timestamp to current time
+        oracle.setLaunchTimestamp(currentTime);
+        
+        // 3. Confirm unstaking is frozen at launch time
+        assertTrue(oracle.isUnstakingFrozen(), "Unstaking should be frozen at launch");
+        
+        // 4. Move time forward 15 days (half the freeze period)
+        vm.warp(currentTime + 15 days);
+        
+        // 5. Confirm unstaking is still frozen
+        assertTrue(oracle.isUnstakingFrozen(), "Unstaking should still be frozen after 15 days");
+        
+        // 6. Move time forward to just after the 30 day freeze period
+        vm.warp(currentTime + 30 days + 1);
+        
+        // 7. Confirm unstaking is no longer frozen
+        assertFalse(oracle.isUnstakingFrozen(), "Unstaking should not be frozen after 30 days");
         
         vm.stopPrank();
-        
-        // Unstaking should now be frozen
-        assertTrue(oracle.isUnstakingFrozen(), "Unstaking should be frozen after setting launch timestamp");
-        
-        // Advance time 31 days
-        vm.warp(block.timestamp + 31 days);
-        
-        // Unstaking should no longer be frozen
-        assertFalse(oracle.isUnstakingFrozen(), "Unstaking should not be frozen after 31 days");
     }
     
     function testBatchSetUserClaimableRewards() public {

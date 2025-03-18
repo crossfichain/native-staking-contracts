@@ -21,6 +21,7 @@ contract APRStakingBase is Test {
     address public constant ADMIN = address(0x1);
     address public constant USER = address(0x2);
     address public constant SECOND_USER = address(0x3);
+    string public constant VALIDATOR_ID = "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
     // Contracts
     WXFI public wxfi;
@@ -80,13 +81,13 @@ contract APRStakingBase is Test {
         
         // Deploy NativeStakingManager
         NativeStakingManager managerImpl = new NativeStakingManager();
-        
         bytes memory managerData = abi.encodeWithSelector(
             NativeStakingManager.initialize.selector,
-            address(staking),     // NativeStaking address
-            address(0),           // NativeStakingVault address (not used in APR tests)
+            address(staking),
+            address(0), // No APY contract for this test
             address(wxfi),
-            address(oracle)
+            address(oracle),
+            false // Do not enforce minimum amounts for tests
         );
         
         TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
@@ -145,7 +146,7 @@ contract APRStakingBase is Test {
         approveWXFI(from, amount);
         
         vm.startPrank(from);
-        manager.stakeAPR(amount, "validator1");
+        manager.stakeAPR(amount, VALIDATOR_ID);
         vm.stopPrank();
     }
     
@@ -156,7 +157,7 @@ contract APRStakingBase is Test {
      */
     function unstakeRequest(address from, uint256 amount) internal {
         vm.startPrank(from);
-        manager.unstakeAPR(amount, "validator1");
+        manager.unstakeAPR(amount, VALIDATOR_ID);
         vm.stopPrank();
     }
     

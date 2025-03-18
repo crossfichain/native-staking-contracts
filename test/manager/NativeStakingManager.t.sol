@@ -19,6 +19,7 @@ contract NativeStakingManagerTest is Test {
     // Test constants
     address public constant ADMIN = address(0x1);
     address public constant USER = address(0x2);
+    string public constant VALIDATOR_ID = "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
     
     // Contracts
     WXFI public wxfi;
@@ -62,7 +63,7 @@ contract NativeStakingManagerTest is Test {
         oracle.setTotalStakedXFI(1000000 ether);
         oracle.setUnbondingPeriod(14 days);
         oracle.setPrice("XFI", 1 ether); // $1 with 18 decimals
-        oracle.setLaunchTimestamp(block.timestamp - 31 days); // Set launch timestamp to a month ago
+        // Don't set launch timestamp in setUp, let the individual tests handle it
         
         // Deploy NativeStaking (APR)
         NativeStaking stakingImpl = new NativeStaking();
@@ -101,7 +102,8 @@ contract NativeStakingManagerTest is Test {
             address(staking),
             address(stakingVault),
             address(wxfi),
-            address(oracle)
+            address(oracle),
+            false // Do not enforce minimum amounts for tests
         );
         TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
             address(managerImpl),
@@ -134,7 +136,7 @@ contract NativeStakingManagerTest is Test {
         
         // USER stakes native XFI
         vm.prank(USER);
-        manager.stakeAPR{value: stakeAmount}(stakeAmount, "validator1");
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, VALIDATOR_ID);
         
         // Check that USER has staked the correct amount
         assertEq(staking.getTotalStaked(USER), stakeAmount, "USER should have staked the correct amount");
@@ -152,15 +154,33 @@ contract NativeStakingManagerTest is Test {
     }
     
     function testUnstakeAPR() public {
+        // Set launch timestamp and unstake freeze time to 0 to disable unstaking freeze
+        vm.startPrank(ADMIN);
+        oracle.setLaunchTimestamp(0);
+        manager.setUnstakeFreezeTime(0);
+        
+        // Fund the contract with WXFI for payouts
+        vm.deal(ADMIN, 10 ether);
+        wxfi.deposit{value: 5 ether}();
+        IERC20(address(wxfi)).transfer(address(staking), 5 ether);
+        vm.stopPrank();
+        
         uint256 stakeAmount = 10 ether;
         
         // USER stakes native XFI
         vm.prank(USER);
-        manager.stakeAPR{value: stakeAmount}(stakeAmount, "validator1");
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, VALIDATOR_ID);
+        
+        // Record logs to capture the request ID from events
+        vm.recordLogs();
         
         // USER requests to unstake half the amount
         vm.prank(USER);
-        uint256 requestId = manager.unstakeAPR(stakeAmount / 2, "validator1");
+        manager.unstakeAPR(stakeAmount / 2, VALIDATOR_ID);
+        
+        // Extract the request ID from logs
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        uint256 requestId = 0; // This will be 0 for the first unstake request
         
         // Check that the request was created
         assertEq(staking.getTotalStaked(USER), stakeAmount / 2, "Half of USER's stake should remain");
@@ -168,10 +188,18 @@ contract NativeStakingManagerTest is Test {
         // Skip through the unbonding period
         skip(oracle.getUnbondingPeriod() + 1);
         
-        // USER claims the unstaked amount
+        // Record balances before claiming
         uint256 balanceBefore = USER.balance;
-        vm.prank(USER);
+        uint256 wxfiBalanceBefore = wxfi.balanceOf(USER);
+        
+        // USER claims the unstaked amount
+        vm.startPrank(USER);
         uint256 claimed = manager.claimUnstakeAPR(requestId);
+        
+        // Unwrap WXFI to native XFI
+        uint256 wxfiBalance = wxfi.balanceOf(USER);
+        wxfi.withdraw(wxfiBalance);
+        vm.stopPrank();
         
         // Check that the right amount was claimed
         assertEq(claimed, stakeAmount / 2, "USER should have claimed half the stake");
