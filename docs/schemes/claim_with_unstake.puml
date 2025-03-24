@@ -1,0 +1,72 @@
+@startuml Unstake and Claim Flow
+actor User
+participant "Frontend\n(Web App)" as FE
+participant "Backend\n(API Server)" as BE
+participant "UnifiedOracle" as UO
+participant "NativeStakingManager" as NSM
+participant "NativeStaking\n(APR Contract)" as NS
+participant "WXFI Token" as WXFI
+
+User -> FE: 1. Request to unstake
+activate FE
+
+FE -> NS: 2. Query user stakes
+FE <-- NS: Return stake info
+
+FE -> UO: 3. Query unbonding period
+FE <-- UO: Return period
+
+User -> FE: 4. Select amount to unstake
+FE -> FE: 5. Validate input\n(amount >= 10 XFI)
+
+FE -> NSM: 6. unstakeAPR(amount, validatorId)
+activate NSM
+
+NSM -> UO: 6.1 Check if unstaking\nis frozen
+NSM -> NS: 6.2 requestUnstake(user,\namount, validator)
+activate NS
+NS -> NS: 6.3 Generate request ID
+NS -> NS: 6.4 Create unstake request
+NS -> NS: 6.5 Mark stakes as unbonding
+NS -> NS: 6.6 Emit UnstakeRequested
+NSM <-- NS: Return request ID
+deactivate NS
+
+FE <-- NSM: Return request ID
+deactivate NSM
+
+FE -> BE: 7. Register unstake request
+activate BE
+BE -> BE: 7.1 Start monitoring\nunbonding period
+FE <-- BE: Confirm receipt
+deactivate BE
+
+' After unbonding period
+User -> FE: 8. Request to claim unstake
+FE -> NSM: 9. claimUnstakeAPR(requestId)
+activate NSM
+
+NSM -> NS: 9.1 Verify unbonding complete
+activate NS
+NS -> NS: 9.2 Calculate final amount
+NS -> WXFI: 9.3 Transfer tokens
+NS -> NS: 9.4 Mark request completed
+NS -> NS: 9.5 Emit UnstakeClaimed
+NSM <-- NS: Return claimed amount
+deactivate NS
+
+NSM -> WXFI: 9.6 withdraw(amount)
+NSM -> User: 9.7 Transfer native XFI
+FE <-- NSM: Return result
+deactivate NSM
+
+FE -> BE: 10. Update unstake status
+activate BE
+BE -> BE: 10.1 Update records
+FE <-- BE: Confirm update
+deactivate BE
+
+User <-- FE: 11. Show confirmation
+deactivate FE
+
+@enduml 

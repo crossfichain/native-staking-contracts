@@ -1,0 +1,49 @@
+@startuml Claim Rewards Flow
+actor User
+participant "Frontend\n(Web App)" as FE
+participant "Backend\n(API Server)" as BE
+participant "DIA Oracle" as DIA
+participant "UnifiedOracle" as UO
+participant "NativeStakingManager" as NSM
+participant "NativeStaking\n(APR Contract)" as NS
+participant "WXFI Token" as WXFI
+
+User -> FE: 1. Request to view\nclaimable rewards
+activate FE
+
+FE -> NS: 2. getUnclaimedRewards(user)
+activate NS
+NS -> UO: 2.1 Get current APR
+UO -> DIA: Query latest data
+NS <-- UO: Return APR
+FE <-- NS: Return rewards amount
+deactivate NS
+
+FE -> User: 3. Display claimable rewards
+
+User -> FE: 4. Initiate claim
+FE -> NSM: 5. claimRewardsAPR()
+activate NSM
+
+NSM -> UO: 5.1 Check oracle freshness
+NSM -> NS: 5.2 Calculate rewards
+activate NS
+NS -> NS: 5.3 Update last claim time
+NS -> WXFI: 5.4 Transfer rewards
+NS -> NS: 5.5 Emit RewardsClaimed
+NSM <-- NS: Return claimed amount
+deactivate NS
+
+FE <-- NSM: Return transaction result
+deactivate NSM
+
+FE -> BE: 6. Notify about claim
+activate BE
+BE -> BE: 6.1 Update reward records
+FE <-- BE: Confirm receipt
+deactivate BE
+
+User <-- FE: 7. Show confirmation
+deactivate FE
+
+@enduml 

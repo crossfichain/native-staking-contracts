@@ -1,0 +1,61 @@
+@startuml Stake APR Flow
+actor User
+participant "Frontend\n(Web App)" as FE
+participant "Backend\n(API Server)" as BE
+participant "DIA Oracle" as DIA
+participant "UnifiedOracle" as UO
+participant "NativeStakingManager" as NSM
+participant "NativeStaking\n(APR Contract)" as NS
+participant "WXFI Token" as WXFI
+participant "Validator Node" as VN
+
+User -> FE: 1. Initiates staking process
+activate FE
+
+FE -> BE: 2. Request validator list\nand staking info
+activate BE
+BE -> VN: 2.1 Query active validators
+BE <-- VN: Return validator list
+BE -> UO: 2.2 Get current APR
+BE <-- UO: Return APR
+FE <-- BE: Return validators & APR info
+deactivate BE
+
+FE -> NSM: 3. Query minimum stake amount
+FE <-- NSM: Return min stake amount
+
+User -> FE: 4. Select validator and\nenter stake amount
+FE -> FE: 5. Validate input\n(amount >= 50 XFI)
+
+FE -> NSM: 6. Call stakeAPR(amount, validatorId)\n{value: amount}
+activate NSM
+
+NSM -> UO: 6.1 Check oracle freshness
+UO -> DIA: Query XFI price
+UO <-- DIA: Return price data
+
+NSM -> WXFI: 6.2 deposit() {value: amount}\nWrap native XFI
+NSM <-- WXFI: Return WXFI tokens
+
+NSM -> NS: 6.3 stake(user, amount,\nvalidator, tokenAddress)
+activate NS
+NS -> WXFI: 6.3.1 transferFrom(manager, this)
+NS -> NS: 6.3.2 Update user stakes
+NS -> NS: 6.3.3 Emit Staked event
+NSM <-- NS: Return success
+deactivate NS
+
+FE <-- NSM: Return transaction result
+deactivate NSM
+
+FE -> BE: 7. Notify backend about\nnew stake
+activate BE
+BE -> BE: 7.1 Update stake records
+BE -> BE: 7.2 Start monitoring\nvalidator performance
+FE <-- BE: Confirm receipt
+deactivate BE
+
+User <-- FE: 8. Show confirmation
+deactivate FE
+
+@enduml 

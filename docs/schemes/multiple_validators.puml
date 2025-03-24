@@ -1,0 +1,55 @@
+@startuml Multiple Validator Stakes Flow
+actor User
+participant "Frontend\n(Web App)" as FE
+participant "Backend\n(API Server)" as BE
+participant "DIA Oracle" as DIA
+participant "UnifiedOracle" as UO
+participant "NativeStakingManager" as NSM
+participant "NativeStaking\n(APR Contract)" as NS
+participant "WXFI Token" as WXFI
+collections "Validator Nodes" as VN
+
+User -> FE: 1. Request validator list
+activate FE
+
+FE -> BE: 2. Get validators info
+activate BE
+BE -> VN: 2.1 Query all validators
+BE -> BE: 2.2 Aggregate performance
+BE -> UO: 2.3 Get APR per validator
+UO -> DIA: Query market data
+BE <-- UO: Return APR data
+FE <-- BE: Return validator list\nwith performance metrics
+deactivate BE
+
+User -> FE: 3. Select multiple validators\nand amounts
+FE -> FE: 4. Validate inputs\n(amount >= 50 XFI per stake)
+
+loop For each validator
+    FE -> NSM: 5. stakeAPR(amount, validatorId)\n{value: amount}
+    activate NSM
+    
+    NSM -> WXFI: 5.1 deposit() {value: amount}
+    NSM -> NS: 5.2 stake(user, amount,\nvalidator, tokenAddress)
+    activate NS
+    NS -> NS: 5.3 Create stake entry
+    NS -> NS: 5.4 Update total staked
+    NS -> NS: 5.5 Emit Staked event
+    NSM <-- NS: Return success
+    deactivate NS
+    
+    FE <-- NSM: Return result
+    deactivate NSM
+    
+    FE -> BE: 6. Register stake
+    activate BE
+    BE -> BE: 6.1 Update stake records
+    BE -> BE: 6.2 Start monitoring
+    FE <-- BE: Confirm update
+    deactivate BE
+end
+
+User <-- FE: 7. Show summary of\nall stakes
+deactivate FE
+
+@enduml 
