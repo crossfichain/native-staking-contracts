@@ -76,4 +76,49 @@ interface IUnifiedOracle {
      * @return The price with 18 decimals of precision
      */
     function getPrice(string calldata symbol) external view returns (uint256);
+    
+    /**
+     * @dev Adds claimable rewards for a user
+     * @param user The user address
+     * @param amount The amount of rewards to add
+     */
+    function addUserClaimableRewards(address user, uint256 amount) external;
+    
+    /**
+     * @dev Gets claimable rewards for a user
+     * @param user The user address
+     * @return The amount of claimable rewards
+     */
+    function getUserClaimableRewards(address user) external view returns (uint256);
+    
+    /**
+     * @dev Converts XFI amount to MPX amount
+     * @param xfiAmount The amount in XFI
+     * @return The amount in MPX
+     */
+    function convertXFItoMPX(uint256 xfiAmount) external view returns (uint256);
+    
+    /**
+     * @dev Updates the APR
+     * @param apr The new APR value
+     */
+    function updateAPR(uint256 apr) external;
+    
+    /**
+     * @dev Updates the APY
+     * @param apy The new APY value
+     */
+    function updateAPY(uint256 apy) external;
+    
+    /**
+     * @dev Updates the total staked XFI amount
+     * @param amount The new total staked amount
+     */
+    function updateTotalStakedXFI(uint256 amount) external;
+    
+    /**
+     * @dev Updates the validator APR
+     * @param apr The new validator APR value
+     */
+    function updateValidatorAPR(uint256 apr) external;
 } 

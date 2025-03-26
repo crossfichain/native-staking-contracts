@@ -31,8 +31,11 @@ contract NativeStakingManager is
     // Constants
     uint256 private constant PRECISION = 1e18;
     address private constant XFI_NATIVE_ADDRESS = address(0);
-    uint256 private constant MIN_STAKE_AMOUNT = 50 ether; // 50 XFI minimum stake
-    uint256 private constant MIN_UNSTAKE_AMOUNT = 10 ether; // 10 XFI minimum unstake
+    
+    // Minimum amounts (now settable)
+    uint256 public minStakeAmount;
+    uint256 public minUnstakeAmount;
+    uint256 public minRewardClaimAmount;
     
     // Validator prefix for validation
     string private constant VALIDATOR_PREFIX = "mxva";
@@ -72,10 +75,14 @@ contract NativeStakingManager is
     // Unstaking freeze period variables
     uint256 private _launchTimestamp;
     uint256 private _unstakeFreezeTime;
+    bool private _isManuallyFrozen;
     
     // Request tracking
     mapping(uint256 => Request) private _requests;
     uint256 private _nextRequestId;
+    
+    // Add new state variables for validator unbonding tracking
+    mapping(address => mapping(string => uint256)) private _userValidatorUnbondingEnd;
     
     // Events
     event APRContractUpdated(address indexed newContract);
@@ -92,6 +99,14 @@ contract NativeStakingManager is
     event UnstakeFreezeTimeUpdated(uint256 newUnstakeFreezeTime);
     event LaunchTimestampSet(uint256 timestamp);
     event RequestFulfilled(uint256 indexed requestId, address indexed user, RequestStatus indexed status, string reason);
+    event UnstakingFrozen(uint256 freezeDuration);
+    event UnstakingUnfrozen();
+    event UnstakingAutoUnfrozen();
+    event MinStakeAmountUpdated(uint256 newMinStakeAmount);
+    event MinUnstakeAmountUpdated(uint256 newMinUnstakeAmount);
+    event MinRewardClaimAmountUpdated(uint256 newMinRewardClaimAmount);
+    event ValidatorUnbondingStarted(address indexed user, string validator, uint256 endTime);
+    event ValidatorUnbondingEnded(address indexed user, string validator);
     
     /**
      * @dev Initializes the contract
@@ -100,13 +115,21 @@ contract NativeStakingManager is
      * @param _wxfi The address of the WXFI token
      * @param _oracle The address of the oracle
      * @param _enforceMinimums Whether to enforce minimum staking amounts
+     * @param _initialFreezeTime Initial freeze period in seconds (default 30 days)
+     * @param _minStake Minimum stake amount in XFI
+     * @param _minUnstake Minimum unstake amount in XFI
+     * @param _minRewardClaim Minimum reward claim amount in XFI
      */
     function initialize(
         address _aprContract,
         address _apyContract,
         address _wxfi,
         address _oracle,
-        bool _enforceMinimums
+        bool _enforceMinimums,
+        uint256 _initialFreezeTime,
+        uint256 _minStake,
+        uint256 _minUnstake,
+        uint256 _minRewardClaim
     ) external initializer {
         __AccessControl_init();
         __Pausable_init();
@@ -124,17 +147,25 @@ contract NativeStakingManager is
         wxfi = IWXFI(_wxfi);
         oracle = IOracle(_oracle);
         
+        // Set minimum amounts
+        minStakeAmount = _minStake;
+        minUnstakeAmount = _minUnstake;
+        minRewardClaimAmount = _minRewardClaim;
+        
         // Set default launch timestamp to now
         _launchTimestamp = block.timestamp;
         
-        // Initialize unstaking freeze period (default 30 days)
-        _unstakeFreezeTime = 30 days;
+        // Initialize unstaking freeze period
+        _unstakeFreezeTime = _initialFreezeTime;
         
         // Set minimum enforcement flag based on deployment environment
         enforceMinimumAmounts = _enforceMinimums;
         
         // Initialize request ID
         _nextRequestId = 1;
+        
+        // Emit initial freeze event
+        emit UnstakingFrozen(_initialFreezeTime);
     }
     
     /**
@@ -198,7 +229,7 @@ contract NativeStakingManager is
         
         // Enforce minimum amount if enabled
         if (enforceMinimumAmounts) {
-            require(amount >= MIN_STAKE_AMOUNT, "Amount must be at least 50 XFI");
+            require(amount >= minStakeAmount, "Amount must be at least 50 XFI");
         }
         
         // Validate validator format
@@ -335,7 +366,7 @@ contract NativeStakingManager is
         
         // Enforce minimum amount if enabled
         if (enforceMinimumAmounts) {
-            require(amount >= MIN_UNSTAKE_AMOUNT, "Amount must be at least 10 XFI");
+            require(amount >= minUnstakeAmount, "Amount must be at least 10 XFI");
         }
         
         // Validate validator format
@@ -343,10 +374,38 @@ contract NativeStakingManager is
         
         // Check if unstaking is frozen (first month after launch)
         require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
+
+        // Check if validator is in unbonding period for this user
+        require(!isValidatorUnbondingForUser(msg.sender, validator), 
+                "Validator is in unbonding period for this user");
+
+        // Get current claimable rewards
+        uint256 claimableRewards = oracle.getUserClaimableRewards(msg.sender);
+        
+        // If there are rewards, claim them regardless of threshold
+        if (claimableRewards > 0) {
+            // Clear rewards on oracle to prevent reentrancy
+            oracle.clearUserClaimableRewards(msg.sender);
+            
+            // Call APR contract to handle the claim
+            aprContract.claimRewards(msg.sender, claimableRewards);
+            
+            // Transfer rewards to user
+            bool transferred = IERC20(wxfi).transfer(msg.sender, claimableRewards);
+            require(transferred, "Reward transfer failed");
+            
+            // Emit rewards claimed event
+            uint256 rewardsMpxAmount = oracle.convertXFItoMPX(claimableRewards);
+            emit RewardsClaimedAPR(msg.sender, claimableRewards, rewardsMpxAmount, _nextRequestId);
+        }
         
         // Call the APR staking contract to request unstake
-        // The returned unstake request ID is not used locally since we track with our own ID system
         aprContract.requestUnstake(msg.sender, amount, validator);
+        
+        // Set unbonding period for this user-validator pair
+        uint256 unbondingPeriod = oracle.getUnbondingPeriod();
+        _userValidatorUnbondingEnd[msg.sender][validator] = block.timestamp + unbondingPeriod;
+        emit ValidatorUnbondingStarted(msg.sender, validator, block.timestamp + unbondingPeriod);
         
         // Create a request record
         requestId = _createRequest(
@@ -376,11 +435,21 @@ contract NativeStakingManager is
         nonReentrant 
         returns (uint256 amount) 
     {
+        // Get request details
+        Request storage request = _requests[requestId];
+        require(request.timestamp > 0, "Invalid request ID");
+        require(request.user == msg.sender, "Not request owner");
+        require(request.requestType == RequestType.UNSTAKE, "Invalid request type");
+        
         // Get the amount from APR contract
         amount = aprContract.claimUnstake(msg.sender, requestId);
         
         // Ensure the amount is non-zero
         require(amount > 0, "Nothing to claim");
+        
+        // Clear validator unbonding period
+        _userValidatorUnbondingEnd[msg.sender][request.validator] = 0;
+        emit ValidatorUnbondingEnded(msg.sender, request.validator);
         
         // Transfer the XFI/WXFI to the user
         bool transferred;
@@ -497,12 +566,16 @@ contract NativeStakingManager is
         amount = oracle.getUserClaimableRewards(msg.sender);
         require(amount > 0, "No rewards to claim");
         
+        // Check minimum reward claim amount
+        if (enforceMinimumAmounts) {
+            require(amount >= minRewardClaimAmount, "Reward amount below minimum");
+        }
+        
         // Get user's total staked amount for validation
         uint256 totalStaked = aprContract.getTotalStaked(msg.sender);
         require(totalStaked > 0, "User has no stake");
         
         // Validate rewards are not unreasonably high (max 100% APR for safety check)
-        // This is a simple check to avoid excessive rewards due to oracle manipulation
         uint256 maxReasonableReward = totalStaked / 4; // 25% of stake (100% APR / 4 for quarterly max)
         require(amount <= maxReasonableReward, "Reward amount exceeds safety threshold");
         
@@ -525,10 +598,10 @@ contract NativeStakingManager is
         require(transferred, "Reward transfer failed");
         
         // Convert XFI to MPX for the event
-        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
+        uint256 rewardsMpxAmount = oracle.convertXFItoMPX(amount);
         
         // Emit event with request ID
-        emit RewardsClaimedAPR(msg.sender, amount, mpxAmount, requestId);
+        emit RewardsClaimedAPR(msg.sender, amount, rewardsMpxAmount, requestId);
         
         return amount;
     }
@@ -865,7 +938,11 @@ contract NativeStakingManager is
      * @return True if unstaking is still frozen
      */
     function isUnstakingFrozen() public view returns (bool) {
-        return (block.timestamp < _launchTimestamp + _unstakeFreezeTime);
+        // If manually frozen, check against launch timestamp
+        if (_isManuallyFrozen) {
+            return (block.timestamp < _launchTimestamp + _unstakeFreezeTime);
+        }
+        return false;
     }
     
     /**
@@ -992,6 +1069,111 @@ contract NativeStakingManager is
                (uint256(timestampValue) << 96) |
                (uint256(randomComponent) << 32) |
                uint256(sequenceValue);
+    }
+    
+    /**
+     * @dev Manually freezes unstaking for a specified duration
+     * @param freezeDuration Duration in seconds to freeze unstaking
+     */
+    function freezeUnstaking(uint256 freezeDuration) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        require(freezeDuration > 0, "Freeze duration must be greater than 0");
+        _unstakeFreezeTime = freezeDuration;
+        _launchTimestamp = block.timestamp;
+        _isManuallyFrozen = true;
+        emit UnstakingFrozen(freezeDuration);
+    }
+    
+    /**
+     * @dev Manually unfreezes unstaking immediately
+     */
+    function unfreezeUnstaking() 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        _unstakeFreezeTime = 0;
+        _isManuallyFrozen = false;
+        emit UnstakingUnfrozen();
+    }
+    
+    /**
+     * @dev Function to check and auto-unfreeze if the freeze period has ended
+     * Can be called by anyone to update the state
+     */
+    function checkAndAutoUnfreeze() public {
+        if (_isManuallyFrozen && block.timestamp >= _launchTimestamp + _unstakeFreezeTime) {
+            _isManuallyFrozen = false;
+            emit UnstakingAutoUnfrozen();
+        }
+    }
+    
+    /**
+     * @dev Sets the minimum stake amount
+     * @param amount The new minimum stake amount in XFI
+     */
+    function setMinStakeAmount(uint256 amount) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        require(amount > 0, "Amount must be greater than 0");
+        minStakeAmount = amount;
+        emit MinStakeAmountUpdated(amount);
+    }
+    
+    /**
+     * @dev Sets the minimum unstake amount
+     * @param amount The new minimum unstake amount in XFI
+     */
+    function setMinUnstakeAmount(uint256 amount) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        require(amount > 0, "Amount must be greater than 0");
+        minUnstakeAmount = amount;
+        emit MinUnstakeAmountUpdated(amount);
+    }
+    
+    /**
+     * @dev Sets the minimum reward claim amount
+     * @param amount The new minimum reward claim amount in XFI
+     */
+    function setMinRewardClaimAmount(uint256 amount) 
+        external 
+        onlyRole(DEFAULT_ADMIN_ROLE) 
+    {
+        require(amount > 0, "Amount must be greater than 0");
+        minRewardClaimAmount = amount;
+        emit MinRewardClaimAmountUpdated(amount);
+    }
+    
+    /**
+     * @dev Checks if a validator is in unbonding period for a specific user
+     * @param user The user address
+     * @param validator The validator address
+     * @return bool True if validator is in unbonding period for the user
+     */
+    function isValidatorUnbondingForUser(address user, string calldata validator) 
+        public 
+        view 
+        returns (bool) 
+    {
+        return block.timestamp < _userValidatorUnbondingEnd[user][validator];
+    }
+
+    /**
+     * @dev Gets the end time of validator unbonding for a user
+     * @param user The user address
+     * @param validator The validator address
+     * @return uint256 The end time of unbonding period
+     */
+    function getValidatorUnbondingEndTime(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return _userValidatorUnbondingEnd[user][validator];
     }
     
     /**

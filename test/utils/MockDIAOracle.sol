@@ -54,4 +54,9 @@ contract MockDIAOracle is IDIAOracle {
         _prices[key] = value;
         _timestamps[key] = timestamp;
     }
+
+    function addUserClaimableRewards(address user, uint256 amount) external {
+        // This is a mock function for testing
+        // In a real implementation, this would be handled by the UnifiedOracle
+    }
 } 
