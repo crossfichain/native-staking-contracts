@@ -47,7 +47,7 @@ contract APRStakingBase is Test {
 
         // Deploy Oracle with DIA Oracle
         UnifiedOracle oracleImpl = new UnifiedOracle();
-        proxyAdmin = new ProxyAdmin(ADMIN);
+        proxyAdmin = new ProxyAdmin();
         
         bytes memory oracleData = abi.encodeWithSelector(
             UnifiedOracle.initialize.selector,

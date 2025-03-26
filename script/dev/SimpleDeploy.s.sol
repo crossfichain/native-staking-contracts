@@ -126,7 +126,7 @@ contract SimpleDeploy is Script {
         console.log("\n==== Deploying Main System Directly ====");
         
         // Step 1: Deploy ProxyAdmin
-        ProxyAdmin admin = new ProxyAdmin(ADMIN);
+        ProxyAdmin admin = new ProxyAdmin();
         proxyAdmin = address(admin);
         console.log("Proxy Admin deployed at:", proxyAdmin);
         

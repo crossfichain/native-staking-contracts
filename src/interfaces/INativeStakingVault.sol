@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import "@openzeppelin/contracts-upgradeable/interfaces/IERC4626Upgradeable.sol";
 
 /**
  * @title INativeStakingVault
  * @dev Interface for the Native Staking Vault contract that handles compounding staking (APY model)
  * Extends the ERC-4626 standard for tokenized vaults
  */
-interface INativeStakingVault is IERC4626 {
+interface INativeStakingVault is IERC4626Upgradeable {
     /**
      * @dev Struct to track a withdrawal request in progress
      * @param assets The amount of assets requested to withdraw

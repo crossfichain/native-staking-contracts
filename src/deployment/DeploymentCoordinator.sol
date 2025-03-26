@@ -43,7 +43,7 @@ contract DeploymentCoordinator {
         diaOracle = diaOracleAddress;
         
         // Step 1: Deploy ProxyAdmin
-        ProxyAdmin admin = new ProxyAdmin(adminAddress);
+        ProxyAdmin admin = new ProxyAdmin();
         proxyAdmin = address(admin);
         admin.transferOwnership(adminAddress);
         

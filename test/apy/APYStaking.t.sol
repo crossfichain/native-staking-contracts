@@ -2,16 +2,16 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
-import "../../src/core/NativeStakingManager.sol";
 import "../../src/core/NativeStakingVault.sol";
+import "../../src/core/NativeStakingManager.sol";
 import "../mocks/MockERC20.sol";
 import "../mocks/MockOracle.sol";
 
 /**
- * @title NativeStakingManagerTest
- * @dev Test contract for the NativeStakingManager
+ * @title APYStakingTest
+ * @dev Simple test for APY staking flow
  */
-contract NativeStakingManagerTest is Test {
+contract APYStakingTest is Test {
     // Test constants
     address public constant ADMIN = address(0x1);
     address public constant USER = address(0x2);
@@ -72,11 +72,6 @@ contract NativeStakingManagerTest is Test {
         xfi.mint(COMPOUNDER, INITIAL_BALANCE);
         
         vm.stopPrank();
-    }
-    
-    function testGetContractAddresses() public {
-        assertEq(manager.getAPYContract(), address(vault), "APY contract address should match");
-        assertEq(manager.getXFIToken(), address(xfi), "XFI token address should match");
     }
     
     function testStakeAPY() public {

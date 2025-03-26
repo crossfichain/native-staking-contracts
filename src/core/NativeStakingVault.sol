@@ -6,10 +6,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/interfaces/IERC4626Upgradeable.sol";
 import "../interfaces/INativeStakingVault.sol";
 import "../interfaces/IOracle.sol";
 
@@ -77,7 +78,7 @@ contract NativeStakingVault is
     ) external initializer {
         __AccessControl_init();
         __ERC20_init(_name, _symbol);
-        __ERC4626_init(IERC20(_asset));
+        __ERC4626_init(IERC20Upgradeable(_asset));
         __Pausable_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
@@ -101,7 +102,7 @@ contract NativeStakingVault is
      * @dev Override decimals function to resolve the inheritance conflict
      * @return The number of decimals for the token
      */
-    function decimals() public view override(ERC20Upgradeable, ERC4626Upgradeable, IERC20Metadata) returns (uint8) {
+    function decimals() public view override(ERC20Upgradeable, ERC4626Upgradeable, IERC20MetadataUpgradeable) returns (uint8) {
         return ERC4626Upgradeable.decimals();
     }
     
@@ -113,16 +114,13 @@ contract NativeStakingVault is
      */
     function deposit(uint256 assets, address receiver) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 shares) 
     {
         require(assets > 0, "Deposit amount must be > 0");
-        
-        // Call the parent implementation
         shares = super.deposit(assets, receiver);
-        
         return shares;
     }
     
@@ -134,16 +132,13 @@ contract NativeStakingVault is
      */
     function mint(uint256 shares, address receiver) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 assets) 
     {
         require(shares > 0, "Shares amount must be > 0");
-        
-        // Call the parent implementation
         assets = super.mint(shares, receiver);
-        
         return assets;
     }
     
@@ -156,20 +151,15 @@ contract NativeStakingVault is
      */
     function withdraw(uint256 assets, address receiver, address owner) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 shares) 
     {
         require(assets >= minWithdrawalAmount, "Amount below minimum");
-        
-        // Check if there's enough liquidity in the vault for immediate withdrawal
         uint256 availableLiquidity = _maxWithdrawalLiquidity();
         require(assets <= availableLiquidity, "Exceeds available liquidity");
-        
-        // Call the parent implementation
         shares = super.withdraw(assets, receiver, owner);
-        
         return shares;
     }
     
@@ -182,21 +172,16 @@ contract NativeStakingVault is
      */
     function redeem(uint256 shares, address receiver, address owner) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 assets) 
     {
         assets = previewRedeem(shares);
         require(assets >= minWithdrawalAmount, "Amount below minimum");
-        
-        // Check if there's enough liquidity in the vault for immediate withdrawal
         uint256 availableLiquidity = _maxWithdrawalLiquidity();
         require(assets <= availableLiquidity, "Exceeds available liquidity");
-        
-        // Call the parent implementation
         assets = super.redeem(shares, receiver, owner);
-        
         return assets;
     }
     
@@ -277,7 +262,7 @@ contract NativeStakingVault is
         _totalPendingWithdrawals -= assets;
         
         // Transfer the assets to the user
-        IERC20(asset()).transfer(msg.sender, assets);
+        IERC20Upgradeable(asset()).transfer(msg.sender, assets);
         
         emit WithdrawalClaimed(msg.sender, requestId, assets);
         
@@ -331,18 +316,23 @@ contract NativeStakingVault is
         nonReentrant 
         returns (bool success) 
     {
-        // In a real implementation, this would interact with the Cosmos staking
-        // and compound the rewards. For this implementation, we'll simulate it.
-        
         // Calculate rewards based on APY since last compound
-        uint256 calculatedTotalAssets = _calculateTotalAssetsWithCompounding();
+        uint256 timeElapsed = block.timestamp - _lastCompoundTimestamp;
         uint256 currentAssets = super.totalAssets();
         
-        if (calculatedTotalAssets > currentAssets) {
-            uint256 rewardsAmount = calculatedTotalAssets - currentAssets;
-            
+        // Calculate rewards using APY formula: rewards = principal * (APY/100) * (time/365 days)
+        uint256 apy = oracle.getCurrentAPY();
+        uint256 rewardsAmount = (currentAssets * apy * timeElapsed) / (365 days * 10000); // APY is in basis points
+        
+        if (rewardsAmount > 0) {
             // Update last compound timestamp
             _lastCompoundTimestamp = block.timestamp;
+            
+            // Transfer rewards to the vault
+            IERC20Upgradeable(asset()).transferFrom(msg.sender, address(this), rewardsAmount);
+            
+            // Rewards are automatically distributed by increasing the exchange rate between shares and assets
+            // No need to mint new shares since the value of existing shares increases
             
             emit CompoundExecuted(rewardsAmount, block.timestamp);
             
@@ -366,7 +356,10 @@ contract NativeStakingVault is
         returns (bool success) 
     {
         // Transfer the rewards to the vault
-        IERC20(asset()).transferFrom(msg.sender, address(this), rewardAmount);
+        IERC20Upgradeable(asset()).transferFrom(msg.sender, address(this), rewardAmount);
+        
+        // Rewards are automatically distributed by increasing the exchange rate between shares and assets
+        // No need to mint new shares since the value of existing shares increases
         
         // Update last compound timestamp
         _lastCompoundTimestamp = block.timestamp;
@@ -383,7 +376,7 @@ contract NativeStakingVault is
     function totalAssets() 
         public 
         view 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         returns (uint256) 
     {
         return _calculateTotalAssetsWithCompounding();
@@ -395,13 +388,21 @@ contract NativeStakingVault is
      */
     function _calculateTotalAssetsWithCompounding() internal view returns (uint256) {
         // Get the raw asset balance
-        uint256 rawAssets = IERC20(asset()).balanceOf(address(this));
+        uint256 rawAssets = IERC20Upgradeable(asset()).balanceOf(address(this));
         
         // Add pending withdrawals (assets that are being withdrawn)
         uint256 pendingWithdrawals = _totalPendingWithdrawals;
         
+        // Calculate rewards based on APY since last compound
+        uint256 timeElapsed = block.timestamp - _lastCompoundTimestamp;
+        uint256 currentAssets = rawAssets + pendingWithdrawals;
+        
+        // Calculate rewards using APY formula: rewards = principal * (APY/100) * (time/365 days)
+        uint256 apy = oracle.getCurrentAPY();
+        uint256 rewardsAmount = (currentAssets * apy * timeElapsed) / (365 days * 10000); // APY is in basis points
+        
         // Calculate total with compounding
-        uint256 calculatedTotalAssets = rawAssets + pendingWithdrawals;
+        uint256 calculatedTotalAssets = currentAssets + rewardsAmount;
         
         return calculatedTotalAssets;
     }
@@ -509,4 +510,81 @@ contract NativeStakingVault is
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[50] private __gap;
+
+    // Override all required functions with proper inheritance
+    function name() public view override(ERC20Upgradeable, IERC20MetadataUpgradeable) returns (string memory) {
+        return super.name();
+    }
+
+    function symbol() public view override(ERC20Upgradeable, IERC20MetadataUpgradeable) returns (string memory) {
+        return super.symbol();
+    }
+
+    function totalSupply() public view override(ERC20Upgradeable, IERC20Upgradeable) returns (uint256) {
+        return super.totalSupply();
+    }
+
+    function balanceOf(address account) public view override(ERC20Upgradeable, IERC20Upgradeable) returns (uint256) {
+        return super.balanceOf(account);
+    }
+
+    function transfer(address to, uint256 amount) public override(ERC20Upgradeable, IERC20Upgradeable) returns (bool) {
+        return super.transfer(to, amount);
+    }
+
+    function allowance(address owner, address spender) public view override(ERC20Upgradeable, IERC20Upgradeable) returns (uint256) {
+        return super.allowance(owner, spender);
+    }
+
+    function approve(address spender, uint256 amount) public override(ERC20Upgradeable, IERC20Upgradeable) returns (bool) {
+        return super.approve(spender, amount);
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public override(ERC20Upgradeable, IERC20Upgradeable) returns (bool) {
+        return super.transferFrom(from, to, amount);
+    }
+
+    function asset() public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (address) {
+        return ERC4626Upgradeable.asset();
+    }
+
+    function convertToShares(uint256 assets) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.convertToShares(assets);
+    }
+
+    function convertToAssets(uint256 shares) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.convertToAssets(shares);
+    }
+
+    function maxDeposit(address receiver) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxDeposit(receiver);
+    }
+
+    function maxMint(address receiver) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxMint(receiver);
+    }
+
+    function maxWithdraw(address owner) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxWithdraw(owner);
+    }
+
+    function maxRedeem(address owner) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxRedeem(owner);
+    }
+
+    function previewDeposit(uint256 assets) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewDeposit(assets);
+    }
+
+    function previewMint(uint256 shares) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewMint(shares);
+    }
+
+    function previewWithdraw(uint256 assets) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewWithdraw(assets);
+    }
+
+    function previewRedeem(uint256 shares) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewRedeem(shares);
+    }
 } 
