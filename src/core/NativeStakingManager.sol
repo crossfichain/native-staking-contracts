@@ -237,6 +237,10 @@ contract NativeStakingManager is
         
         // Check oracle freshness
         _checkOracleFreshness();
+
+        // Add check for validator unbonding period
+        require(!isValidatorUnbondingForUser(msg.sender, validator), 
+                "Cannot stake to validator during unbonding period");
         
         address tokenAddress;
         
