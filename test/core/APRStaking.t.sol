@@ -46,7 +46,7 @@ contract APRStakingTest is Test {
     }
     
     function testInitialization() public {
-        assertEq(staking.oracle(), address(oracle));
+        assertEq(address(staking.oracle()), address(oracle));
         assertEq(staking.stakingToken(), address(xfi));
     }
     
@@ -94,8 +94,8 @@ contract APRStakingTest is Test {
         vm.warp(block.timestamp + UNBONDING_PERIOD + 1);
         
         // Claim unstake
-        vm.prank(USER);
-        uint256 amount = staking.claimUnstake(0);
+        vm.prank(MANAGER);
+        uint256 amount = staking.claimUnstake(USER, 0);
         
         assertEq(amount, STAKE_AMOUNT);
         assertEq(xfi.balanceOf(USER), INITIAL_BALANCE);
@@ -153,7 +153,7 @@ contract APRStakingTest is Test {
         
         // Try to claim before unbonding period
         vm.prank(USER);
-        staking.claimUnstake(0);
+        staking.claimUnstake(USER, 0);
     }
     
     function testFailClaimUnstakeByNonOwner() public {
@@ -167,8 +167,9 @@ contract APRStakingTest is Test {
         // Fast forward time
         vm.warp(block.timestamp + UNBONDING_PERIOD + 1);
         
-        // Try to claim as non-owner
-        vm.prank(MANAGER);
-        staking.claimUnstake(0);
+        // Try to claim as non-manager
+        vm.prank(USER);
+        vm.expectRevert("AccessControl: account 0x0000000000000000000000000000000000000002 is missing role 0x0000000000000000000000000000000000000000000000000000000000000000");
+        staking.claimUnstake(USER, 0);
     }
 } 

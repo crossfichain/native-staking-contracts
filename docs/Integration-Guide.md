@@ -1,38 +1,38 @@
-# CrossFi Native Staking — Руководство по интеграции
+# CrossFi Native Staking вЂ” Р СѓРєРѕРІРѕРґСЃС‚РІРѕ РїРѕ РёРЅС‚РµРіСЂР°С†РёРё
 
-## Содержание
+## РЎРѕРґРµСЂР¶Р°РЅРёРµ
 
-- [Обзор системы](#обзор-системы)
-- [Адреса контрактов](#адреса-контрактов)
-- [Интеграция для бэкенд-разработчиков](#интеграция-для-бэкенд-разработчиков)
-- [Интеграция для фронтенд-разработчиков](#интеграция-для-фронтенд-разработчиков)
-- [Рабочие процессы стейкинга](#рабочие-процессы-стейкинга)
-- [Управление ID запросов](#управление-id-запросов)
-- [События и их обработка](#события-и-их-обработка)
-- [Примеры кода](#примеры-кода)
+- [РћР±Р·РѕСЂ СЃРёСЃС‚РµРјС‹](#РѕР±Р·РѕСЂ-СЃРёСЃС‚РµРјС‹)
+- [РђРґСЂРµСЃР° РєРѕРЅС‚СЂР°РєС‚РѕРІ](#Р°РґСЂРµСЃР°-РєРѕРЅС‚СЂР°РєС‚РѕРІ)
+- [РРЅС‚РµРіСЂР°С†РёСЏ РґР»СЏ Р±СЌРєРµРЅРґ-СЂР°Р·СЂР°Р±РѕС‚С‡РёРєРѕРІ](#РёРЅС‚РµРіСЂР°С†РёСЏ-РґР»СЏ-Р±СЌРєРµРЅРґ-СЂР°Р·СЂР°Р±РѕС‚С‡РёРєРѕРІ)
+- [РРЅС‚РµРіСЂР°С†РёСЏ РґР»СЏ С„СЂРѕРЅС‚РµРЅРґ-СЂР°Р·СЂР°Р±РѕС‚С‡РёРєРѕРІ](#РёРЅС‚РµРіСЂР°С†РёСЏ-РґР»СЏ-С„СЂРѕРЅС‚РµРЅРґ-СЂР°Р·СЂР°Р±РѕС‚С‡РёРєРѕРІ)
+- [Р Р°Р±РѕС‡РёРµ РїСЂРѕС†РµСЃСЃС‹ СЃС‚РµР№РєРёРЅРіР°](#СЂР°Р±РѕС‡РёРµ-РїСЂРѕС†РµСЃСЃС‹-СЃС‚РµР№РєРёРЅРіР°)
+- [РЈРїСЂР°РІР»РµРЅРёРµ ID Р·Р°РїСЂРѕСЃРѕРІ](#СѓРїСЂР°РІР»РµРЅРёРµ-id-Р·Р°РїСЂРѕСЃРѕРІ)
+- [РЎРѕР±С‹С‚РёСЏ Рё РёС… РѕР±СЂР°Р±РѕС‚РєР°](#СЃРѕР±С‹С‚РёСЏ-Рё-РёС…-РѕР±СЂР°Р±РѕС‚РєР°)
+- [РџСЂРёРјРµСЂС‹ РєРѕРґР°](#РїСЂРёРјРµСЂС‹-РєРѕРґР°)
 
-## Обзор системы
+## РћР±Р·РѕСЂ СЃРёСЃС‚РµРјС‹
 
-Native Staking система CrossFi позволяет пользователям размещать токены XFI в стейкинге двумя способами:
+Native Staking СЃРёСЃС‚РµРјР° CrossFi РїРѕР·РІРѕР»СЏРµС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏРј СЂР°Р·РјРµС‰Р°С‚СЊ С‚РѕРєРµРЅС‹ XFI РІ СЃС‚РµР№РєРёРЅРіРµ РґРІСѓРјСЏ СЃРїРѕСЃРѕР±Р°РјРё:
 
-1. **APR модель** — Прямой стейкинг с фиксированной годовой процентной ставкой.
-2. **APY модель** — Стейкинг через vault с авто-компаундингом наград.
+1. **APR РјРѕРґРµР»СЊ** вЂ” РџСЂСЏРјРѕР№ СЃС‚РµР№РєРёРЅРі СЃ С„РёРєСЃРёСЂРѕРІР°РЅРЅРѕР№ РіРѕРґРѕРІРѕР№ РїСЂРѕС†РµРЅС‚РЅРѕР№ СЃС‚Р°РІРєРѕР№.
+2. **APY РјРѕРґРµР»СЊ** вЂ” РЎС‚РµР№РєРёРЅРі С‡РµСЂРµР· vault СЃ Р°РІС‚Рѕ-РєРѕРјРїР°СѓРЅРґРёРЅРіРѕРј РЅР°РіСЂР°Рґ.
 
-### Архитектура контрактов
+### РђСЂС…РёС‚РµРєС‚СѓСЂР° РєРѕРЅС‚СЂР°РєС‚РѕРІ
 
-Система состоит из следующих основных контрактов:
+РЎРёСЃС‚РµРјР° СЃРѕСЃС‚РѕРёС‚ РёР· СЃР»РµРґСѓСЋС‰РёС… РѕСЃРЅРѕРІРЅС‹С… РєРѕРЅС‚СЂР°РєС‚РѕРІ:
 
-- **NativeStakingManager** — Централизованный маршрутизатор для всех операций стейкинга
-- **NativeStaking** — Контракт для модели APR
-- **NativeStakingVault** — Контракт для модели APY (совместимый с ERC-4626)
-- **UnifiedOracle** — Оракул, предоставляющий данные о ценах и информацию о стейкинге
-- **WXFI** — Wrapped XFI токен (совместимый с ERC-20)
+- **NativeStakingManager** вЂ” Р¦РµРЅС‚СЂР°Р»РёР·РѕРІР°РЅРЅС‹Р№ РјР°СЂС€СЂСѓС‚РёР·Р°С‚РѕСЂ РґР»СЏ РІСЃРµС… РѕРїРµСЂР°С†РёР№ СЃС‚РµР№РєРёРЅРіР°
+- **NativeStaking** вЂ” РљРѕРЅС‚СЂР°РєС‚ РґР»СЏ РјРѕРґРµР»Рё APR
+- **NativeStakingVault** вЂ” РљРѕРЅС‚СЂР°РєС‚ РґР»СЏ РјРѕРґРµР»Рё APY (СЃРѕРІРјРµСЃС‚РёРјС‹Р№ СЃ ERC-4626)
+- **UnifiedOracle** вЂ” РћСЂР°РєСѓР», РїСЂРµРґРѕСЃС‚Р°РІР»СЏСЋС‰РёР№ РґР°РЅРЅС‹Рµ Рѕ С†РµРЅР°С… Рё РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ СЃС‚РµР№РєРёРЅРіРµ
+- **WXFI** вЂ” Wrapped XFI С‚РѕРєРµРЅ (СЃРѕРІРјРµСЃС‚РёРјС‹Р№ СЃ ERC-20)
 
-Все основные контракты реализованы как обновляемые прокси, что позволяет обновлять логику без изменения состояния или адресов контрактов.
+Р’СЃРµ РѕСЃРЅРѕРІРЅС‹Рµ РєРѕРЅС‚СЂР°РєС‚С‹ СЂРµР°Р»РёР·РѕРІР°РЅС‹ РєР°Рє РѕР±РЅРѕРІР»СЏРµРјС‹Рµ РїСЂРѕРєСЃРё, С‡С‚Рѕ РїРѕР·РІРѕР»СЏРµС‚ РѕР±РЅРѕРІР»СЏС‚СЊ Р»РѕРіРёРєСѓ Р±РµР· РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚РѕСЏРЅРёСЏ РёР»Рё Р°РґСЂРµСЃРѕРІ РєРѕРЅС‚СЂР°РєС‚РѕРІ.
 
-## Адреса контрактов
+## РђРґСЂРµСЃР° РєРѕРЅС‚СЂР°РєС‚РѕРІ
 
-> **Примечание**: После деплоя на тестовую или основную сеть CrossFi, скопируйте адреса из файла `deployments/dev.env`.
+> **РџСЂРёРјРµС‡Р°РЅРёРµ**: РџРѕСЃР»Рµ РґРµРїР»РѕСЏ РЅР° С‚РµСЃС‚РѕРІСѓСЋ РёР»Рё РѕСЃРЅРѕРІРЅСѓСЋ СЃРµС‚СЊ CrossFi, СЃРєРѕРїРёСЂСѓР№С‚Рµ Р°РґСЂРµСЃР° РёР· С„Р°Р№Р»Р° `deployments/dev.env`.
 
 ```
 WXFI_ADDRESS=0x...
@@ -44,103 +44,103 @@ STAKING_MANAGER_PROXY_ADDRESS=0x...
 PROXY_ADMIN_ADDRESS=0x...
 ```
 
-## Интеграция для бэкенд-разработчиков
+## РРЅС‚РµРіСЂР°С†РёСЏ РґР»СЏ Р±СЌРєРµРЅРґ-СЂР°Р·СЂР°Р±РѕС‚С‡РёРєРѕРІ
 
-### Установка и настройка
+### РЈСЃС‚Р°РЅРѕРІРєР° Рё РЅР°СЃС‚СЂРѕР№РєР°
 
-Для взаимодействия с контрактами на backend рекомендуется использовать библиотеку ethers.js или web3.js.
+Р”Р»СЏ РІР·Р°РёРјРѕРґРµР№СЃС‚РІРёСЏ СЃ РєРѕРЅС‚СЂР°РєС‚Р°РјРё РЅР° backend СЂРµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ Р±РёР±Р»РёРѕС‚РµРєСѓ ethers.js РёР»Рё web3.js.
 
 ```javascript
-// Пример установки с использованием npm
+// РџСЂРёРјРµСЂ СѓСЃС‚Р°РЅРѕРІРєРё СЃ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµРј npm
 npm install ethers
 ```
 
-### Инициализация контрактов
+### РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РєРѕРЅС‚СЂР°РєС‚РѕРІ
 
 ```javascript
 const { ethers } = require("ethers");
 
-// Настройка провайдера
+// РќР°СЃС‚СЂРѕР№РєР° РїСЂРѕРІР°Р№РґРµСЂР°
 const provider = new ethers.providers.JsonRpcProvider("https://rpc.crossfi.org");
 
-// Инициализация основного контракта
+// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РѕСЃРЅРѕРІРЅРѕРіРѕ РєРѕРЅС‚СЂР°РєС‚Р°
 const stakingManagerABI = require("./abis/NativeStakingManager.json");
-const stakingManagerAddress = "0x..."; // Адрес из deployments/dev.env
+const stakingManagerAddress = "0x..."; // РђРґСЂРµСЃ РёР· deployments/dev.env
 const stakingManager = new ethers.Contract(
   stakingManagerAddress, 
   stakingManagerABI, 
   provider
 );
 
-// Для транзакций нужен подписант
+// Р”Р»СЏ С‚СЂР°РЅР·Р°РєС†РёР№ РЅСѓР¶РµРЅ РїРѕРґРїРёСЃР°РЅС‚
 const privateKey = process.env.PRIVATE_KEY;
 const wallet = new ethers.Wallet(privateKey, provider);
 const stakingManagerWithSigner = stakingManager.connect(wallet);
 ```
 
-### Основные функции для бэкенд
+### РћСЃРЅРѕРІРЅС‹Рµ С„СѓРЅРєС†РёРё РґР»СЏ Р±СЌРєРµРЅРґ
 
-1. **Получение данных о стейкинге**
+1. **РџРѕР»СѓС‡РµРЅРёРµ РґР°РЅРЅС‹С… Рѕ СЃС‚РµР№РєРёРЅРіРµ**
 
 ```javascript
-// Получение APR ставки
+// РџРѕР»СѓС‡РµРЅРёРµ APR СЃС‚Р°РІРєРё
 const apr = await stakingManager.getAPR();
 console.log("Current APR:", ethers.utils.formatUnits(apr, 18), "%");
 
-// Получение APY ставки
+// РџРѕР»СѓС‡РµРЅРёРµ APY СЃС‚Р°РІРєРё
 const apy = await stakingManager.getAPY();
 console.log("Current APY:", ethers.utils.formatUnits(apy, 18), "%");
 
-// Проверка статуса запроса на анстейкинг
+// РџСЂРѕРІРµСЂРєР° СЃС‚Р°С‚СѓСЃР° Р·Р°РїСЂРѕСЃР° РЅР° Р°РЅСЃС‚РµР№РєРёРЅРі
 async function checkUnstakeRequest(requestId, userAddress) {
   const request = await stakingManager.getRequest(requestId);
   console.log("Request status:", request);
   
-  // Проверка возможности вывода средств
+  // РџСЂРѕРІРµСЂРєР° РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё РІС‹РІРѕРґР° СЃСЂРµРґСЃС‚РІ
   const canClaim = await stakingManager.canClaimUnstake(requestId);
   console.log("Can be claimed:", canClaim);
 }
 ```
 
-2. **Отслеживание событий**
+2. **РћС‚СЃР»РµР¶РёРІР°РЅРёРµ СЃРѕР±С‹С‚РёР№**
 
 ```javascript
-// Отслеживание новых стейкингов
+// РћС‚СЃР»РµР¶РёРІР°РЅРёРµ РЅРѕРІС‹С… СЃС‚РµР№РєРёРЅРіРѕРІ
 stakingManager.on("StakedAPR", (user, amount, mpxAmount, validator, requestId, event) => {
   console.log(`New stake from ${user}: ${ethers.utils.formatEther(amount)} XFI`);
   console.log(`Request ID: ${requestId}`);
-  // Сохранить информацию в БД
+  // РЎРѕС…СЂР°РЅРёС‚СЊ РёРЅС„РѕСЂРјР°С†РёСЋ РІ Р‘Р”
 });
 
-// Отслеживание запросов на анстейкинг
+// РћС‚СЃР»РµР¶РёРІР°РЅРёРµ Р·Р°РїСЂРѕСЃРѕРІ РЅР° Р°РЅСЃС‚РµР№РєРёРЅРі
 stakingManager.on("UnstakedAPR", (user, amount, mpxAmount, validator, requestId, event) => {
   console.log(`Unstake request from ${user}: ${ethers.utils.formatEther(amount)} XFI`);
   console.log(`Request ID: ${requestId}`);
-  // Обновить статус в БД
+  // РћР±РЅРѕРІРёС‚СЊ СЃС‚Р°С‚СѓСЃ РІ Р‘Р”
 });
 
-// Отслеживание выполненных запросов
+// РћС‚СЃР»РµР¶РёРІР°РЅРёРµ РІС‹РїРѕР»РЅРµРЅРЅС‹С… Р·Р°РїСЂРѕСЃРѕРІ
 stakingManager.on("RequestFulfilled", (requestId, requestType, event) => {
   console.log(`Request ${requestId} has been fulfilled`);
-  // Обновить статус в БД
+  // РћР±РЅРѕРІРёС‚СЊ СЃС‚Р°С‚СѓСЃ РІ Р‘Р”
 });
 ```
 
-## Интеграция для фронтенд-разработчиков
+## РРЅС‚РµРіСЂР°С†РёСЏ РґР»СЏ С„СЂРѕРЅС‚РµРЅРґ-СЂР°Р·СЂР°Р±РѕС‚С‡РёРєРѕРІ
 
-### Настройка Web3 и контрактов
+### РќР°СЃС‚СЂРѕР№РєР° Web3 Рё РєРѕРЅС‚СЂР°РєС‚РѕРІ
 
-Для фронтенд-интеграции рекомендуется использовать библиотеку ethers.js или web3.js вместе с Web3Modal или WalletConnect для подключения кошельков.
+Р”Р»СЏ С„СЂРѕРЅС‚РµРЅРґ-РёРЅС‚РµРіСЂР°С†РёРё СЂРµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ Р±РёР±Р»РёРѕС‚РµРєСѓ ethers.js РёР»Рё web3.js РІРјРµСЃС‚Рµ СЃ Web3Modal РёР»Рё WalletConnect РґР»СЏ РїРѕРґРєР»СЋС‡РµРЅРёСЏ РєРѕС€РµР»СЊРєРѕРІ.
 
 ```javascript
-// Пример с использованием ethers.js и React
+// РџСЂРёРјРµСЂ СЃ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµРј ethers.js Рё React
 import { ethers } from "ethers";
 import { useState, useEffect } from "react";
 import StakingManagerABI from "./abis/NativeStakingManager.json";
 import WXFIABI from "./abis/WXFI.json";
 
-const STAKING_MANAGER_ADDRESS = "0x..."; // Адрес из deployments/dev.env
-const WXFI_ADDRESS = "0x..."; // Адрес из deployments/dev.env
+const STAKING_MANAGER_ADDRESS = "0x..."; // РђРґСЂРµСЃ РёР· deployments/dev.env
+const WXFI_ADDRESS = "0x..."; // РђРґСЂРµСЃ РёР· deployments/dev.env
 
 function StakingApp() {
   const [provider, setProvider] = useState(null);
@@ -148,7 +148,7 @@ function StakingApp() {
   const [stakingManager, setStakingManager] = useState(null);
   const [wxfi, setWxfi] = useState(null);
   
-  // Подключение к MetaMask
+  // РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє MetaMask
   async function connectWallet() {
     if (window.ethereum) {
       try {
@@ -159,7 +159,7 @@ function StakingApp() {
         setProvider(provider);
         setSigner(signer);
         
-        // Инициализация контрактов
+        // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РєРѕРЅС‚СЂР°РєС‚РѕРІ
         const stakingManager = new ethers.Contract(
           STAKING_MANAGER_ADDRESS,
           StakingManagerABI,
@@ -182,45 +182,45 @@ function StakingApp() {
     }
   }
   
-  // Компонент UI
+  // РљРѕРјРїРѕРЅРµРЅС‚ UI
   return (
     <div>
       <button onClick={connectWallet}>Connect Wallet</button>
-      {/* Остальной UI */}
+      {/* РћСЃС‚Р°Р»СЊРЅРѕР№ UI */}
     </div>
   );
 }
 ```
 
-### Основные функции для фронтенда
+### РћСЃРЅРѕРІРЅС‹Рµ С„СѓРЅРєС†РёРё РґР»СЏ С„СЂРѕРЅС‚РµРЅРґР°
 
-1. **Стейкинг XFI с использованием APR модели**
+1. **РЎС‚РµР№РєРёРЅРі XFI СЃ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµРј APR РјРѕРґРµР»Рё**
 
 ```javascript
-// Функция для стейкинга XFI
+// Р¤СѓРЅРєС†РёСЏ РґР»СЏ СЃС‚РµР№РєРёРЅРіР° XFI
 async function stakeXFI(amount, validator = "default") {
   if (!stakingManager || !signer) return;
   
   try {
-    // Конвертация amount из человеко-читаемого формата в wei
+    // РљРѕРЅРІРµСЂС‚Р°С†РёСЏ amount РёР· С‡РµР»РѕРІРµРєРѕ-С‡РёС‚Р°РµРјРѕРіРѕ С„РѕСЂРјР°С‚Р° РІ wei
     const amountInWei = ethers.utils.parseEther(amount);
     
-    // Проверка баланса нативного XFI
+    // РџСЂРѕРІРµСЂРєР° Р±Р°Р»Р°РЅСЃР° РЅР°С‚РёРІРЅРѕРіРѕ XFI
     const balance = await signer.getBalance();
     if (balance.lt(amountInWei)) {
-      alert("Недостаточно XFI на балансе");
+      alert("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ XFI РЅР° Р±Р°Р»Р°РЅСЃРµ");
       return;
     }
     
-    // Выполнение стейкинга
+    // Р’С‹РїРѕР»РЅРµРЅРёРµ СЃС‚РµР№РєРёРЅРіР°
     const tx = await stakingManager.stakeAPR(amountInWei, validator, {
-      value: amountInWei // Отправка нативного XFI вместе с транзакцией
+      value: amountInWei // РћС‚РїСЂР°РІРєР° РЅР°С‚РёРІРЅРѕРіРѕ XFI РІРјРµСЃС‚Рµ СЃ С‚СЂР°РЅР·Р°РєС†РёРµР№
     });
     
-    // Ожидание подтверждения
+    // РћР¶РёРґР°РЅРёРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ
     const receipt = await tx.wait();
     
-    // Поиск событий StakedAPR в логах транзакции
+    // РџРѕРёСЃРє СЃРѕР±С‹С‚РёР№ StakedAPR РІ Р»РѕРіР°С… С‚СЂР°РЅР·Р°РєС†РёРё
     const stakedEvent = receipt.events.find(event => event.event === "StakedAPR");
     if (stakedEvent) {
       const requestId = stakedEvent.args.requestId;
@@ -230,56 +230,56 @@ async function stakeXFI(amount, validator = "default") {
     return receipt;
   } catch (error) {
     console.error("Staking error:", error);
-    alert("Произошла ошибка при стейкинге. Проверьте консоль для деталей.");
+    alert("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё СЃС‚РµР№РєРёРЅРіРµ. РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅСЃРѕР»СЊ РґР»СЏ РґРµС‚Р°Р»РµР№.");
   }
 }
 ```
 
-2. **Анстейкинг XFI из APR модели**
+2. **РђРЅСЃС‚РµР№РєРёРЅРі XFI РёР· APR РјРѕРґРµР»Рё**
 
 ```javascript
-// Функция для запроса анстейкинга XFI
+// Р¤СѓРЅРєС†РёСЏ РґР»СЏ Р·Р°РїСЂРѕСЃР° Р°РЅСЃС‚РµР№РєРёРЅРіР° XFI
 async function unstakeXFI(amount, validator = "default") {
   if (!stakingManager || !signer) return;
   
   try {
-    // Конвертация amount из человеко-читаемого формата в wei
+    // РљРѕРЅРІРµСЂС‚Р°С†РёСЏ amount РёР· С‡РµР»РѕРІРµРєРѕ-С‡РёС‚Р°РµРјРѕРіРѕ С„РѕСЂРјР°С‚Р° РІ wei
     const amountInWei = ethers.utils.parseEther(amount);
     
-    // Выполнение запроса на анстейкинг
+    // Р’С‹РїРѕР»РЅРµРЅРёРµ Р·Р°РїСЂРѕСЃР° РЅР° Р°РЅСЃС‚РµР№РєРёРЅРі
     const tx = await stakingManager.unstakeAPR(amountInWei, validator);
     
-    // Ожидание подтверждения
+    // РћР¶РёРґР°РЅРёРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ
     const receipt = await tx.wait();
     
-    // Поиск события UnstakedAPR в логах транзакции
+    // РџРѕРёСЃРє СЃРѕР±С‹С‚РёСЏ UnstakedAPR РІ Р»РѕРіР°С… С‚СЂР°РЅР·Р°РєС†РёРё
     const unstakedEvent = receipt.events.find(event => event.event === "UnstakedAPR");
     if (unstakedEvent) {
       const requestId = unstakedEvent.args.requestId;
       console.log("Unstaking request successful! Request ID:", requestId.toString());
-      // Сохранить requestId для последующего использования
+      // РЎРѕС…СЂР°РЅРёС‚СЊ requestId РґР»СЏ РїРѕСЃР»РµРґСѓСЋС‰РµРіРѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ
     }
     
     return receipt;
   } catch (error) {
     console.error("Unstaking error:", error);
-    alert("Произошла ошибка при анстейкинге. Проверьте консоль для деталей.");
+    alert("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё Р°РЅСЃС‚РµР№РєРёРЅРіРµ. РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅСЃРѕР»СЊ РґР»СЏ РґРµС‚Р°Р»РµР№.");
   }
 }
 
-// Функция для получения XFI после периода разблокировки
+// Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ XFI РїРѕСЃР»Рµ РїРµСЂРёРѕРґР° СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё
 async function claimUnstake(requestId) {
   if (!stakingManager || !signer) return;
   
   try {
-    // Проверка, можно ли уже вывести средства
+    // РџСЂРѕРІРµСЂРєР°, РјРѕР¶РЅРѕ Р»Рё СѓР¶Рµ РІС‹РІРµСЃС‚Рё СЃСЂРµРґСЃС‚РІР°
     const canClaim = await stakingManager.canClaimUnstake(requestId);
     if (!canClaim) {
-      alert("Период разблокировки еще не завершен");
+      alert("РџРµСЂРёРѕРґ СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё РµС‰Рµ РЅРµ Р·Р°РІРµСЂС€РµРЅ");
       return;
     }
     
-    // Вывод средств
+    // Р’С‹РІРѕРґ СЃСЂРµРґСЃС‚РІ
     const tx = await stakingManager.claimUnstakeAPR(requestId);
     const receipt = await tx.wait();
     
@@ -287,31 +287,31 @@ async function claimUnstake(requestId) {
     return receipt;
   } catch (error) {
     console.error("Claim error:", error);
-    alert("Произошла ошибка при выводе средств. Проверьте консоль для деталей.");
+    alert("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё РІС‹РІРѕРґРµ СЃСЂРµРґСЃС‚РІ. РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅСЃРѕР»СЊ РґР»СЏ РґРµС‚Р°Р»РµР№.");
   }
 }
 ```
 
-3. **Стейкинг и вывод из APY модели (Vault)**
+3. **РЎС‚РµР№РєРёРЅРі Рё РІС‹РІРѕРґ РёР· APY РјРѕРґРµР»Рё (Vault)**
 
 ```javascript
-// Стейкинг XFI в vault (APY модель)
+// РЎС‚РµР№РєРёРЅРі XFI РІ vault (APY РјРѕРґРµР»СЊ)
 async function stakeVault(amount) {
   if (!stakingManager || !signer) return;
   
   try {
-    // Конвертация amount из человеко-читаемого формата в wei
+    // РљРѕРЅРІРµСЂС‚Р°С†РёСЏ amount РёР· С‡РµР»РѕРІРµРєРѕ-С‡РёС‚Р°РµРјРѕРіРѕ С„РѕСЂРјР°С‚Р° РІ wei
     const amountInWei = ethers.utils.parseEther(amount);
     
-    // Выполнение стейкинга в vault
+    // Р’С‹РїРѕР»РЅРµРЅРёРµ СЃС‚РµР№РєРёРЅРіР° РІ vault
     const tx = await stakingManager.stakeAPY(amountInWei, {
-      value: amountInWei // Отправка нативного XFI вместе с транзакцией
+      value: amountInWei // РћС‚РїСЂР°РІРєР° РЅР°С‚РёРІРЅРѕРіРѕ XFI РІРјРµСЃС‚Рµ СЃ С‚СЂР°РЅР·Р°РєС†РёРµР№
     });
     
-    // Ожидание подтверждения
+    // РћР¶РёРґР°РЅРёРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ
     const receipt = await tx.wait();
     
-    // Поиск события в логах
+    // РџРѕРёСЃРє СЃРѕР±С‹С‚РёСЏ РІ Р»РѕРіР°С…
     const stakedEvent = receipt.events.find(event => event.event === "StakedAPY");
     if (stakedEvent) {
       const shares = stakedEvent.args.shares;
@@ -321,43 +321,43 @@ async function stakeVault(amount) {
     return receipt;
   } catch (error) {
     console.error("Vault staking error:", error);
-    alert("Произошла ошибка при стейкинге в vault. Проверьте консоль для деталей.");
+    alert("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё СЃС‚РµР№РєРёРЅРіРµ РІ vault. РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅСЃРѕР»СЊ РґР»СЏ РґРµС‚Р°Р»РµР№.");
   }
 }
 
-// Вывод из vault (APY модель)
+// Р’С‹РІРѕРґ РёР· vault (APY РјРѕРґРµР»СЊ)
 async function withdrawVault(shares) {
   if (!stakingManager || !signer) return;
   
   try {
-    // Конвертация shares из человеко-читаемого формата в wei
+    // РљРѕРЅРІРµСЂС‚Р°С†РёСЏ shares РёР· С‡РµР»РѕРІРµРєРѕ-С‡РёС‚Р°РµРјРѕРіРѕ С„РѕСЂРјР°С‚Р° РІ wei
     const sharesInWei = ethers.utils.parseEther(shares);
     
-    // Запрос на вывод средств
+    // Р—Р°РїСЂРѕСЃ РЅР° РІС‹РІРѕРґ СЃСЂРµРґСЃС‚РІ
     const tx = await stakingManager.withdrawAPY(sharesInWei);
     const receipt = await tx.wait();
     
-    // Поиск события WithdrawalRequestedAPY в логах
+    // РџРѕРёСЃРє СЃРѕР±С‹С‚РёСЏ WithdrawalRequestedAPY РІ Р»РѕРіР°С…
     const withdrawalEvent = receipt.events.find(event => event.event === "WithdrawalRequestedAPY");
     if (withdrawalEvent) {
       const requestId = withdrawalEvent.args.requestId;
       console.log("Withdrawal request successful! Request ID:", requestId.toString());
-      // Сохранить requestId для последующего использования
+      // РЎРѕС…СЂР°РЅРёС‚СЊ requestId РґР»СЏ РїРѕСЃР»РµРґСѓСЋС‰РµРіРѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ
     }
     
     return receipt;
   } catch (error) {
     console.error("Vault withdrawal error:", error);
-    alert("Произошла ошибка при выводе из vault. Проверьте консоль для деталей.");
+    alert("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё РІС‹РІРѕРґРµ РёР· vault. РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅСЃРѕР»СЊ РґР»СЏ РґРµС‚Р°Р»РµР№.");
   }
 }
 
-// Получение выведенных средств после периода разблокировки
+// РџРѕР»СѓС‡РµРЅРёРµ РІС‹РІРµРґРµРЅРЅС‹С… СЃСЂРµРґСЃС‚РІ РїРѕСЃР»Рµ РїРµСЂРёРѕРґР° СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё
 async function claimWithdrawal(requestId) {
   if (!stakingManager || !signer) return;
   
   try {
-    // Вывод средств
+    // Р’С‹РІРѕРґ СЃСЂРµРґСЃС‚РІ
     const tx = await stakingManager.claimWithdrawalAPY(requestId);
     const receipt = await tx.wait();
     
@@ -365,71 +365,71 @@ async function claimWithdrawal(requestId) {
     return receipt;
   } catch (error) {
     console.error("Withdrawal claim error:", error);
-    alert("Произошла ошибка при получении средств. Проверьте консоль для деталей.");
+    alert("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё РїРѕР»СѓС‡РµРЅРёРё СЃСЂРµРґСЃС‚РІ. РџСЂРѕРІРµСЂСЊС‚Рµ РєРѕРЅСЃРѕР»СЊ РґР»СЏ РґРµС‚Р°Р»РµР№.");
   }
 }
 ```
 
-## Рабочие процессы стейкинга
+## Р Р°Р±РѕС‡РёРµ РїСЂРѕС†РµСЃСЃС‹ СЃС‚РµР№РєРёРЅРіР°
 
-### APR модель (прямой стейкинг)
+### APR РјРѕРґРµР»СЊ (РїСЂСЏРјРѕР№ СЃС‚РµР№РєРёРЅРі)
 
-Процесс стейкинга по модели APR включает следующие этапы:
+РџСЂРѕС†РµСЃСЃ СЃС‚РµР№РєРёРЅРіР° РїРѕ РјРѕРґРµР»Рё APR РІРєР»СЋС‡Р°РµС‚ СЃР»РµРґСѓСЋС‰РёРµ СЌС‚Р°РїС‹:
 
-1. **Стейкинг**
-   - Пользователь вызывает `stakeAPR(amount, validator)`
-   - XFI переводятся на контракт
-   - Запись о стейкинге сохраняется в контракте
-   - Генерируется событие `StakedAPR`
+1. **РЎС‚РµР№РєРёРЅРі**
+   - РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹Р·С‹РІР°РµС‚ `stakeAPR(amount, validator)`
+   - XFI РїРµСЂРµРІРѕРґСЏС‚СЃСЏ РЅР° РєРѕРЅС‚СЂР°РєС‚
+   - Р—Р°РїРёСЃСЊ Рѕ СЃС‚РµР№РєРёРЅРіРµ СЃРѕС…СЂР°РЅСЏРµС‚СЃСЏ РІ РєРѕРЅС‚СЂР°РєС‚Рµ
+   - Р“РµРЅРµСЂРёСЂСѓРµС‚СЃСЏ СЃРѕР±С‹С‚РёРµ `StakedAPR`
 
-2. **Запрос анстейкинга**
-   - Пользователь вызывает `unstakeAPR(amount, validator)`
-   - Создается запрос на анстейкинг с уникальным `requestId`
-   - Генерируется событие `UnstakedAPR`
-   - Начинается период разблокировки (обычно 21 день)
+2. **Р—Р°РїСЂРѕСЃ Р°РЅСЃС‚РµР№РєРёРЅРіР°**
+   - РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹Р·С‹РІР°РµС‚ `unstakeAPR(amount, validator)`
+   - РЎРѕР·РґР°РµС‚СЃСЏ Р·Р°РїСЂРѕСЃ РЅР° Р°РЅСЃС‚РµР№РєРёРЅРі СЃ СѓРЅРёРєР°Р»СЊРЅС‹Рј `requestId`
+   - Р“РµРЅРµСЂРёСЂСѓРµС‚СЃСЏ СЃРѕР±С‹С‚РёРµ `UnstakedAPR`
+   - РќР°С‡РёРЅР°РµС‚СЃСЏ РїРµСЂРёРѕРґ СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё (РѕР±С‹С‡РЅРѕ 21 РґРµРЅСЊ)
 
-3. **Получение средств**
-   - После завершения периода разблокировки пользователь вызывает `claimUnstakeAPR(requestId)`
-   - XFI переводятся обратно пользователю
-   - Генерируется событие `UnstakeClaimedAPR`
+3. **РџРѕР»СѓС‡РµРЅРёРµ СЃСЂРµРґСЃС‚РІ**
+   - РџРѕСЃР»Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ РїРµСЂРёРѕРґР° СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹Р·С‹РІР°РµС‚ `claimUnstakeAPR(requestId)`
+   - XFI РїРµСЂРµРІРѕРґСЏС‚СЃСЏ РѕР±СЂР°С‚РЅРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
+   - Р“РµРЅРµСЂРёСЂСѓРµС‚СЃСЏ СЃРѕР±С‹С‚РёРµ `UnstakeClaimedAPR`
 
-4. **Получение наград**
-   - Пользователь вызывает `claimRewardsAPR()`
-   - Рассчитываются и переводятся награды
-   - Генерируется событие `RewardsClaimed`
+4. **РџРѕР»СѓС‡РµРЅРёРµ РЅР°РіСЂР°Рґ**
+   - РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹Р·С‹РІР°РµС‚ `claimRewardsAPR()`
+   - Р Р°СЃСЃС‡РёС‚С‹РІР°СЋС‚СЃСЏ Рё РїРµСЂРµРІРѕРґСЏС‚СЃСЏ РЅР°РіСЂР°РґС‹
+   - Р“РµРЅРµСЂРёСЂСѓРµС‚СЃСЏ СЃРѕР±С‹С‚РёРµ `RewardsClaimed`
 
-### APY модель (Vault с компаундингом)
+### APY РјРѕРґРµР»СЊ (Vault СЃ РєРѕРјРїР°СѓРЅРґРёРЅРіРѕРј)
 
-Процесс стейкинга по модели APY включает следующие этапы:
+РџСЂРѕС†РµСЃСЃ СЃС‚РµР№РєРёРЅРіР° РїРѕ РјРѕРґРµР»Рё APY РІРєР»СЋС‡Р°РµС‚ СЃР»РµРґСѓСЋС‰РёРµ СЌС‚Р°РїС‹:
 
-1. **Стейкинг**
-   - Пользователь вызывает `stakeAPY(amount)`
-   - XFI переводятся на контракт
-   - Пользователь получает shares (доли) в vault
-   - Генерируется событие `StakedAPY`
+1. **РЎС‚РµР№РєРёРЅРі**
+   - РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹Р·С‹РІР°РµС‚ `stakeAPY(amount)`
+   - XFI РїРµСЂРµРІРѕРґСЏС‚СЃСЏ РЅР° РєРѕРЅС‚СЂР°РєС‚
+   - РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РїРѕР»СѓС‡Р°РµС‚ shares (РґРѕР»Рё) РІ vault
+   - Р“РµРЅРµСЂРёСЂСѓРµС‚СЃСЏ СЃРѕР±С‹С‚РёРµ `StakedAPY`
 
-2. **Вывод средств**
-   - Пользователь вызывает `withdrawAPY(shares)`
-   - Если в vault достаточно ликвидности, вывод происходит мгновенно
-   - В противном случае создается запрос на вывод с `requestId`
-   - Генерируется событие `WithdrawalRequestedAPY`
-   - Начинается период разблокировки
+2. **Р’С‹РІРѕРґ СЃСЂРµРґСЃС‚РІ**
+   - РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹Р·С‹РІР°РµС‚ `withdrawAPY(shares)`
+   - Р•СЃР»Рё РІ vault РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ Р»РёРєРІРёРґРЅРѕСЃС‚Рё, РІС‹РІРѕРґ РїСЂРѕРёСЃС…РѕРґРёС‚ РјРіРЅРѕРІРµРЅРЅРѕ
+   - Р’ РїСЂРѕС‚РёРІРЅРѕРј СЃР»СѓС‡Р°Рµ СЃРѕР·РґР°РµС‚СЃСЏ Р·Р°РїСЂРѕСЃ РЅР° РІС‹РІРѕРґ СЃ `requestId`
+   - Р“РµРЅРµСЂРёСЂСѓРµС‚СЃСЏ СЃРѕР±С‹С‚РёРµ `WithdrawalRequestedAPY`
+   - РќР°С‡РёРЅР°РµС‚СЃСЏ РїРµСЂРёРѕРґ СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё
 
-3. **Получение выведенных средств**
-   - После завершения периода разблокировки пользователь вызывает `claimWithdrawalAPY(requestId)`
-   - XFI переводятся обратно пользователю
-   - Генерируется событие `WithdrawalClaimedAPY`
+3. **РџРѕР»СѓС‡РµРЅРёРµ РІС‹РІРµРґРµРЅРЅС‹С… СЃСЂРµРґСЃС‚РІ**
+   - РџРѕСЃР»Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ РїРµСЂРёРѕРґР° СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹Р·С‹РІР°РµС‚ `claimWithdrawalAPY(requestId)`
+   - XFI РїРµСЂРµРІРѕРґСЏС‚СЃСЏ РѕР±СЂР°С‚РЅРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
+   - Р“РµРЅРµСЂРёСЂСѓРµС‚СЃСЏ СЃРѕР±С‹С‚РёРµ `WithdrawalClaimedAPY`
 
-## Управление ID запросов
+## РЈРїСЂР°РІР»РµРЅРёРµ ID Р·Р°РїСЂРѕСЃРѕРІ
 
-ID запросов (`requestId`) используются для отслеживания операций анстейкинга и вывода.
+ID Р·Р°РїСЂРѕСЃРѕРІ (`requestId`) РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ РґР»СЏ РѕС‚СЃР»РµР¶РёРІР°РЅРёСЏ РѕРїРµСЂР°С†РёР№ Р°РЅСЃС‚РµР№РєРёРЅРіР° Рё РІС‹РІРѕРґР°.
 
-### Прогнозирование ID запросов
+### РџСЂРѕРіРЅРѕР·РёСЂРѕРІР°РЅРёРµ ID Р·Р°РїСЂРѕСЃРѕРІ
 
-Для прогнозирования ID запросов можно использовать функцию:
+Р”Р»СЏ РїСЂРѕРіРЅРѕР·РёСЂРѕРІР°РЅРёСЏ ID Р·Р°РїСЂРѕСЃРѕРІ РјРѕР¶РЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ С„СѓРЅРєС†РёСЋ:
 
 ```javascript
-// Прогнозирование ID запроса
+// РџСЂРѕРіРЅРѕР·РёСЂРѕРІР°РЅРёРµ ID Р·Р°РїСЂРѕСЃР°
 async function predictRequestId(user, amount, validator, requestType) {
   const predictedId = await stakingManager.predictRequestId(
     user,
@@ -441,131 +441,131 @@ async function predictRequestId(user, amount, validator, requestType) {
 }
 ```
 
-### Проверка статуса запроса
+### РџСЂРѕРІРµСЂРєР° СЃС‚Р°С‚СѓСЃР° Р·Р°РїСЂРѕСЃР°
 
 ```javascript
-// Проверка статуса запроса
+// РџСЂРѕРІРµСЂРєР° СЃС‚Р°С‚СѓСЃР° Р·Р°РїСЂРѕСЃР°
 async function checkRequestStatus(requestId) {
   const request = await stakingManager.getRequest(requestId);
   
-  // Структура ответа
+  // РЎС‚СЂСѓРєС‚СѓСЂР° РѕС‚РІРµС‚Р°
   const {
-    user,            // Адрес пользователя
-    amount,          // Количество токенов
-    validator,       // ID валидатора
-    timestamp,       // Время создания запроса
-    unlockTime,      // Время разблокировки
-    requestType,     // Тип запроса
-    completed        // Выполнен ли запрос
+    user,            // РђРґСЂРµСЃ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ
+    amount,          // РљРѕР»РёС‡РµСЃС‚РІРѕ С‚РѕРєРµРЅРѕРІ
+    validator,       // ID РІР°Р»РёРґР°С‚РѕСЂР°
+    timestamp,       // Р’СЂРµРјСЏ СЃРѕР·РґР°РЅРёСЏ Р·Р°РїСЂРѕСЃР°
+    unlockTime,      // Р’СЂРµРјСЏ СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё
+    requestType,     // РўРёРї Р·Р°РїСЂРѕСЃР°
+    completed        // Р’С‹РїРѕР»РЅРµРЅ Р»Рё Р·Р°РїСЂРѕСЃ
   } = request;
   
   return request;
 }
 ```
 
-## События и их обработка
+## РЎРѕР±С‹С‚РёСЏ Рё РёС… РѕР±СЂР°Р±РѕС‚РєР°
 
-Система генерирует различные события, которые следует отслеживать:
+РЎРёСЃС‚РµРјР° РіРµРЅРµСЂРёСЂСѓРµС‚ СЂР°Р·Р»РёС‡РЅС‹Рµ СЃРѕР±С‹С‚РёСЏ, РєРѕС‚РѕСЂС‹Рµ СЃР»РµРґСѓРµС‚ РѕС‚СЃР»РµР¶РёРІР°С‚СЊ:
 
-### События стейкинга APR
+### РЎРѕР±С‹С‚РёСЏ СЃС‚РµР№РєРёРЅРіР° APR
 
 - `StakedAPR(address user, uint256 amount, uint256 mpxAmount, string validator, uint256 requestId)`
 - `UnstakedAPR(address user, uint256 amount, uint256 mpxAmount, string validator, uint256 requestId)`
 - `UnstakeClaimedAPR(address user, uint256 amount, uint256 requestId)`
 - `RewardsClaimed(address user, uint256 amount)`
 
-### События стейкинга APY
+### РЎРѕР±С‹С‚РёСЏ СЃС‚РµР№РєРёРЅРіР° APY
 
 - `StakedAPY(address user, uint256 assets, uint256 shares)`
 - `WithdrawalRequestedAPY(address user, uint256 assets, uint256 shares, uint256 requestId)`
 - `WithdrawalClaimedAPY(address user, uint256 assets, uint256 requestId)`
 
-### Общие события
+### РћР±С‰РёРµ СЃРѕР±С‹С‚РёСЏ
 
 - `RequestCreated(uint256 requestId, address user, uint256 amount, string validator, uint8 requestType)`
 - `RequestFulfilled(uint256 requestId, uint8 requestType)`
 
-### Подписка на события
+### РџРѕРґРїРёСЃРєР° РЅР° СЃРѕР±С‹С‚РёСЏ
 
 ```javascript
-// Подписка на все события стейкинга
+// РџРѕРґРїРёСЃРєР° РЅР° РІСЃРµ СЃРѕР±С‹С‚РёСЏ СЃС‚РµР№РєРёРЅРіР°
 function subscribeToStakingEvents() {
-  // Событие создания стейка APR
+  // РЎРѕР±С‹С‚РёРµ СЃРѕР·РґР°РЅРёСЏ СЃС‚РµР№РєР° APR
   stakingManager.on("StakedAPR", handleStakedAPR);
   
-  // Событие запроса анстейкинга APR
+  // РЎРѕР±С‹С‚РёРµ Р·Р°РїСЂРѕСЃР° Р°РЅСЃС‚РµР№РєРёРЅРіР° APR
   stakingManager.on("UnstakedAPR", handleUnstakedAPR);
   
-  // Событие получения средств после анстейкинга APR
+  // РЎРѕР±С‹С‚РёРµ РїРѕР»СѓС‡РµРЅРёСЏ СЃСЂРµРґСЃС‚РІ РїРѕСЃР»Рµ Р°РЅСЃС‚РµР№РєРёРЅРіР° APR
   stakingManager.on("UnstakeClaimedAPR", handleUnstakeClaimedAPR);
   
-  // Событие стейкинга в vault APY
+  // РЎРѕР±С‹С‚РёРµ СЃС‚РµР№РєРёРЅРіР° РІ vault APY
   stakingManager.on("StakedAPY", handleStakedAPY);
   
-  // Событие запроса вывода из vault APY
+  // РЎРѕР±С‹С‚РёРµ Р·Р°РїСЂРѕСЃР° РІС‹РІРѕРґР° РёР· vault APY
   stakingManager.on("WithdrawalRequestedAPY", handleWithdrawalRequestedAPY);
   
-  // Событие получения средств после вывода из vault APY
+  // РЎРѕР±С‹С‚РёРµ РїРѕР»СѓС‡РµРЅРёСЏ СЃСЂРµРґСЃС‚РІ РїРѕСЃР»Рµ РІС‹РІРѕРґР° РёР· vault APY
   stakingManager.on("WithdrawalClaimedAPY", handleWithdrawalClaimedAPY);
   
-  // Событие начисления наград
+  // РЎРѕР±С‹С‚РёРµ РЅР°С‡РёСЃР»РµРЅРёСЏ РЅР°РіСЂР°Рґ
   stakingManager.on("RewardsClaimed", handleRewardsClaimed);
 }
 
-// Обработчики событий
+// РћР±СЂР°Р±РѕС‚С‡РёРєРё СЃРѕР±С‹С‚РёР№
 function handleStakedAPR(user, amount, mpxAmount, validator, requestId, event) {
   console.log(`User ${user} staked ${ethers.utils.formatEther(amount)} XFI`);
-  // Обновить UI или сохранить информацию
+  // РћР±РЅРѕРІРёС‚СЊ UI РёР»Рё СЃРѕС…СЂР°РЅРёС‚СЊ РёРЅС„РѕСЂРјР°С†РёСЋ
 }
 
-// Аналогично для других обработчиков...
+// РђРЅР°Р»РѕРіРёС‡РЅРѕ РґР»СЏ РґСЂСѓРіРёС… РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ...
 ```
 
-## Примеры кода
+## РџСЂРёРјРµСЂС‹ РєРѕРґР°
 
-### Полный пример интеграции бэкенда
+### РџРѕР»РЅС‹Р№ РїСЂРёРјРµСЂ РёРЅС‚РµРіСЂР°С†РёРё Р±СЌРєРµРЅРґР°
 
 ```javascript
 const { ethers } = require("ethers");
 const fs = require("fs");
 
-// Загрузка ABI
+// Р—Р°РіСЂСѓР·РєР° ABI
 const stakingManagerABI = JSON.parse(fs.readFileSync("./abis/NativeStakingManager.json"));
 const wxfiABI = JSON.parse(fs.readFileSync("./abis/WXFI.json"));
 const oracleABI = JSON.parse(fs.readFileSync("./abis/UnifiedOracle.json"));
 
-// Загрузка адресов
+// Р—Р°РіСЂСѓР·РєР° Р°РґСЂРµСЃРѕРІ
 const STAKING_MANAGER_ADDRESS = process.env.STAKING_MANAGER_PROXY_ADDRESS;
 const WXFI_ADDRESS = process.env.WXFI_ADDRESS;
 const ORACLE_ADDRESS = process.env.ORACLE_PROXY_ADDRESS;
 
-// Инициализация провайдера и кошелька
+// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РїСЂРѕРІР°Р№РґРµСЂР° Рё РєРѕС€РµР»СЊРєР°
 const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
-// Инициализация контрактов
+// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РєРѕРЅС‚СЂР°РєС‚РѕРІ
 const stakingManager = new ethers.Contract(STAKING_MANAGER_ADDRESS, stakingManagerABI, wallet);
 const wxfi = new ethers.Contract(WXFI_ADDRESS, wxfiABI, wallet);
 const oracle = new ethers.Contract(ORACLE_ADDRESS, oracleABI, wallet);
 
-// Пример использования
+// РџСЂРёРјРµСЂ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ
 async function main() {
   try {
-    // Получение текущих ставок
+    // РџРѕР»СѓС‡РµРЅРёРµ С‚РµРєСѓС‰РёС… СЃС‚Р°РІРѕРє
     const apr = await oracle.getCurrentAPR();
     const apy = await oracle.getCurrentAPY();
     console.log(`Current APR: ${ethers.utils.formatUnits(apr, 18)}%`);
     console.log(`Current APY: ${ethers.utils.formatUnits(apy, 18)}%`);
     
-    // Получение периода разблокировки
+    // РџРѕР»СѓС‡РµРЅРёРµ РїРµСЂРёРѕРґР° СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё
     const unbondingPeriod = await oracle.getUnbondingPeriod();
     console.log(`Unbonding period: ${unbondingPeriod / 86400} days`);
     
-    // Проверка, заморожен ли анстейкинг
+    // РџСЂРѕРІРµСЂРєР°, Р·Р°РјРѕСЂРѕР¶РµРЅ Р»Рё Р°РЅСЃС‚РµР№РєРёРЅРі
     const isFrozen = await stakingManager.isUnstakingFrozen();
     console.log(`Unstaking frozen: ${isFrozen}`);
     
-    // Отслеживание событий
+    // РћС‚СЃР»РµР¶РёРІР°РЅРёРµ СЃРѕР±С‹С‚РёР№
     stakingManager.on("StakedAPR", (user, amount, mpxAmount, validator, requestId, event) => {
       console.log(`New stake: ${user} staked ${ethers.utils.formatEther(amount)} XFI`);
       console.log(`Request ID: ${requestId}`);
@@ -580,7 +580,7 @@ async function main() {
 main();
 ```
 
-### Полный пример компонента фронтенда на React
+### РџРѕР»РЅС‹Р№ РїСЂРёРјРµСЂ РєРѕРјРїРѕРЅРµРЅС‚Р° С„СЂРѕРЅС‚РµРЅРґР° РЅР° React
 
 ```jsx
 import React, { useState, useEffect } from 'react';
@@ -588,12 +588,12 @@ import { ethers } from 'ethers';
 import StakingManagerABI from './abis/NativeStakingManager.json';
 import WXFIABI from './abis/WXFI.json';
 
-// Адреса контрактов
+// РђРґСЂРµСЃР° РєРѕРЅС‚СЂР°РєС‚РѕРІ
 const STAKING_MANAGER_ADDRESS = process.env.REACT_APP_STAKING_MANAGER_ADDRESS;
 const WXFI_ADDRESS = process.env.REACT_APP_WXFI_ADDRESS;
 
 function StakingApp() {
-  // Состояние
+  // РЎРѕСЃС‚РѕСЏРЅРёРµ
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState('');
@@ -607,9 +607,9 @@ function StakingApp() {
   const [validators, setValidators] = useState(['default']);
   const [selectedValidator, setSelectedValidator] = useState('default');
   const [isLoading, setIsLoading] = useState(false);
-  const [stakingTab, setStakingTab] = useState('apr'); // 'apr' или 'apy'
+  const [stakingTab, setStakingTab] = useState('apr'); // 'apr' РёР»Рё 'apy'
   
-  // Подключение к MetaMask
+  // РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє MetaMask
   async function connectWallet() {
     if (window.ethereum) {
       try {
@@ -622,7 +622,7 @@ function StakingApp() {
         setSigner(signer);
         setAccount(account);
         
-        // Инициализация контрактов
+        // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РєРѕРЅС‚СЂР°РєС‚РѕРІ
         const stakingManager = new ethers.Contract(
           STAKING_MANAGER_ADDRESS,
           StakingManagerABI,
@@ -638,10 +638,10 @@ function StakingApp() {
         setStakingManager(stakingManager);
         setWxfi(wxfi);
         
-        // Загрузка данных
+        // Р—Р°РіСЂСѓР·РєР° РґР°РЅРЅС‹С…
         loadStakingData(stakingManager);
         
-        // Слушаем изменения аккаунта
+        // РЎР»СѓС€Р°РµРј РёР·РјРµРЅРµРЅРёСЏ Р°РєРєР°СѓРЅС‚Р°
         window.ethereum.on('accountsChanged', (accounts) => {
           setAccount(accounts[0]);
         });
@@ -653,10 +653,10 @@ function StakingApp() {
     }
   }
   
-  // Загрузка данных о стейкинге
+  // Р—Р°РіСЂСѓР·РєР° РґР°РЅРЅС‹С… Рѕ СЃС‚РµР№РєРёРЅРіРµ
   async function loadStakingData(manager) {
     try {
-      // Получение APR и APY
+      // РџРѕР»СѓС‡РµРЅРёРµ APR Рё APY
       const apr = await manager.getAPR();
       const apy = await manager.getAPY();
       
@@ -667,7 +667,7 @@ function StakingApp() {
     }
   }
   
-  // Стейкинг XFI (APR модель)
+  // РЎС‚РµР№РєРёРЅРі XFI (APR РјРѕРґРµР»СЊ)
   async function handleStakeAPR() {
     if (!stakingManager || !stakeAmount) return;
     
@@ -675,15 +675,15 @@ function StakingApp() {
     try {
       const amountInWei = ethers.utils.parseEther(stakeAmount);
       
-      // Выполнение стейкинга
+      // Р’С‹РїРѕР»РЅРµРЅРёРµ СЃС‚РµР№РєРёРЅРіР°
       const tx = await stakingManager.stakeAPR(amountInWei, selectedValidator, {
         value: amountInWei
       });
       
-      // Ожидание подтверждения
+      // РћР¶РёРґР°РЅРёРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ
       await tx.wait();
       
-      // Сброс формы
+      // РЎР±СЂРѕСЃ С„РѕСЂРјС‹
       setStakeAmount('');
       alert("Staking successful!");
     } catch (error) {
@@ -694,7 +694,7 @@ function StakingApp() {
     }
   }
   
-  // Запрос анстейкинга XFI (APR модель)
+  // Р—Р°РїСЂРѕСЃ Р°РЅСЃС‚РµР№РєРёРЅРіР° XFI (APR РјРѕРґРµР»СЊ)
   async function handleUnstakeAPR() {
     if (!stakingManager || !unstakeAmount) return;
     
@@ -702,11 +702,11 @@ function StakingApp() {
     try {
       const amountInWei = ethers.utils.parseEther(unstakeAmount);
       
-      // Запрос на анстейкинг
+      // Р—Р°РїСЂРѕСЃ РЅР° Р°РЅСЃС‚РµР№РєРёРЅРі
       const tx = await stakingManager.unstakeAPR(amountInWei, selectedValidator);
       const receipt = await tx.wait();
       
-      // Получение requestId из событий
+      // РџРѕР»СѓС‡РµРЅРёРµ requestId РёР· СЃРѕР±С‹С‚РёР№
       const event = receipt.events.find(e => e.event === "UnstakedAPR");
       if (event) {
         const id = event.args.requestId.toString();
@@ -723,20 +723,20 @@ function StakingApp() {
     }
   }
   
-  // Получение средств после периода разблокировки
+  // РџРѕР»СѓС‡РµРЅРёРµ СЃСЂРµРґСЃС‚РІ РїРѕСЃР»Рµ РїРµСЂРёРѕРґР° СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё
   async function handleClaimUnstake() {
     if (!stakingManager || !requestId) return;
     
     setIsLoading(true);
     try {
-      // Проверка, можно ли уже вывести средства
+      // РџСЂРѕРІРµСЂРєР°, РјРѕР¶РЅРѕ Р»Рё СѓР¶Рµ РІС‹РІРµСЃС‚Рё СЃСЂРµРґСЃС‚РІР°
       const canClaim = await stakingManager.canClaimUnstake(requestId);
       if (!canClaim) {
         alert("Unbonding period not finished yet");
         return;
       }
       
-      // Вывод средств
+      // Р’С‹РІРѕРґ СЃСЂРµРґСЃС‚РІ
       const tx = await stakingManager.claimUnstakeAPR(requestId);
       await tx.wait();
       
@@ -750,7 +750,7 @@ function StakingApp() {
     }
   }
   
-  // UI компонента
+  // UI РєРѕРјРїРѕРЅРµРЅС‚Р°
   return (
     <div className="staking-container">
       <h1>CrossFi Native Staking</h1>
@@ -847,7 +847,7 @@ function StakingApp() {
           ) : (
             <div className="apy-staking">
               <h2>APY Vault Staking</h2>
-              {/* Аналогичные компоненты для APY стейкинга */}
+              {/* РђРЅР°Р»РѕРіРёС‡РЅС‹Рµ РєРѕРјРїРѕРЅРµРЅС‚С‹ РґР»СЏ APY СЃС‚РµР№РєРёРЅРіР° */}
             </div>
           )}
         </div>
@@ -859,13 +859,13 @@ function StakingApp() {
 export default StakingApp;
 ```
 
-## Заключение
+## Р—Р°РєР»СЋС‡РµРЅРёРµ
 
-Интеграция с Native Staking системой CrossFi требует четкого понимания рабочих процессов стейкинга и обработки событий. Основные моменты для успешной интеграции:
+РРЅС‚РµРіСЂР°С†РёСЏ СЃ Native Staking СЃРёСЃС‚РµРјРѕР№ CrossFi С‚СЂРµР±СѓРµС‚ С‡РµС‚РєРѕРіРѕ РїРѕРЅРёРјР°РЅРёСЏ СЂР°Р±РѕС‡РёС… РїСЂРѕС†РµСЃСЃРѕРІ СЃС‚РµР№РєРёРЅРіР° Рё РѕР±СЂР°Р±РѕС‚РєРё СЃРѕР±С‹С‚РёР№. РћСЃРЅРѕРІРЅС‹Рµ РјРѕРјРµРЅС‚С‹ РґР»СЏ СѓСЃРїРµС€РЅРѕР№ РёРЅС‚РµРіСЂР°С†РёРё:
 
-1. **Используйте NativeStakingManager**: Всегда взаимодействуйте с системой через этот контракт
-2. **Отслеживайте события**: События содержат важную информацию о ID запросов
-3. **Управляйте периодами разблокировки**: Не забывайте проверять возможность вывода средств
-4. **Обрабатывайте ошибки**: Каждая операция может потенциально вызвать различные ошибки
+1. **РСЃРїРѕР»СЊР·СѓР№С‚Рµ NativeStakingManager**: Р’СЃРµРіРґР° РІР·Р°РёРјРѕРґРµР№СЃС‚РІСѓР№С‚Рµ СЃ СЃРёСЃС‚РµРјРѕР№ С‡РµСЂРµР· СЌС‚РѕС‚ РєРѕРЅС‚СЂР°РєС‚
+2. **РћС‚СЃР»РµР¶РёРІР°Р№С‚Рµ СЃРѕР±С‹С‚РёСЏ**: РЎРѕР±С‹С‚РёСЏ СЃРѕРґРµСЂР¶Р°С‚ РІР°Р¶РЅСѓСЋ РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ ID Р·Р°РїСЂРѕСЃРѕРІ
+3. **РЈРїСЂР°РІР»СЏР№С‚Рµ РїРµСЂРёРѕРґР°РјРё СЂР°Р·Р±Р»РѕРєРёСЂРѕРІРєРё**: РќРµ Р·Р°Р±С‹РІР°Р№С‚Рµ РїСЂРѕРІРµСЂСЏС‚СЊ РІРѕР·РјРѕР¶РЅРѕСЃС‚СЊ РІС‹РІРѕРґР° СЃСЂРµРґСЃС‚РІ
+4. **РћР±СЂР°Р±Р°С‚С‹РІР°Р№С‚Рµ РѕС€РёР±РєРё**: РљР°Р¶РґР°СЏ РѕРїРµСЂР°С†РёСЏ РјРѕР¶РµС‚ РїРѕС‚РµРЅС†РёР°Р»СЊРЅРѕ РІС‹Р·РІР°С‚СЊ СЂР°Р·Р»РёС‡РЅС‹Рµ РѕС€РёР±РєРё
 
-При корректной интеграции система обеспечивает надежный и прозрачный механизм для стейкинга XFI токенов и получения наград. 
+РџСЂРё РєРѕСЂСЂРµРєС‚РЅРѕР№ РёРЅС‚РµРіСЂР°С†РёРё СЃРёСЃС‚РµРјР° РѕР±РµСЃРїРµС‡РёРІР°РµС‚ РЅР°РґРµР¶РЅС‹Р№ Рё РїСЂРѕР·СЂР°С‡РЅС‹Р№ РјРµС…Р°РЅРёР·Рј РґР»СЏ СЃС‚РµР№РєРёРЅРіР° XFI С‚РѕРєРµРЅРѕРІ Рё РїРѕР»СѓС‡РµРЅРёСЏ РЅР°РіСЂР°Рґ. 

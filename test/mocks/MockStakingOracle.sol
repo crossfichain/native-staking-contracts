@@ -54,6 +54,11 @@ contract MockStakingOracle is IOracle {
         _currentAPY = apy;
     }
 
+    function setAPY(uint256 apy) external {
+        _currentAPY = apy;
+        _currentAPR = apy;
+    }
+
     function getCurrentAPR() external view returns (uint256) {
         return _currentAPR;
     }

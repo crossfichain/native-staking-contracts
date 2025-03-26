@@ -55,6 +55,7 @@ contract SimpleDeploy is Script {
     bytes32 public constant FULFILLER_ROLE = keccak256("FULFILLER_ROLE");
     bytes32 public constant COMPOUNDER_ROLE = keccak256("COMPOUNDER_ROLE");
     bytes32 public constant EMERGENCY_ROLE = keccak256("EMERGENCY_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
     function run() public {
         // Get the private key for deployment
@@ -186,7 +187,12 @@ contract SimpleDeploy is Script {
             aprStakingProxy,
             apyStakingProxy,
             wxfi,
-            oracleProxy
+            oracleProxy,
+            true,                   // _enforceMinimums
+            30 days,               // _initialFreezeTime
+            50 ether,             // _minStake (50 XFI)
+            10 ether,             // _minUnstake (10 XFI)
+            1 ether               // _minRewardClaim (1 XFI)
         );
         
         TransparentUpgradeableProxy nativeStakingManagerProxyContract = new TransparentUpgradeableProxy(
@@ -218,7 +224,7 @@ contract SimpleDeploy is Script {
         oracle.setTotalStakedXFI(0);
         oracle.setLaunchTimestamp(block.timestamp);
         
-        // 2. Setup operator roles
+        // 2. Setup roles
         console.log("Setting up roles...");
         
         // Make sure Admin has admin role in all contracts
@@ -245,8 +251,10 @@ contract SimpleDeploy is Script {
         // Staking manager role
         aprStaking.grantRole(STAKING_MANAGER_ROLE, stakingManagerProxy);
         aprStaking.grantRole(STAKING_MANAGER_ROLE, OPERATOR);
+        aprStaking.grantRole(STAKING_MANAGER_ROLE, ADMIN);
         apyStaking.grantRole(STAKING_MANAGER_ROLE, stakingManagerProxy);
         apyStaking.grantRole(STAKING_MANAGER_ROLE, OPERATOR);
+        apyStaking.grantRole(STAKING_MANAGER_ROLE, ADMIN);
         
         // Operator needs fulfiller role
         stakingManager.grantRole(FULFILLER_ROLE, OPERATOR);
@@ -258,6 +266,16 @@ contract SimpleDeploy is Script {
         
         // Oracle updater role for manager so it can update rewards
         oracle.grantRole(ORACLE_UPDATER_ROLE, stakingManagerProxy);
+        
+        // Grant UPGRADER_ROLE to admin and operator
+        aprStaking.grantRole(UPGRADER_ROLE, ADMIN);
+        aprStaking.grantRole(UPGRADER_ROLE, OPERATOR);
+        apyStaking.grantRole(UPGRADER_ROLE, ADMIN);
+        apyStaking.grantRole(UPGRADER_ROLE, OPERATOR);
+        stakingManager.grantRole(UPGRADER_ROLE, ADMIN);
+        stakingManager.grantRole(UPGRADER_ROLE, OPERATOR);
+        oracle.grantRole(UPGRADER_ROLE, ADMIN);
+        oracle.grantRole(UPGRADER_ROLE, OPERATOR);
         
         console.log("System configured successfully.");
     }

@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "../../src/core/NativeStakingVault.sol";
 import "../mocks/MockERC20.sol";
-import "../mocks/MockOracle.sol";
+import "../mocks/MockStakingOracle.sol";
 import {INativeStakingVault} from "../../src/interfaces/INativeStakingVault.sol";
 
 contract NativeStakingVaultTest is Test {

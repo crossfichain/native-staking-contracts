@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "../../src/core/NativeStakingVault.sol";
 import "../../src/core/NativeStakingManager.sol";
 import "../mocks/MockERC20.sol";
-import "../mocks/MockOracle.sol";
+import "../mocks/MockStakingOracle.sol";
 
 /**
  * @title APYStakingTest
