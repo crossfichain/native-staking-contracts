@@ -232,6 +232,10 @@ contract SimpleDeploy is Script {
         aprStaking.grantRole(DEFAULT_ADMIN_ROLE, ADMIN);
         apyStaking.grantRole(DEFAULT_ADMIN_ROLE, ADMIN);
         stakingManager.grantRole(DEFAULT_ADMIN_ROLE, ADMIN);
+        oracle.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR);
+        aprStaking.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR);
+        apyStaking.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR);
+        stakingManager.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR);
         
         // Oracle roles
         oracle.grantRole(ORACLE_UPDATER_ROLE, OPERATOR);
