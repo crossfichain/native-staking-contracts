@@ -12,11 +12,13 @@ interface INativeStaking {
      * @param amount The amount of XFI staked
      * @param stakedAt The timestamp when the stake was created
      * @param unbondingAt The timestamp when unbonding was requested (0 if not unbonding)
+     * @param validator The validator address/ID associated with this stake
      */
     struct StakeInfo {
         uint256 amount;
         uint256 stakedAt;
         uint256 unbondingAt;
+        string validator;
     }
     
     /**

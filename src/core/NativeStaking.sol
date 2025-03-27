@@ -114,24 +114,46 @@ contract NativeStaking is
         bool transferred = IERC20(tokenAddress).transferFrom(msg.sender, address(this), amount);
         require(transferred, "Transfer failed");
         
-        // Add stake to user's stakes (simplified, no validator storage)
-        StakeInfo memory newStake = StakeInfo({
-            amount: amount,
-            stakedAt: block.timestamp,
-            unbondingAt: 0
-        });
+        // Check if user already has a stake with this validator
+        bool existingStakeFound = false;
+        for (uint256 i = 0; i < _userStakes[user].length; i++) {
+            StakeInfo storage stakeItem = _userStakes[user][i];
+            // Compare validator strings and ensure stake is active
+            if (stakeItem.unbondingAt == 0 && 
+                stakeItem.amount > 0 && 
+                keccak256(bytes(stakeItem.validator)) == keccak256(bytes(validator))) {
+                
+                // Update existing stake
+                stakeItem.amount += amount;
+                existingStakeFound = true;
+                emit Staked(user, amount, validator, i);
+                break;
+            }
+        }
         
-        _userStakes[user].push(newStake);
+        // If no existing stake found with this validator, create a new one
+        if (!existingStakeFound) {
+            // Add stake to user's stakes with validator information
+            StakeInfo memory newStake = StakeInfo({
+                amount: amount,
+                stakedAt: block.timestamp,
+                unbondingAt: 0,
+                validator: validator
+            });
+            
+            _userStakes[user].push(newStake);
+            
+            // Emit event with validator information
+            uint256 stakeId = _userStakes[user].length - 1;
+            emit Staked(user, amount, validator, stakeId);
+        }
+        
         _totalStakedByUser[user] += amount;
         
         // Set initial claim time if first stake
         if (_lastClaimTime[user] == 0) {
             _lastClaimTime[user] = block.timestamp;
         }
-        
-        // Emit event with validator information for off-chain processing
-        uint256 stakeId = _userStakes[user].length - 1;
-        emit Staked(user, amount, validator, stakeId);
         
         return true;
     }
@@ -152,6 +174,23 @@ contract NativeStaking is
     {
         require(amount > 0, "Amount must be > 0");
         require(_totalStakedByUser[user] >= amount, "Insufficient staked amount");
+        
+        // Check if user has a stake with this validator
+        bool validatorStakeFound = false;
+        uint256 validatorStakeTotal = 0;
+        
+        for (uint256 i = 0; i < _userStakes[user].length; i++) {
+            StakeInfo storage stakeItem = _userStakes[user][i];
+            if (stakeItem.unbondingAt == 0 && 
+                stakeItem.amount > 0 && 
+                keccak256(bytes(stakeItem.validator)) == keccak256(bytes(validator))) {
+                validatorStakeFound = true;
+                validatorStakeTotal += stakeItem.amount;
+            }
+        }
+        
+        require(validatorStakeFound, "No stake found for this validator");
+        require(validatorStakeTotal >= amount, "Insufficient stake for this validator");
         
         // Calculate unlock time based on unbonding period
         uint256 unlockTime = block.timestamp + oracle.getUnbondingPeriod();
@@ -194,11 +233,16 @@ contract NativeStaking is
         // Increment the counter for future requests (for legacy support)
         _nextRequestId++;
         
-        // Find stakes to mark as unbonding
+        // Find stakes to mark as unbonding - prioritize stake with the requested validator
         uint256 remainingAmount = amount;
+        
+        // First, try to unstake from the specified validator
         for (uint256 i = 0; i < _userStakes[user].length && remainingAmount > 0; i++) {
             StakeInfo storage stakeItem = _userStakes[user][i];
-            if (stakeItem.unbondingAt == 0 && stakeItem.amount > 0) {
+            if (stakeItem.unbondingAt == 0 && 
+                stakeItem.amount > 0 && 
+                keccak256(bytes(stakeItem.validator)) == keccak256(bytes(validator))) {
+                
                 uint256 unstakeAmount = stakeItem.amount <= remainingAmount ? stakeItem.amount : remainingAmount;
                 
                 if (unstakeAmount == stakeItem.amount) {
@@ -210,7 +254,8 @@ contract NativeStaking is
                     _userStakes[user].push(StakeInfo({
                         amount: unstakeAmount,
                         stakedAt: stakeItem.stakedAt,
-                        unbondingAt: block.timestamp
+                        unbondingAt: block.timestamp,
+                        validator: stakeItem.validator // Copy the validator from the original stake
                     }));
                     
                     // Reduce the original stake
@@ -376,7 +421,7 @@ contract NativeStaking is
     /**
      * @dev Gets all active stakes for a user
      * @param user The user to get stakes for
-     * @return An array of StakeInfo structs
+     * @return An array of StakeInfo structs with validator information
      */
     function getUserStakes(address user) 
         external 
@@ -615,14 +660,18 @@ contract NativeStaking is
         override 
         returns (uint256) 
     {
-        uint256 totalStake = 0;
+        uint256 validatorStake = 0;
+        
         for (uint256 i = 0; i < _userStakes[user].length; i++) {
             StakeInfo storage stakeItem = _userStakes[user][i];
-            if (stakeItem.unbondingAt == 0 && stakeItem.amount > 0) {
-                totalStake += stakeItem.amount;
+            if (stakeItem.unbondingAt == 0 && 
+                stakeItem.amount > 0 &&
+                keccak256(bytes(stakeItem.validator)) == keccak256(bytes(validator))) {
+                validatorStake += stakeItem.amount;
             }
         }
-        return totalStake;
+        
+        return validatorStake;
     }
     
     /**
