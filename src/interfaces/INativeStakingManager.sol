@@ -29,14 +29,14 @@ interface INativeStakingManager {
      * @param validator The validator address/ID (only for events, not stored on-chain)
      * @return requestId The ID of the unstake request
      */
-    function unstakeAPR(uint256 amount, string calldata validator) external returns (uint256 requestId);
+    function unstakeAPR(uint256 amount, string calldata validator) external returns (bytes memory requestId);
     
     /**
      * @dev Claims XFI from a completed APR unstake request
      * @param requestId The ID of the unstake request to claim
      * @return amount The amount of XFI claimed
      */
-    function claimUnstakeAPR(uint256 requestId) external returns (uint256 amount);
+    function claimUnstakeAPR(bytes calldata requestId) external returns (uint256 amount);
     
     /**
      * @dev Withdraws XFI from the APY model by burning vault shares
@@ -52,7 +52,7 @@ interface INativeStakingManager {
      * @param requestId The ID of the withdrawal request to claim
      * @return assets The amount of XFI claimed
      */
-    function claimWithdrawalAPY(uint256 requestId) external returns (uint256 assets);
+    function claimWithdrawalAPY(bytes calldata requestId) external returns (uint256 assets);
     
     /**
      * @dev Claims rewards from the APR model

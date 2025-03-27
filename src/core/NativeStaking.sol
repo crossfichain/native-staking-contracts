@@ -40,7 +40,7 @@ contract NativeStaking is
     uint256 public minStakeAmount;
     uint256 public maxStakesPerUser;
     
-    // Counter for generating request IDs
+    // Counter for legacy request IDs
     uint256 private _nextRequestId;
     
     // Mappings - simplified to remove validator-specific storage
@@ -49,10 +49,13 @@ contract NativeStaking is
     mapping(address => uint256) private _totalStakedByUser;
     mapping(address => uint256) private _lastClaimTime;
     
+    // New mapping to map requestId (as bytes) to array index
+    mapping(address => mapping(bytes32 => uint256)) private _requestIdToIndex;
+    
     // Events
     event Staked(address indexed user, uint256 amount, string validator, uint256 stakeId);
-    event UnstakeRequested(address indexed user, uint256 amount, string validator, uint256 indexed requestId, uint256 unlockTime);
-    event UnstakeClaimed(address indexed user, uint256 amount, uint256 indexed requestId);
+    event UnstakeRequested(address indexed user, uint256 amount, string validator, bytes indexed requestId, uint256 unlockTime);
+    event UnstakeClaimed(address indexed user, uint256 amount, bytes indexed requestId);
     event RewardsClaimed(address indexed user, uint256 amount);
     event RewardsAdded(string validator, uint256 amount);
     event TreasuryUpdated(address newTreasury);
@@ -145,7 +148,7 @@ contract NativeStaking is
         override 
         onlyRole(STAKING_MANAGER_ROLE) 
         whenNotPaused 
-        returns (uint256 requestId) 
+        returns (bytes memory requestId) 
     {
         require(amount > 0, "Amount must be > 0");
         require(_totalStakedByUser[user] >= amount, "Insufficient staked amount");
@@ -164,29 +167,31 @@ contract NativeStaking is
         _userUnstakeRequests[user].push(request);
         uint256 arrayIndex = _userUnstakeRequests[user].length - 1;
         
-        // Generate a structured request ID with:
-        // [2 bytes: type (0 = unstake)][4 bytes: timestamp][8 bytes: user+amount hash][4 bytes: sequence]
+        // Generate a structured requestId as bytes
+        // Format: [2 bytes: type][4 bytes: timestamp][20 bytes: user address][32 bytes: amount hash][4 bytes: sequence]
         
-        // 1. Convert request type to 2 bytes (0 = unstake)
-        uint16 requestTypeValue = 0;
+        // 1. Request type (0 = unstake) - 2 bytes
+        bytes2 requestType = bytes2(uint16(0));
         
-        // 2. Take last 4 bytes of timestamp (covers ~136 years)
-        uint32 timestampValue = uint32(block.timestamp);
+        // 2. Timestamp - 4 bytes
+        bytes4 timestamp = bytes4(uint32(block.timestamp));
         
-        // 3. Generate 8 bytes from user and amount (randomness component)
-        bytes32 userAmountHash = keccak256(abi.encodePacked(user, amount, validator));
-        uint64 randomComponent = uint64(uint256(userAmountHash));
+        // 3. User address - 20 bytes
         
-        // 4. Use array index as the sequence value (4 bytes)
-        uint32 sequenceValue = uint32(arrayIndex);
+        // 4. Hash of amount and validator - 32 bytes
+        bytes32 amountValidatorHash = keccak256(abi.encodePacked(amount, validator));
         
-        // 5. Combine all components into a single uint256
-        requestId = (uint256(requestTypeValue) << 128) |
-                   (uint256(timestampValue) << 96) |
-                   (uint256(randomComponent) << 32) |
-                   uint256(sequenceValue);
+        // 5. Sequence number - 4 bytes
+        bytes4 sequence = bytes4(uint32(arrayIndex));
         
-        // Increment the counter for future requests
+        // Combine all components
+        requestId = abi.encodePacked(requestType, timestamp, user, amountValidatorHash, sequence);
+        
+        // Store the mapping from requestId hash to array index
+        bytes32 requestIdHash = keccak256(requestId);
+        _requestIdToIndex[user][requestIdHash] = arrayIndex;
+        
+        // Increment the counter for future requests (for legacy support)
         _nextRequestId++;
         
         // Find stakes to mark as unbonding
@@ -231,7 +236,7 @@ contract NativeStaking is
      * @param requestId The ID of the unstake request to claim
      * @return amount The amount of XFI claimed
      */
-    function claimUnstake(address user, uint256 requestId) 
+    function claimUnstake(address user, bytes calldata requestId) 
         external 
         override 
         onlyRole(STAKING_MANAGER_ROLE) 
@@ -240,13 +245,21 @@ contract NativeStaking is
         // Extract the array index from the requestId
         uint256 index;
         
-        // Check if this is a structured requestId or a legacy index
-        if (isStructuredRequestId(requestId)) {
-            // Extract the array index from the last 4 bytes
-            index = getSequenceFromId(requestId);
+        // Check if this is a bytes requestId or a legacy requestId (uint256 represented as bytes)
+        if (requestId.length > 32) {
+            // New format - get index from the requestId mapping
+            bytes32 requestIdHash = keccak256(requestId);
+            index = _requestIdToIndex[user][requestIdHash];
         } else {
-            // Use the requestId directly as an index (legacy format)
-            index = requestId;
+            // Legacy format - parse as uint256 and extract index
+            uint256 legacyId = abi.decode(requestId, (uint256));
+            if (isStructuredRequestId(legacyId)) {
+                // Extract the array index from the last 4 bytes
+                index = getSequenceFromId(legacyId);
+            } else {
+                // Use the requestId directly as an index (very old legacy format)
+                index = legacyId;
+            }
         }
         
         // Validate the request exists
@@ -297,7 +310,7 @@ contract NativeStaking is
     
     /**
      * @dev Claims staking rewards for a user
-     * @param user The user to claim rewards for
+     * @param user The user claiming rewards
      * @param rewardAmount The amount of rewards to claim (determined by oracle)
      * @return amount The amount of rewards claimed
      */
@@ -305,6 +318,7 @@ contract NativeStaking is
         external 
         override 
         onlyRole(STAKING_MANAGER_ROLE) 
+        nonReentrant 
         returns (uint256 amount) 
     {
         // The reward amount is now provided by the manager based on oracle data
@@ -454,14 +468,14 @@ contract NativeStaking is
     
     /**
      * @dev Sets the minimum stake amount
-     * @param amount The new minimum stake amount
+     * @param newAmount The new minimum stake amount
      */
-    function setMinStakeAmount(uint256 amount) 
+    function setMinStakeAmount(uint256 newAmount) 
         external 
         onlyRole(DEFAULT_ADMIN_ROLE) 
     {
-        minStakeAmount = amount;
-        emit MinStakeAmountUpdated(amount);
+        minStakeAmount = newAmount;
+        emit MinStakeAmountUpdated(newAmount);
     }
     
     /**
@@ -612,9 +626,45 @@ contract NativeStaking is
     }
     
     /**
+     * @dev Gets a specific unstake request for a user
+     * @param user The user to get the request for
+     * @param requestId The ID of the request
+     * @return The UnstakeRequest struct
+     */
+    function getUnstakeRequest(address user, bytes calldata requestId) 
+        external 
+        view 
+        override 
+        returns (UnstakeRequest memory) 
+    {
+        // Extract the array index from the requestId using similar logic to claimUnstake
+        uint256 index;
+        
+        // Check if this is a bytes requestId or a legacy requestId (uint256 represented as bytes)
+        if (requestId.length > 32) {
+            // New format - get index from the requestId mapping
+            bytes32 requestIdHash = keccak256(requestId);
+            index = _requestIdToIndex[user][requestIdHash];
+        } else {
+            // Legacy format - parse as uint256 and extract index
+            uint256 legacyId = abi.decode(requestId, (uint256));
+            if (isStructuredRequestId(legacyId)) {
+                // Extract the array index from the last 4 bytes
+                index = getSequenceFromId(legacyId);
+            } else {
+                // Use the requestId directly as an index (very old legacy format)
+                index = legacyId;
+            }
+        }
+        
+        require(index < _userUnstakeRequests[user].length, "Invalid request ID");
+        return _userUnstakeRequests[user][index];
+    }
+    
+    /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[50] private __gap;
+    uint256[49] private __gap; // Adjusted for new mapping
 } 

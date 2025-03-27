@@ -37,7 +37,7 @@ interface IAPRStaking {
      */
     function claimUnstake(
         address user,
-        uint256 requestId
+        bytes calldata requestId
     ) external returns (uint256 amount);
 
     /**

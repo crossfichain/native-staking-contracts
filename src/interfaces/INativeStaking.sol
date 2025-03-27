@@ -48,7 +48,7 @@ interface INativeStaking {
      * @param validator The validator address/ID (only used in events, not stored)
      * @return requestId The ID of the unstake request
      */
-    function requestUnstake(address user, uint256 amount, string calldata validator) external returns (uint256 requestId);
+    function requestUnstake(address user, uint256 amount, string calldata validator) external returns (bytes memory requestId);
     
     /**
      * @dev Claims XFI from a completed unstake request
@@ -56,7 +56,7 @@ interface INativeStaking {
      * @param requestId The ID of the unstake request to claim
      * @return amount The amount of XFI claimed
      */
-    function claimUnstake(address user, uint256 requestId) external returns (uint256 amount);
+    function claimUnstake(address user, bytes calldata requestId) external returns (uint256 amount);
     
     /**
      * @dev Claims staking rewards for a user
@@ -79,6 +79,14 @@ interface INativeStaking {
      * @return An array of UnstakeRequest structs
      */
     function getUserUnstakeRequests(address user) external view returns (UnstakeRequest[] memory);
+    
+    /**
+     * @dev Gets a specific unstake request for a user
+     * @param user The user to get the request for
+     * @param requestId The ID of the request
+     * @return The UnstakeRequest struct
+     */
+    function getUnstakeRequest(address user, bytes calldata requestId) external view returns (UnstakeRequest memory);
     
     /**
      * @dev Gets the total amount of XFI staked by a user

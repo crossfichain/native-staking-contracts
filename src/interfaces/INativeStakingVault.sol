@@ -37,14 +37,14 @@ interface INativeStakingVault is IERC4626Upgradeable {
         uint256 assets,
         address receiver,
         address owner
-    ) external returns (uint256 requestId);
+    ) external returns (bytes memory requestId);
     
     /**
      * @dev Claims assets from a completed withdrawal request
      * @param requestId The ID of the withdrawal request
      * @return assets The amount of assets claimed
      */
-    function claimWithdrawal(uint256 requestId) external returns (uint256 assets);
+    function claimWithdrawal(bytes calldata requestId) external returns (uint256 assets);
     
     /**
      * @dev Gets all pending withdrawal requests for a user
