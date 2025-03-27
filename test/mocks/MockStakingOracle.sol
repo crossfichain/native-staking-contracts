@@ -12,6 +12,7 @@ contract MockStakingOracle is IOracle {
     uint256 private _currentAPY;
     uint256 private _currentAPR;
     uint256 private _unbondingPeriod;
+    mapping(address => mapping(string => uint256)) private _userValidatorStakes;
 
     function getPrice(string calldata symbol) external view returns (uint256) {
         if (keccak256(bytes(symbol)) == keccak256(bytes("XFI"))) {
@@ -88,6 +89,14 @@ contract MockStakingOracle is IOracle {
         return amount;
     }
 
+    function getValidatorStake(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return _userValidatorStakes[user][validator];
+    }
+
     // Admin functions for testing
     function setXfiPrice(uint256 price) external {
         _xfiPrice = price;
@@ -122,6 +131,7 @@ contract MockStakingOracle is IOracle {
     }
 
     function setValidatorStake(address user, string calldata validator, uint256 amount) external {
+        _userValidatorStakes[user][validator] = amount;
         _totalStakedXFI += amount;
     }
 } 

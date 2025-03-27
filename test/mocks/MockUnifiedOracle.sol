@@ -12,6 +12,7 @@ contract MockUnifiedOracle is IOracle {
     uint256 private _unbondingPeriod;
     mapping(address => uint256) private _userClaimableRewards;
     mapping(address => mapping(string => uint256)) private _userValidatorClaimableRewards;
+    mapping(address => mapping(string => uint256)) private _validatorStakes;
 
     function setXfiPrice(uint256 price) external {
         _xfiPrice = price;
@@ -110,5 +111,13 @@ contract MockUnifiedOracle is IOracle {
         uint256 amount = _userValidatorClaimableRewards[user][validator];
         _userValidatorClaimableRewards[user][validator] = 0;
         return amount;
+    }
+
+    function getValidatorStake(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return _validatorStakes[user][validator];
     }
 } 

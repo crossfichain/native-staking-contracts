@@ -225,37 +225,33 @@ contract NativeStakingManagerTest is Test {
     }
     
     function testClaimRewardsAPRForValidator() public {
-        // Setup
-        string memory validator = "mxva123456789";
-        uint256 stakeAmount = 1000 ether;
-        uint256 rewardAmount = 100 ether;
+        uint256 rewardAmount = 10 ether;
+        string memory validator = "mxvaloper1";
         
-        // Stake
-        vm.startPrank(USER);
-        wxfi.approve(address(manager), stakeAmount);
-        manager.stakeAPR(stakeAmount, validator);
+        // Setup oracle rewards for specific validator
+        vm.startPrank(address(oracle));
+        oracle.setUserClaimableRewardsForValidator(USER, validator, rewardAmount);
+        oracle.setValidatorStake(USER, validator, 100 ether);
         vm.stopPrank();
         
-        // Set rewards for the validator
-        oracle.setUserClaimableRewardsForValidator(USER, validator, rewardAmount);
+        // User claims rewards
+        vm.startPrank(USER);
+        uint256 requestId = manager.claimRewardsAPRForValidator(validator, rewardAmount);
+        vm.stopPrank();
         
-        // Set validator stake in oracle
-        oracle.setValidatorStake(USER, validator, stakeAmount);
+        // Verify request
+        (address user, uint256 amount, string memory val, uint256 timestamp, 
+         NativeStakingManager.RequestType requestType, NativeStakingManager.RequestStatus status, 
+         string memory reason) = manager.getRequest(requestId);
         
-        // Set total rewards
-        oracle.setUserClaimableRewards(USER, rewardAmount);
+        assertEq(user, USER, "Request user should match");
+        assertEq(amount, rewardAmount, "Request amount should match");
+        assertEq(val, validator, "Request validator should match");
+        assertEq(uint256(requestType), uint256(NativeStakingManager.RequestType.CLAIM_REWARDS), "Request type should be CLAIM_REWARDS");
+        assertEq(uint256(status), uint256(NativeStakingManager.RequestStatus.FULFILLED), "Request status should be FULFILLED");
         
-        // Mint rewards to the manager and APR contract
-        wxfi.mint(address(manager), rewardAmount);
-        wxfi.mint(address(aprContract), rewardAmount);
-        
-        // Claim rewards
-        vm.prank(USER);
-        uint256 claimedAmount = manager.claimRewardsAPRForValidator(validator);
-        
-        // Verify
-        assertEq(claimedAmount, rewardAmount, "Incorrect reward amount claimed");
-        assertEq(wxfi.balanceOf(USER), INITIAL_BALANCE - stakeAmount + rewardAmount, "Rewards not transferred");
+        // Verify rewards were transferred
+        assertEq(wxfi.balanceOf(USER), INITIAL_BALANCE + rewardAmount, "User should receive rewards");
     }
     
     function testClaimRewardsAPRForMultipleValidators() public {
@@ -355,38 +351,36 @@ contract NativeStakingManagerTest is Test {
     }
     
     function testFailClaimRewardsAPRForValidatorNoStake() public {
-        // Setup
-        string memory validator = "mxva123456789";
-        uint256 rewardAmount = 100 ether;
+        uint256 rewardAmount = 10 ether;
+        string memory validator = "mxvaloper1";
         
-        // Set rewards for the validator
+        // Setup oracle rewards but no stake
+        vm.startPrank(address(oracle));
         oracle.setUserClaimableRewardsForValidator(USER, validator, rewardAmount);
+        vm.stopPrank();
         
-        // Should fail because user has no stake
-        vm.prank(USER);
-        vm.expectRevert("revert: No stake found");
-        manager.claimRewardsAPRForValidator(validator);
+        // User attempts to claim rewards
+        vm.startPrank(USER);
+        vm.expectRevert("No stake found for this validator");
+        manager.claimRewardsAPRForValidator(validator, rewardAmount);
+        vm.stopPrank();
     }
     
     function testFailClaimRewardsAPRForValidatorBelowMin() public {
-        // Setup
-        string memory validator = "mxva123456789";
-        uint256 stakeAmount = 1000 ether;
-        uint256 rewardAmount = 0.5 ether; // Below min reward claim amount
+        uint256 rewardAmount = 0.5 ether; // Below minimum
+        string memory validator = "mxvaloper1";
         
-        // Stake
-        vm.startPrank(USER);
-        wxfi.approve(address(manager), stakeAmount);
-        manager.stakeAPR(stakeAmount, validator);
+        // Setup oracle rewards and stake
+        vm.startPrank(address(oracle));
+        oracle.setUserClaimableRewardsForValidator(USER, validator, rewardAmount);
+        oracle.setValidatorStake(USER, validator, 100 ether);
         vm.stopPrank();
         
-        // Set rewards for the validator
-        oracle.setUserClaimableRewardsForValidator(USER, validator, rewardAmount);
-        
-        // Should fail because reward amount is below minimum
-        vm.prank(USER);
-        vm.expectRevert("revert: Amount must be at least 1 XFI");
-        manager.claimRewardsAPRForValidator(validator);
+        // User attempts to claim rewards
+        vm.startPrank(USER);
+        vm.expectRevert("Amount must be at least minRewardClaimAmount");
+        manager.claimRewardsAPRForValidator(validator, rewardAmount);
+        vm.stopPrank();
     }
     
     function testFailClaimRewardsAPRNoStake() public {

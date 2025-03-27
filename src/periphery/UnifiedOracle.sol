@@ -541,4 +541,12 @@ contract UnifiedOracle is
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[40] private __gap;
+
+    function getValidatorStake(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return _validatorStakes[user][validator];
+    }
 } 

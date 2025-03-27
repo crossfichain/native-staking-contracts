@@ -251,13 +251,11 @@ contract NativeStakingE2ETest is Test {
         oracle.setUserClaimableRewardsForValidator(address(this), validator1, rewardAmount1);
         oracle.setUserClaimableRewardsForValidator(address(this), validator2, rewardAmount2);
         
-        // Claim rewards from first validator
-        uint256 claimedAmount1 = manager.claimRewardsAPRForValidator(validator1);
-        assertEq(claimedAmount1, rewardAmount1, "Incorrect reward amount claimed for validator1");
-        
-        // Claim rewards from second validator
-        uint256 claimedAmount2 = manager.claimRewardsAPRForValidator(validator2);
-        assertEq(claimedAmount2, rewardAmount2, "Incorrect reward amount claimed for validator2");
+        // Claim rewards for both validators
+        vm.startPrank(admin);
+        uint256 claimedAmount1 = manager.claimRewardsAPRForValidator(validator1, rewardAmount1);
+        uint256 claimedAmount2 = manager.claimRewardsAPRForValidator(validator2, rewardAmount2);
+        vm.stopPrank();
         
         // Verify total rewards received
         assertEq(xfi.balanceOf(address(this)), rewardAmount1 + rewardAmount2, "Total rewards not transferred correctly");

@@ -552,57 +552,57 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Claims rewards from the APR model for a specific validator
-     * @param validator The validator to claim rewards from
-     * @return amount The amount of rewards claimed
+     * @dev Claims rewards for a specific validator
+     * @param validator The validator to claim rewards for
+     * @param amount The amount of rewards to claim
+     * @return requestId The ID of the request
      */
-    function claimRewardsAPRForValidator(string calldata validator)
-        external
-        whenNotPaused
-        nonReentrant
-        returns (uint256 amount)
+    function claimRewardsAPRForValidator(string calldata validator, uint256 amount) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        returns (uint256 requestId) 
     {
+        require(amount >= minRewardClaimAmount, "Amount must be at least minRewardClaimAmount");
+        require(oracle.isValidatorActive(validator), "Validator is not active");
+        
         // Check oracle freshness
         _checkOracleFreshness();
-
-        // Get claimable rewards for this validator
-        amount = oracle.getUserClaimableRewardsForValidator(msg.sender, validator);
-        require(amount > 0, "No rewards to claim");
-
-        // Enforce minimum amount if enabled
-        if (enforceMinimumAmounts) {
-            require(amount >= minRewardClaimAmount, "Amount must be at least 1 XFI");
-        }
-
-        // Get total stake for safety check
-        uint256 totalStake = aprContract.getValidatorStake(msg.sender, validator);
-        require(totalStake > 0, "No stake found");
-
-        // Safety check - rewards should not exceed 25% of stake
-        require(amount <= (totalStake * 25) / 100, "Reward amount exceeds reasonable threshold");
-
-        // Clear rewards on oracle to prevent reentrancy
-        oracle.clearUserClaimableRewardsForValidator(msg.sender, validator);
-
-        // Transfer rewards directly to the user
-        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
-        require(transferred, "Reward transfer failed");
-
-        // Convert XFI to MPX for the event
-        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
-
-        // Create a request record
-        uint256 requestId = _createRequest(
-            msg.sender,
-            amount,
-            validator,
-            RequestType.CLAIM_REWARDS
-        );
-
-        // Emit event
-        emit RewardsClaimedAPRForValidator(msg.sender, amount, mpxAmount, validator, requestId);
-
-        return amount;
+        
+        // Get user's claimable rewards for this validator
+        uint256 claimableRewards = oracle.getUserClaimableRewardsForValidator(msg.sender, validator);
+        require(claimableRewards >= amount, "Insufficient claimable rewards");
+        
+        // Get user's stake for this validator
+        uint256 userStake = oracle.getValidatorStake(msg.sender, validator);
+        require(userStake > 0, "No stake found for this validator");
+        
+        // Safety check: reward amount should not exceed 25% of stake
+        require(amount <= userStake / 4, "Reward amount exceeds reasonable threshold");
+        
+        // Clear rewards on oracle first to prevent reentrancy
+        uint256 clearedAmount = oracle.clearUserClaimableRewardsForValidator(msg.sender, validator);
+        require(clearedAmount >= amount, "Failed to clear rewards");
+        
+        // Transfer rewards to user
+        require(wxfi.transfer(msg.sender, amount), "Failed to transfer rewards");
+        
+        // Create and store request
+        requestId = _nextRequestId++;
+        _requests[requestId] = Request({
+            user: msg.sender,
+            amount: amount,
+            validator: validator,
+            timestamp: block.timestamp,
+            requestType: RequestType.CLAIM_REWARDS,
+            status: RequestStatus.FULFILLED,
+            statusReason: "Success"
+        });
+        
+        emit RewardsClaimedAPRForValidator(msg.sender, amount, 0, validator, requestId);
+        emit RequestFulfilled(requestId, msg.sender, RequestStatus.FULFILLED, "Success");
+        
+        return requestId;
     }
 
     /**

@@ -109,4 +109,15 @@ interface IOracle {
     function clearUserClaimableRewardsForValidator(address user, string calldata validator) 
         external 
         returns (uint256);
+
+    /**
+     * @dev Gets the stake amount for a user with a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of stake
+     */
+    function getValidatorStake(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256);
 } 
