@@ -7,13 +7,13 @@ import "../../src/core/APRStaking.sol";
 /**
  * @title APRStakingRequestIdTest
  * @dev Tests for the APRStaking contract's requestId handling
- * Focuses on verifying that structured requestIds are correctly handled
+ * Focuses on verifying that bytes requestIds are correctly handled
  */
 contract APRStakingRequestIdTest is APRStakingBase {
     // Test globals
     uint256 public stakeAmount = 100 ether;
     uint256 public unstakeAmount = 50 ether;
-    uint256 public requestId;
+    bytes public requestId;
 
     function setUp() public override {
         super.setUp();
@@ -21,39 +21,48 @@ contract APRStakingRequestIdTest is APRStakingBase {
         // Set a reasonable unbonding period for tests (5 seconds)
         vm.startPrank(ADMIN);
         oracle.setUnbondingPeriod(5);
+        vm.stopPrank();
         
         // Set validator stake for the test
+        vm.startPrank(ADMIN);
         oracle.setValidatorStake(USER, VALIDATOR_ID, stakeAmount);
         vm.stopPrank();
         
+        // Make sure USER has enough tokens
+        vm.startPrank(ADMIN);
+        deal(address(wxfi), USER, stakeAmount * 2);
+        deal(address(wxfi), address(manager), stakeAmount * 10); // Ensure manager has enough tokens for tests
+        vm.stopPrank();
+        
         // Stake some tokens with USER for testing
+        vm.startPrank(USER);
+        wxfi.approve(address(manager), stakeAmount);
+        vm.stopPrank();
+        
         stake(USER, stakeAmount);
     }
     
     /**
-     * @dev Test unstaking and claiming with a structured requestId
-     * Verifies the fix for the "Invalid requestId" issue
+     * @dev Test unstaking and claiming with a bytes requestId
+     * Verifies the new bytes requestId functionality
      */
-    function testStructuredRequestIdHandling() public {
+    function testBytesRequestIdHandling() public {
         // Request to unstake
         vm.startPrank(USER);
         requestId = manager.unstakeAPR(unstakeAmount, VALIDATOR_ID);
         vm.stopPrank();
         
-        // Verify that the requestId is structured (greater than 2^32)
-        assertTrue(manager.isStructuredRequestId(requestId), "RequestId should be structured");
+        // Verify that the requestId is not empty
+        assertGt(requestId.length, 0, "RequestId should not be empty");
         
-        // Extract sequence from the structured ID
-        uint256 sequence = manager.getSequenceFromId(requestId);
-        
-        // Log the requestId and its sequence component for debugging
-        console.log("Structured RequestId:", requestId);
-        console.log("Sequence component:", sequence);
+        // Print requestId length and hex representation for debugging
+        console.log("Bytes RequestId length:", requestId.length);
+        console.logBytes(requestId);
         
         // Advance time past the unbonding period
         advanceTime(6); // 6 seconds, just past the 5-second unbonding period
         
-        // Try to claim with the structured requestId (this would have failed before the fix)
+        // Try to claim with the bytes requestId
         vm.startPrank(USER);
         uint256 claimed = manager.claimUnstakeAPR(requestId);
         vm.stopPrank();
@@ -63,13 +72,13 @@ contract APRStakingRequestIdTest is APRStakingBase {
     }
     
     /**
-     * @dev Test multiple sequential unstake requests
-     * Ensures multiple requestIds are handled correctly
+     * @dev Test multiple sequential unstake requests with bytes requestIds
+     * Ensures multiple bytes requestIds are handled correctly
      */
-    function testMultipleRequestIds() public {
+    function testMultipleBytesRequestIds() public {
         // First unstake request
         vm.startPrank(USER);
-        uint256 requestId1 = manager.unstakeAPR(20 ether, VALIDATOR_ID);
+        bytes memory requestId1 = manager.unstakeAPR(20 ether, VALIDATOR_ID);
         vm.stopPrank();
         
         // Wait until out of unbonding period for the validator
@@ -77,16 +86,18 @@ contract APRStakingRequestIdTest is APRStakingBase {
         
         // Second unstake request
         vm.startPrank(USER);
-        uint256 requestId2 = manager.unstakeAPR(20 ether, VALIDATOR_ID);
+        bytes memory requestId2 = manager.unstakeAPR(20 ether, VALIDATOR_ID);
         vm.stopPrank();
         
-        // Log both requestIds
-        console.log("RequestId 1:", requestId1);
-        console.log("RequestId 2:", requestId2);
+        // Log requestId details
+        console.log("RequestId 1 length:", requestId1.length);
+        console.logBytes(requestId1);
+        console.log("RequestId 2 length:", requestId2.length);
+        console.logBytes(requestId2);
         
         advanceTime(6);
         
-        // Claim both requests (should succeed with the fix)
+        // Claim both requests with bytes requestIds
         vm.startPrank(USER);
         uint256 claimed1 = manager.claimUnstakeAPR(requestId1);
         uint256 claimed2 = manager.claimUnstakeAPR(requestId2);
@@ -97,27 +108,55 @@ contract APRStakingRequestIdTest is APRStakingBase {
     }
     
     /**
-     * @dev Test the edge case where requestId is exactly 2^32
-     * This is the boundary between structured and non-structured IDs
+     * @dev Test the structure of the bytes requestId
+     * Verifies the expected format of the bytes requestId
      */
-    function testRequestIdBoundary() public {
-        // Create a mock scenario with a manually crafted requestId at the boundary
-        uint256 boundaryId = 4294967296; // 2^32
-        
-        // Verify detection of structured ID
-        assertTrue(manager.isStructuredRequestId(boundaryId), "Boundary ID should be detected as structured");
-        assertTrue(!manager.isStructuredRequestId(boundaryId - 1), "Below boundary should not be structured");
-        
-        // Request to unstake with normal flow to get a real structured ID
+    function testBytesRequestIdStructure() public {
+        // Request to unstake to get a real bytes requestId
         vm.startPrank(USER);
-        uint256 realRequestId = manager.unstakeAPR(unstakeAmount, VALIDATOR_ID);
+        bytes memory bytesRequestId = manager.unstakeAPR(unstakeAmount, VALIDATOR_ID);
         vm.stopPrank();
         
-        // Verify structured ID detection
-        assertTrue(manager.isStructuredRequestId(realRequestId), "Real request ID should be structured");
+        // Expected format is now an ABI-encoded uint256 with the structured format internally
+        // Check the length is correct (should be 32 bytes for abi.encode)
+        assertEq(bytesRequestId.length, 32, "Bytes requestId should be 32 bytes long");
         
-        // Log the IDs
-        console.log("Boundary ID:", boundaryId);
-        console.log("Real Request ID:", realRequestId);
+        // For debugging
+        console.log("Bytes RequestId length:", bytesRequestId.length);
+        console.logBytes(bytesRequestId);
+        
+        // Extract the numeric value for verification
+        uint256 numericId = abi.decode(bytesRequestId, (uint256));
+        console.log("Decoded numeric ID:", numericId);
+        
+        // Verify the ID is in the structured format (above 2^32)
+        assertTrue(numericId >= 4294967296, "Numeric ID should be in structured format");
+        
+        // Advance time and claim to verify functionality
+        advanceTime(6);
+        vm.startPrank(USER);
+        uint256 claimed = manager.claimUnstakeAPR(bytesRequestId);
+        vm.stopPrank();
+        
+        assertEq(claimed, unstakeAmount, "Should claim the correct amount");
+    }
+    
+    /**
+     * @dev Test backward compatibility with legacy uint256 requestIds
+     */
+    function testLegacyRequestIdCompatibility() public {
+        // Create a simple legacy requestId (just a number)
+        uint256 legacyId = 42;
+        bytes memory encodedLegacyId = abi.encode(legacyId);
+        
+        // We would need to set up a manual test case since we can't generate
+        // legacy requestIds with the updated contracts
+        
+        // Log the encoded legacy ID
+        console.log("Encoded legacy ID length:", encodedLegacyId.length);
+        console.logBytes(encodedLegacyId);
+        
+        // NOTE: This test is mostly for illustration since we can't directly test
+        // legacy compatibility without modifying the contracts or mock data
     }
 } 

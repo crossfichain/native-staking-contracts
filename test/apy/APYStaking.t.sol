@@ -143,10 +143,10 @@ contract APYStakingTest is Test {
         uint256 currentShares = vault.balanceOf(USER);
         require(currentShares > 0, "User should have shares");
         vault.approve(address(manager), currentShares); // Approve shares for withdrawal
-        uint256 requestId = manager.withdrawAPY(currentShares);
+        bytes memory requestId = manager.withdrawAPY(currentShares);
         vm.stopPrank();
         
-        assertGt(requestId, 0, "Should get valid request ID");
+        assertGt(requestId.length, 0, "Should get valid request ID");
         
         // Fast forward through unbonding period
         vm.warp(block.timestamp + UNBONDING_PERIOD + 1);
@@ -192,7 +192,7 @@ contract APYStakingTest is Test {
         vm.startPrank(USER);
         uint256 shares = vault.balanceOf(USER);
         vault.approve(address(manager), shares);
-        uint256 requestId = manager.withdrawAPY(shares);
+        bytes memory requestId = manager.withdrawAPY(shares);
         
         // Fast forward through unbonding period
         vm.warp(block.timestamp + UNBONDING_PERIOD + 1);

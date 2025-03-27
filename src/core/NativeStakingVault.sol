@@ -46,8 +46,8 @@ contract NativeStakingVault is
     uint256 public minWithdrawalAmount;
     
     // Withdrawal request tracking
-    mapping(address => uint256[]) private _userWithdrawalRequestIds;
-    mapping(uint256 => WithdrawalRequest) private _withdrawalRequests;
+    mapping(address => bytes[]) private _userWithdrawalRequestIds;
+    mapping(bytes => WithdrawalRequest) private _withdrawalRequests;
     uint256 private _nextWithdrawalRequestId;
     
     // Mapping of last compound timestamp
@@ -57,8 +57,8 @@ contract NativeStakingVault is
     uint256 private _totalPendingWithdrawals;
     
     // Events
-    event WithdrawalRequested(address indexed owner, address indexed receiver, uint256 indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime);
-    event WithdrawalClaimed(address indexed receiver, uint256 indexed requestId, uint256 assets);
+    event WithdrawalRequested(address indexed owner, address indexed receiver, bytes indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime);
+    event WithdrawalClaimed(address indexed receiver, bytes indexed requestId, uint256 assets);
     event CompoundExecuted(uint256 rewardsAdded, uint256 timestamp);
     event MaxLiquidityPercentUpdated(uint256 newPercent);
     event MinWithdrawalAmountUpdated(uint256 newAmount);
@@ -202,7 +202,7 @@ contract NativeStakingVault is
         override 
         whenNotPaused 
         nonReentrant 
-        returns (uint256 requestId) 
+        returns (bytes memory requestId) 
     {
         require(assets >= minWithdrawalAmount, "Amount below minimum");
         require(assets <= maxRedeem(owner), "Insufficient shares");
@@ -222,9 +222,22 @@ contract NativeStakingVault is
         uint256 unbondingPeriod = oracle.getUnbondingPeriod();
         uint256 unlockTime = block.timestamp + unbondingPeriod;
         
-        // Create withdrawal request
-        requestId = _nextWithdrawalRequestId++;
+        // Create a structured requestId as bytes - similar format to other contracts
+        // Format: [2 bytes: type][4 bytes: timestamp][20 bytes: owner][32 bytes: hash][4 bytes: sequence]
+        bytes2 requestType = bytes2(0x0000); // Use 0 for withdrawal requests
+        bytes4 timestamp = bytes4(uint32(block.timestamp));
         
+        // Create a hash that combines the assets and other data
+        bytes32 dataHash = keccak256(abi.encodePacked(assets, shares, unlockTime, block.chainid));
+        
+        // Get sequence number
+        uint32 sequence = uint32(_nextWithdrawalRequestId);
+        _nextWithdrawalRequestId++;
+        
+        // Create the full requestId
+        requestId = abi.encodePacked(requestType, timestamp, owner, dataHash, sequence);
+        
+        // Store the withdrawal request
         _withdrawalRequests[requestId] = WithdrawalRequest({
             assets: assets,
             shares: shares,
@@ -246,7 +259,7 @@ contract NativeStakingVault is
      * @param requestId The ID of the withdrawal request
      * @return assets The amount of assets claimed
      */
-    function claimWithdrawal(uint256 requestId) 
+    function claimWithdrawal(bytes calldata requestId) 
         external 
         override 
         nonReentrant 
@@ -280,7 +293,7 @@ contract NativeStakingVault is
         override 
         returns (WithdrawalRequest[] memory) 
     {
-        uint256[] storage requestIds = _userWithdrawalRequestIds[user];
+        bytes[] storage requestIds = _userWithdrawalRequestIds[user];
         uint256 validCount = 0;
         
         // Count valid requests

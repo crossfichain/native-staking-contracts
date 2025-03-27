@@ -94,6 +94,15 @@ contract APRStakingTest is Test {
         xfi.approve(address(staking), INITIAL_BALANCE);
         staking.stake(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", address(0));
         staking.requestUnstake(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        
+        // For testing purposes, we're using a simple bytes value for the requestId
+        // In a real scenario, this would be the value generated and emitted by the contract
+        bytes memory requestId = abi.encodePacked(
+            uint16(0),                // Request type (0 for unstake)
+            uint32(block.timestamp),  // Timestamp 
+            uint64(uint256(keccak256(abi.encodePacked(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")))), 
+            uint32(0)                 // Sequence number
+        );
         vm.stopPrank();
         
         // Fast forward time
@@ -101,7 +110,7 @@ contract APRStakingTest is Test {
         
         // Claim unstake
         vm.prank(ADMIN);
-        uint256 amount = staking.claimUnstake(USER, 0);
+        uint256 amount = staking.claimUnstake(USER, requestId);
         
         assertEq(amount, INITIAL_BALANCE);
         assertEq(xfi.balanceOf(USER), INITIAL_BALANCE);
@@ -155,11 +164,19 @@ contract APRStakingTest is Test {
         xfi.approve(address(staking), INITIAL_BALANCE);
         staking.stake(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", address(0));
         staking.requestUnstake(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        
+        // For testing purposes, we're using a simple bytes value for the requestId
+        bytes memory requestId = abi.encodePacked(
+            uint16(0),                // Request type (0 for unstake)
+            uint32(block.timestamp),  // Timestamp 
+            uint64(uint256(keccak256(abi.encodePacked(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")))), 
+            uint32(0)                 // Sequence number
+        );
         vm.stopPrank();
         
         // Try to claim before unbonding period
         vm.prank(USER);
-        staking.claimUnstake(USER, 0);
+        staking.claimUnstake(USER, requestId);
     }
     
     function testFailClaimUnstakeByNonOwner() public {
@@ -168,6 +185,14 @@ contract APRStakingTest is Test {
         xfi.approve(address(staking), INITIAL_BALANCE);
         staking.stake(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", address(0));
         staking.requestUnstake(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        
+        // For testing purposes, we're using a simple bytes value for the requestId
+        bytes memory requestId = abi.encodePacked(
+            uint16(0),                // Request type (0 for unstake)
+            uint32(block.timestamp),  // Timestamp 
+            uint64(uint256(keccak256(abi.encodePacked(USER, INITIAL_BALANCE, "mxvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")))), 
+            uint32(0)                 // Sequence number
+        );
         vm.stopPrank();
         
         // Fast forward time
@@ -176,6 +201,6 @@ contract APRStakingTest is Test {
         // Try to claim as non-admin
         vm.prank(USER);
         vm.expectRevert("AccessControl: account 0x0000000000000000000000000000000000000002 is missing role 0x0000000000000000000000000000000000000000000000000000000000000000");
-        staking.claimUnstake(USER, 0);
+        staking.claimUnstake(USER, requestId);
     }
 } 

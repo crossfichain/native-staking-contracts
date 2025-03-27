@@ -174,7 +174,7 @@ contract APRStakingBase is Test {
      * @param from User address
      * @param requestId Request ID to fulfill
      */
-    function fulfillUnstakeRequest(address from, uint256 requestId) internal {
+    function fulfillUnstakeRequest(address from, bytes memory requestId) internal {
         vm.startPrank(from);
         manager.claimUnstakeAPR(requestId);
         vm.stopPrank();

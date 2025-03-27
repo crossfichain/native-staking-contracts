@@ -43,9 +43,9 @@ interface INativeStakingManager {
      * If there are sufficient liquid assets, withdrawal is immediate
      * Otherwise, it will be queued for the unbonding period
      * @param shares The amount of vault shares to burn
-     * @return assets The amount of XFI withdrawn or 0 if request is queued
+     * @return requestId The withdrawal request ID
      */
-    function withdrawAPY(uint256 shares) external returns (uint256 assets);
+    function withdrawAPY(uint256 shares) external returns (bytes memory requestId);
     
     /**
      * @dev Claims XFI from a completed APY withdrawal request

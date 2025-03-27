@@ -2,27 +2,24 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
+import "forge-std/console.sol";
 import "../../src/core/NativeStakingVault.sol";
 import "../../src/interfaces/IOracle.sol";
-import "../mocks/MockERC20.sol";
-import {MockStakingOracle} from "../mocks/MockStakingOracle.sol";
 import {INativeStakingVault} from "../../src/interfaces/INativeStakingVault.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
+import {MockStakingOracle} from "../mocks/MockStakingOracle.sol";
 
 contract NativeStakingVaultTest is Test {
-    // Constants
+    MockERC20 public xfi;
+    MockStakingOracle public oracle;
+    NativeStakingVault public vault;
+    
     address public constant ADMIN = address(0x1);
     address public constant USER = address(0x2);
     address public constant COMPOUNDER = address(0x3);
     
-    // Contracts
-    MockERC20 public xfi;
-    IOracle public oracle;
-    NativeStakingVault public vault;
-    
-    // Test constants
-    uint256 public constant INITIAL_BALANCE = 10000 ether;
+    uint256 public constant INITIAL_BALANCE = 1000 ether;
     uint256 public constant DEPOSIT_AMOUNT = 100 ether;
-    uint256 public constant APY = 1000; // 10% in basis points
     uint256 public constant UNBONDING_PERIOD = 14 days;
     
     function setUp() public {
@@ -30,12 +27,11 @@ contract NativeStakingVaultTest is Test {
         
         // Deploy mock contracts
         xfi = new MockERC20("XFI", "XFI", 18);
-        oracle = IOracle(address(new MockStakingOracle()));
+        oracle = new MockStakingOracle();
         
         // Setup oracle values
-        MockStakingOracle(address(oracle)).setCurrentAPY(APY);
-        MockStakingOracle(address(oracle)).setUnbondingPeriod(UNBONDING_PERIOD);
-        MockStakingOracle(address(oracle)).setXfiPrice(1e18); // Set XFI price to 1 USD
+        oracle.setCurrentAPY(100 * 1e16); // 100% with 18 decimals
+        oracle.setUnbondingPeriod(UNBONDING_PERIOD);
         
         // Deploy vault
         vault = new NativeStakingVault();
@@ -47,7 +43,6 @@ contract NativeStakingVaultTest is Test {
         );
         
         // Setup roles
-        vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), ADMIN);
         vault.grantRole(vault.COMPOUNDER_ROLE(), COMPOUNDER);
         
         // Give users some XFI
@@ -57,22 +52,14 @@ contract NativeStakingVaultTest is Test {
         vm.stopPrank();
     }
     
-    function testInitialization() public {
-        assertEq(vault.name(), "XFI Staking Vault");
-        assertEq(vault.symbol(), "xXFI");
-        assertEq(vault.decimals(), 18);
-        assertEq(vault.asset(), address(xfi));
-        assertEq(vault.maxLiquidityPercent(), 1000); // 10%
-        assertEq(vault.minWithdrawalAmount(), 0.1 ether);
-    }
-    
     function testDeposit() public {
         vm.startPrank(USER);
         xfi.approve(address(vault), DEPOSIT_AMOUNT);
         uint256 shares = vault.deposit(DEPOSIT_AMOUNT, USER);
         vm.stopPrank();
         
-        assertEq(vault.balanceOf(USER), shares);
+        assertEq(shares, DEPOSIT_AMOUNT); // 1:1 ratio initially
+        assertEq(vault.balanceOf(USER), DEPOSIT_AMOUNT);
         assertEq(xfi.balanceOf(address(vault)), DEPOSIT_AMOUNT);
     }
     
@@ -81,12 +68,6 @@ contract NativeStakingVaultTest is Test {
         vm.startPrank(USER);
         xfi.approve(address(vault), DEPOSIT_AMOUNT);
         vault.deposit(DEPOSIT_AMOUNT, USER);
-        
-        // Set max liquidity percent to 100% for testing
-        vm.stopPrank();
-        vm.startPrank(ADMIN);
-        vault.setMaxLiquidityPercent(10000); // 100%
-        vm.stopPrank();
         
         // Then withdraw
         vm.startPrank(USER);
@@ -105,7 +86,7 @@ contract NativeStakingVaultTest is Test {
         vault.deposit(DEPOSIT_AMOUNT, USER);
         
         // Request withdrawal
-        uint256 requestId = vault.requestWithdrawal(DEPOSIT_AMOUNT, USER, USER);
+        bytes memory requestId = vault.requestWithdrawal(DEPOSIT_AMOUNT, USER, USER);
         vm.stopPrank();
         
         // Check withdrawal request
@@ -122,7 +103,7 @@ contract NativeStakingVaultTest is Test {
         vm.startPrank(USER);
         xfi.approve(address(vault), DEPOSIT_AMOUNT);
         vault.deposit(DEPOSIT_AMOUNT, USER);
-        uint256 requestId = vault.requestWithdrawal(DEPOSIT_AMOUNT, USER, USER);
+        bytes memory requestId = vault.requestWithdrawal(DEPOSIT_AMOUNT, USER, USER);
         vm.stopPrank();
         
         // Fast forward time

@@ -88,14 +88,14 @@ contract NativeStakingManager is
     event APRContractUpdated(address indexed newContract);
     event APYContractUpdated(address indexed newContract);
     event OracleUpdated(address indexed newOracle);
-    event StakedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, bool success, uint256 indexed requestId);
-    event StakedAPY(address indexed user, uint256 xfiAmount, uint256 mpxAmount, uint256 shares, uint256 indexed requestId);
-    event UnstakedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, uint256 indexed requestId);
-    event WithdrawnAPY(address indexed user, uint256 shares, uint256 xfiAssets, uint256 mpxAssets, uint256 indexed requestId);
-    event WithdrawalRequestedAPY(address indexed user, uint256 xfiAssets, uint256 mpxAssets, uint256 indexed requestId);
+    event StakedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, bool success, bytes indexed requestId);
+    event StakedAPY(address indexed user, uint256 xfiAmount, uint256 mpxAmount, uint256 shares, bytes indexed requestId);
+    event UnstakedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, bytes indexed requestId);
+    event WithdrawnAPY(address indexed user, uint256 shares, uint256 xfiAssets, uint256 mpxAssets, bytes indexed requestId);
+    event WithdrawalRequestedAPY(address indexed user, uint256 xfiAssets, uint256 mpxAssets, bytes indexed requestId);
     event UnstakeClaimedAPR(address indexed user, bytes indexed requestId, uint256 xfiAmount, uint256 mpxAmount);
     event WithdrawalClaimedAPY(address indexed user, bytes indexed requestId, uint256 xfiAmount, uint256 mpxAmount);
-    event RewardsClaimedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, uint256 indexed requestId);
+    event RewardsClaimedAPR(address indexed user, uint256 xfiAmount, uint256 mpxAmount, bytes indexed requestId);
     event UnstakeFreezeTimeUpdated(uint256 newUnstakeFreezeTime);
     event LaunchTimestampSet(uint256 timestamp);
     event RequestFulfilled(uint256 indexed requestId, address indexed user, RequestStatus indexed status, string reason);
@@ -107,7 +107,7 @@ contract NativeStakingManager is
     event MinRewardClaimAmountUpdated(uint256 newMinRewardClaimAmount);
     event ValidatorUnbondingStarted(address indexed user, string validator, uint256 endTime);
     event ValidatorUnbondingEnded(address indexed user, string validator);
-    event RewardsClaimedAPRForValidator(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, uint256 indexed requestId);
+    event RewardsClaimedAPRForValidator(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, bytes indexed requestId);
     
     /**
      * @dev Initializes the contract
@@ -286,7 +286,7 @@ contract NativeStakingManager is
         uint256 mpxAmount = oracle.convertXFItoMPX(amount);
         
         // Emit event with request ID
-        emit StakedAPR(msg.sender, amount, mpxAmount, validator, success, requestId);
+        emit StakedAPR(msg.sender, amount, mpxAmount, validator, success, abi.encode(requestId));
         
         return success;
     }
@@ -342,7 +342,7 @@ contract NativeStakingManager is
         uint256 mpxAmount = oracle.convertXFItoMPX(amount);
         
         // Emit event with request ID
-        emit StakedAPY(msg.sender, amount, mpxAmount, shares, requestId);
+        emit StakedAPY(msg.sender, amount, mpxAmount, shares, abi.encode(requestId));
         
         return shares;
     }
@@ -395,7 +395,7 @@ contract NativeStakingManager is
             
             // Emit rewards claimed event
             uint256 rewardsMpxAmount = oracle.convertXFItoMPX(claimableRewards);
-            emit RewardsClaimedAPR(msg.sender, claimableRewards, rewardsMpxAmount, _nextRequestId);
+            emit RewardsClaimedAPR(msg.sender, claimableRewards, rewardsMpxAmount, abi.encode(requestId));
         }
         
         // Call the APR staking contract to request unstake
@@ -418,7 +418,7 @@ contract NativeStakingManager is
         uint256 mpxAmount = oracle.convertXFItoMPX(amount);
         
         // Emit event with request ID - use the bytes requestId from the contract
-        emit UnstakedAPR(msg.sender, amount, mpxAmount, validator, internalRequestId);
+        emit UnstakedAPR(msg.sender, amount, mpxAmount, validator, abi.encode(internalRequestId));
         
         return requestId;
     }
@@ -472,18 +472,16 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Withdraws XFI from the APY model by burning vault shares
-     * If there are sufficient liquid assets, withdrawal is immediate
-     * Otherwise, it will be queued for the unbonding period
-     * @param shares The amount of vault shares to burn
-     * @return assets The amount of XFI withdrawn or 0 if request is queued
+     * @dev Withdraws XFI from the APY staking model
+     * @param shares The amount of vault shares to withdraw
+     * @return requestId The withdrawal request ID (the vault's request ID or a generated one for direct withdrawals)
      */
     function withdrawAPY(uint256 shares) 
         external 
         override 
         whenNotPaused 
         nonReentrant 
-        returns (uint256 assets) 
+        returns (bytes memory requestId) 
     {
         // Check if unstaking is frozen (first month after launch)
         require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
@@ -492,7 +490,7 @@ contract NativeStakingManager is
         require(apyContract.allowance(msg.sender, address(this)) >= shares, "Insufficient share allowance");
         
         // Create a request record for tracking
-        uint256 requestId = _createRequest(
+        uint256 internalRequestId = _createRequest(
             msg.sender, 
             shares, 
             "", 
@@ -502,10 +500,13 @@ contract NativeStakingManager is
         // First try a direct withdrawal
         try apyContract.redeem(shares, msg.sender, msg.sender) returns (uint256 redeemedAssets) {
             // Immediate withdrawal successful
-            assets = redeemedAssets;
+            uint256 assets = redeemedAssets;
             
             // Convert XFI to MPX for the event
             uint256 mpxAssets = oracle.convertXFItoMPX(assets);
+            
+            // Convert to bytes for the return value
+            requestId = abi.encode(internalRequestId);
             
             emit WithdrawnAPY(msg.sender, shares, assets, mpxAssets, requestId);
         } catch {
@@ -514,18 +515,15 @@ contract NativeStakingManager is
             
             // Make the vault withdrawal request
             // The vault maintains its own request ID system internally
-            apyContract.requestWithdrawal(previewAssets, msg.sender, msg.sender);
-            
-            // Assets will be delivered later
-            assets = 0;
+            requestId = apyContract.requestWithdrawal(previewAssets, msg.sender, msg.sender);
             
             // Convert XFI to MPX for the event
             uint256 mpxAssets = oracle.convertXFItoMPX(previewAssets);
             
-            emit WithdrawalRequestedAPY(msg.sender, previewAssets, mpxAssets, requestId);
+            emit WithdrawalRequestedAPY(msg.sender, previewAssets, mpxAssets, abi.encode(internalRequestId));
         }
         
-        return assets;
+        return requestId;
     }
     
     /**
@@ -574,7 +572,7 @@ contract NativeStakingManager is
         external 
         whenNotPaused 
         nonReentrant 
-        returns (uint256 requestId) 
+        returns (bytes memory requestId) 
     {
         require(amount >= minRewardClaimAmount, "Amount must be at least minRewardClaimAmount");
         require(oracle.isValidatorActive(validator), "Validator is not active");
@@ -600,9 +598,19 @@ contract NativeStakingManager is
         // Transfer rewards to user
         require(wxfi.transfer(msg.sender, amount), "Failed to transfer rewards");
         
-        // Create and store request
-        requestId = _nextRequestId++;
-        _requests[requestId] = Request({
+        // Create request record using the new structured ID format
+        uint256 legacyRequestId = _nextRequestId++;
+        
+        // Generate the new formatted request ID
+        requestId = _generateStructuredRequestId(
+            RequestType.CLAIM_REWARDS,
+            msg.sender,
+            amount,
+            validator
+        );
+        
+        // Store using the legacy ID for backward compatibility
+        _requests[legacyRequestId] = Request({
             user: msg.sender,
             amount: amount,
             validator: validator,
@@ -613,7 +621,7 @@ contract NativeStakingManager is
         });
         
         emit RewardsClaimedAPRForValidator(msg.sender, amount, 0, validator, requestId);
-        emit RequestFulfilled(requestId, msg.sender, RequestStatus.FULFILLED, "Success");
+        emit RequestFulfilled(legacyRequestId, msg.sender, RequestStatus.FULFILLED, "Success");
         
         return requestId;
     }
@@ -667,7 +675,7 @@ contract NativeStakingManager is
         uint256 rewardsMpxAmount = oracle.convertXFItoMPX(amount);
         
         // Emit event with request ID
-        emit RewardsClaimedAPR(msg.sender, amount, rewardsMpxAmount, requestId);
+        emit RewardsClaimedAPR(msg.sender, amount, rewardsMpxAmount, abi.encode(requestId));
         
         return amount;
     }
@@ -1260,4 +1268,45 @@ contract NativeStakingManager is
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[50] private __gap;
+
+    /**
+     * @dev Generates a structured request ID in bytes format
+     * @param requestType The type of request
+     * @param user The user making the request
+     * @param amount The amount involved in the request
+     * @param validator The validator ID if applicable
+     * @return requestId The bytes representation of the request ID
+     */
+    function _generateStructuredRequestId(
+        RequestType requestType,
+        address user,
+        uint256 amount,
+        string memory validator
+    ) 
+        internal
+        view
+        returns (bytes memory) 
+    {
+        // 1. Convert request type to 2 bytes
+        uint16 requestTypeValue = uint16(requestType);
+        
+        // 2. Take last 4 bytes of timestamp (covers ~136 years)
+        uint32 timestampValue = uint32(block.timestamp);
+        
+        // 3. Generate 8 bytes from user and amount (randomness component)
+        bytes32 userAmountHash = keccak256(abi.encodePacked(user, amount, validator));
+        uint64 randomComponent = uint64(uint256(userAmountHash));
+        
+        // 4. Use 4 bytes from sequence counter
+        uint32 sequenceValue = uint32(_nextRequestId);
+        
+        // 5. Combine all components into a single uint256
+        uint256 numericId = (uint256(requestTypeValue) << 128) |
+                   (uint256(timestampValue) << 96) |
+                   (uint256(randomComponent) << 32) |
+                   uint256(sequenceValue);
+                   
+        // Convert to bytes
+        return abi.encode(numericId);
+    }
 } 

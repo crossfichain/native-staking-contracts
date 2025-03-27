@@ -98,7 +98,7 @@ contract APRStakingFixTest is Test {
     
     // Request data
     uint256 public normalRequestId = 42;
-    uint256 public structuredRequestId = 0x0100000000AABBCCDD0000002A; // Contains 42 (0x2A) in last 4 bytes
+    uint256 public structuredRequestId = (1 << 32) | 42; // 0x00000000000000000000000000000001 followed by 42 
     uint256 public amount = 100 ether;
     
     function setUp() public {
