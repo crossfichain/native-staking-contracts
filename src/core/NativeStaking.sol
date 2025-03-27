@@ -605,7 +605,7 @@ contract NativeStaking is
         pure 
         returns (uint256) 
     {
-        return uint256(uint32(requestId));
+        return requestId & 0xFFFFFFFF;
     }
     
     /**
@@ -618,7 +618,7 @@ contract NativeStaking is
         pure 
         returns (uint256) 
     {
-        return uint256(uint64(requestId >> 32));
+        return (requestId >> 32) & 0xFFFFFFFFFFFFFFFF;
     }
     
     /**

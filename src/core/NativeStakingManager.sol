@@ -856,7 +856,9 @@ contract NativeStakingManager is
         pure 
         returns (uint256) 
     {
-        return uint256(uint32(requestId));
+        // Use bitwise AND to mask only the last 4 bytes (32 bits)
+        // This prevents overflow by directly extracting the bits
+        return requestId & 0xFFFFFFFF;
     }
 
     /**
@@ -869,8 +871,8 @@ contract NativeStakingManager is
         pure 
         returns (uint256) 
     {
-        uint64 randomComponent = uint64(requestId >> 32);
-        return uint256(randomComponent);
+        // Extract bits 32-95 (8 bytes) using bitwise operations
+        return (requestId >> 32) & 0xFFFFFFFFFFFFFFFF;
     }
     
     /**
@@ -1281,23 +1283,24 @@ contract NativeStakingManager is
         returns (bytes memory) 
     {
         // 1. Convert request type to 2 bytes
-        uint16 requestTypeValue = uint16(requestType);
+        uint256 requestTypeValue = uint256(uint16(requestType));
         
         // 2. Take last 4 bytes of timestamp (covers ~136 years)
-        uint32 timestampValue = uint32(block.timestamp);
+        uint256 timestampValue = uint256(uint32(block.timestamp));
         
         // 3. Generate 8 bytes from user and amount (randomness component)
         bytes32 userAmountHash = keccak256(abi.encodePacked(user, amount, validator));
-        uint64 randomComponent = uint64(uint256(userAmountHash));
+        uint256 randomComponent = uint256(uint64(uint256(userAmountHash)));
         
         // 4. Use 4 bytes from sequence counter
-        uint32 sequenceValue = uint32(_nextRequestId);
+        uint256 sequenceValue = uint256(uint32(_nextRequestId));
         
-        // 5. Combine all components into a single uint256
-        uint256 numericId = (uint256(requestTypeValue) << 128) |
-                   (uint256(timestampValue) << 96) |
-                   (uint256(randomComponent) << 32) |
-                   uint256(sequenceValue);
+        // 5. Combine all components into a single uint256 using safe bit operations
+        uint256 numericId = 0;
+        numericId |= (requestTypeValue & 0xFFFF) << 128;
+        numericId |= (timestampValue & 0xFFFFFFFF) << 96;
+        numericId |= (randomComponent & 0xFFFFFFFFFFFFFFFF) << 32;
+        numericId |= (sequenceValue & 0xFFFFFFFF);
                    
         // Convert to bytes
         return abi.encode(numericId);
