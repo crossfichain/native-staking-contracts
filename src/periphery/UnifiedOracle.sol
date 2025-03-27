@@ -33,6 +33,7 @@ contract UnifiedOracle is
     bytes32 public constant ORACLE_UPDATER_ROLE = keccak256("ORACLE_UPDATER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     
     // External oracle reference
     IDIAOracle public diaOracle;
@@ -46,6 +47,9 @@ contract UnifiedOracle is
     uint256 private _currentAPR;
     uint256 private _unbondingPeriod;
     uint256 private _launchTimestamp;
+    
+    // Mapping to track claimable rewards per user per validator
+    mapping(address => mapping(string => uint256)) private _userValidatorClaimableRewards;
     
     // Events
     event PriceUpdated(string indexed symbol, uint256 price);
@@ -463,6 +467,72 @@ contract UnifiedOracle is
     {
         // Just return the default APR for now
         return _currentAPR;
+    }
+    
+    /**
+     * @dev Gets the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of claimable rewards
+     */
+    function getUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        return _userValidatorClaimableRewards[user][validator];
+    }
+    
+    /**
+     * @dev Clears the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of rewards that were cleared
+     */
+    function clearUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        override 
+        returns (uint256) 
+    {
+        uint256 amount = _userValidatorClaimableRewards[user][validator];
+        _userValidatorClaimableRewards[user][validator] = 0;
+        return amount;
+    }
+    
+    /**
+     * @dev Sets claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @param amount The amount of rewards to set
+     */
+    function setUserClaimableRewardsForValidator(
+        address user, 
+        string calldata validator, 
+        uint256 amount
+    ) external onlyRole(OPERATOR_ROLE) {
+        _userValidatorClaimableRewards[user][validator] = amount;
+    }
+    
+    /**
+     * @dev Batch sets claimable rewards for multiple users from specific validators
+     * @param users Array of user addresses
+     * @param validators Array of validator addresses
+     * @param amounts Array of reward amounts
+     */
+    function batchSetUserClaimableRewardsForValidator(
+        address[] calldata users,
+        string[] calldata validators,
+        uint256[] calldata amounts
+    ) external onlyRole(OPERATOR_ROLE) {
+        require(
+            users.length == validators.length && validators.length == amounts.length,
+            "Array lengths must match"
+        );
+        
+        for (uint256 i = 0; i < users.length; i++) {
+            _userValidatorClaimableRewards[users[i]][validators[i]] = amounts[i];
+        }
     }
     
     /**

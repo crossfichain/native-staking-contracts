@@ -88,6 +88,14 @@ interface INativeStaking {
     function getTotalStaked(address user) external view returns (uint256);
     
     /**
+     * @dev Gets the amount staked with a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount staked with the validator
+     */
+    function getValidatorStake(address user, string calldata validator) external view returns (uint256);
+    
+    /**
      * @dev Gets the total amount of unclaimed rewards for a user
      * @param user The user to get the rewards for
      * @return The total amount of unclaimed rewards

@@ -47,7 +47,7 @@ contract NativeStakingE2ETest is Test {
         // Setup oracle values
         oracle.setCurrentAPY(APY);
         oracle.setUnbondingPeriod(UNBONDING_PERIOD);
-        oracle.setPrice(1e18); // Set XFI price to 1 USD
+        oracle.setXfiPrice(1e18); // Set XFI price to 1 USD
         
         // Deploy vault
         vault = new NativeStakingVault();
@@ -92,7 +92,7 @@ contract NativeStakingE2ETest is Test {
 
         // Setup initial state
         oracle.setCurrentAPY(APY);
-        oracle.setPrice(1e18);
+        oracle.setXfiPrice(1e18); // Fix: Use setXfiPrice instead of setPrice
 
         // User1 stakes XFI through manager
         vm.startPrank(user1);
@@ -129,10 +129,14 @@ contract NativeStakingE2ETest is Test {
         vault.setMaxLiquidityPercent(10000); // 100%
         vm.stopPrank();
 
+        // Get current shares after rewards
+        uint256 currentShares = vault.balanceOf(user1);
+        assertGt(currentShares, shares, "Shares should have increased due to rewards");
+
         // Request withdrawal through manager
         vm.startPrank(user1);
-        vault.approve(address(manager), shares);
-        uint256 assets = manager.withdrawAPY(shares);
+        vault.approve(address(manager), currentShares);
+        uint256 assets = manager.withdrawAPY(currentShares);
         vm.stopPrank();
 
         // Since we set maxLiquidityPercent to 100%, withdrawal should be immediate
@@ -227,5 +231,64 @@ contract NativeStakingE2ETest is Test {
         // Allow for small rounding differences (1 wei)
         uint256 diff = assets1 > assets2 ? assets1 - assets2 : assets2 - assets1;
         assertLe(diff, 1, "Both users should get equal rewards (within 1 wei)");
+    }
+    
+    function testClaimRewardsFromMultipleValidators() public {
+        // Setup
+        string memory validator1 = "mxva123456789";
+        string memory validator2 = "mxva987654321";
+        uint256 stakeAmount = 1000 ether;
+        uint256 rewardAmount1 = 100 ether;
+        uint256 rewardAmount2 = 200 ether;
+        
+        // Stake with multiple validators
+        vm.deal(address(this), stakeAmount * 2);
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, validator1);
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, validator2);
+        
+        // Set rewards for both validators
+        vm.prank(address(oracle));
+        oracle.setUserClaimableRewardsForValidator(address(this), validator1, rewardAmount1);
+        oracle.setUserClaimableRewardsForValidator(address(this), validator2, rewardAmount2);
+        
+        // Claim rewards from first validator
+        uint256 claimedAmount1 = manager.claimRewardsAPRForValidator(validator1);
+        assertEq(claimedAmount1, rewardAmount1, "Incorrect reward amount claimed for validator1");
+        
+        // Claim rewards from second validator
+        uint256 claimedAmount2 = manager.claimRewardsAPRForValidator(validator2);
+        assertEq(claimedAmount2, rewardAmount2, "Incorrect reward amount claimed for validator2");
+        
+        // Verify total rewards received
+        assertEq(xfi.balanceOf(address(this)), rewardAmount1 + rewardAmount2, "Total rewards not transferred correctly");
+    }
+    
+    function testClaimAllRewardsAfterMultipleStakes() public {
+        // Setup
+        string memory validator1 = "mxva123456789";
+        string memory validator2 = "mxva987654321";
+        uint256 stakeAmount = 1000 ether;
+        uint256 rewardAmount1 = 100 ether;
+        uint256 rewardAmount2 = 200 ether;
+        
+        // Stake with multiple validators
+        vm.deal(address(this), stakeAmount * 2);
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, validator1);
+        manager.stakeAPR{value: stakeAmount}(stakeAmount, validator2);
+        
+        // Set rewards for both validators
+        vm.prank(address(oracle));
+        oracle.setUserClaimableRewardsForValidator(address(this), validator1, rewardAmount1);
+        oracle.setUserClaimableRewardsForValidator(address(this), validator2, rewardAmount2);
+        
+        // Set total rewards (should match sum of validator rewards)
+        oracle.setUserClaimableRewards(address(this), rewardAmount1 + rewardAmount2);
+        
+        // Claim all rewards at once
+        uint256 claimedAmount = manager.claimRewardsAPR();
+        
+        // Verify
+        assertEq(claimedAmount, rewardAmount1 + rewardAmount2, "Incorrect total reward amount claimed");
+        assertEq(xfi.balanceOf(address(this)), rewardAmount1 + rewardAmount2, "Total rewards not transferred correctly");
     }
 } 

@@ -12,3 +12,4 @@ out/
 
 # Dotenv file
 .env
+.cursor/

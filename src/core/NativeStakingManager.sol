@@ -107,11 +107,12 @@ contract NativeStakingManager is
     event MinRewardClaimAmountUpdated(uint256 newMinRewardClaimAmount);
     event ValidatorUnbondingStarted(address indexed user, string validator, uint256 endTime);
     event ValidatorUnbondingEnded(address indexed user, string validator);
+    event RewardsClaimedAPRForValidator(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, uint256 indexed requestId);
     
     /**
      * @dev Initializes the contract
      * @param _aprContract The address of the APR staking contract
-     * @param _apyContract The address of the APY staking vault
+     * @param _apyContract The address of the APY staking contract
      * @param _wxfi The address of the WXFI token
      * @param _oracle The address of the oracle
      * @param _enforceMinimums Whether to enforce minimum staking amounts
@@ -315,21 +316,15 @@ contract NativeStakingManager is
             
             // Wrap XFI to WXFI
             wxfi.deposit{value: amount}();
-            
-            // Approve APY contract to spend WXFI (only exact amount)
-            // First reset approval to 0 to prevent some ERC20 issues
-            IERC20(address(wxfi)).approve(address(apyContract), 0);
-            // Then set exact approval amount
-            IERC20(address(wxfi)).approve(address(apyContract), amount);
         } else {
             // User is staking WXFI
             IERC20(address(wxfi)).transferFrom(msg.sender, address(this), amount);
-            
-            // Approve APY contract to spend WXFI (only exact amount)
-            // First reset approval to 0 to prevent some ERC20 issues
-            IERC20(address(wxfi)).approve(address(apyContract), 0);
-            // Then set exact approval amount
-            IERC20(address(wxfi)).approve(address(apyContract), amount);
+        }
+        
+        // Ensure vault has approval to spend WXFI
+        uint256 currentAllowance = IERC20(address(wxfi)).allowance(address(this), address(apyContract));
+        if (currentAllowance < amount) {
+            IERC20(address(wxfi)).approve(address(apyContract), type(uint256).max);
         }
         
         // Deposit to the APY staking contract (vault)
@@ -495,6 +490,9 @@ contract NativeStakingManager is
         // Check if unstaking is frozen (first month after launch)
         require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
         
+        // Check if user has approved shares for withdrawal
+        require(apyContract.allowance(msg.sender, address(this)) >= shares, "Insufficient share allowance");
+        
         // Create a request record for tracking
         uint256 requestId = _createRequest(
             msg.sender, 
@@ -554,7 +552,61 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Claims rewards from the APR model
+     * @dev Claims rewards from the APR model for a specific validator
+     * @param validator The validator to claim rewards from
+     * @return amount The amount of rewards claimed
+     */
+    function claimRewardsAPRForValidator(string calldata validator)
+        external
+        whenNotPaused
+        nonReentrant
+        returns (uint256 amount)
+    {
+        // Check oracle freshness
+        _checkOracleFreshness();
+
+        // Get claimable rewards for this validator
+        amount = oracle.getUserClaimableRewardsForValidator(msg.sender, validator);
+        require(amount > 0, "No rewards to claim");
+
+        // Enforce minimum amount if enabled
+        if (enforceMinimumAmounts) {
+            require(amount >= minRewardClaimAmount, "Amount must be at least 1 XFI");
+        }
+
+        // Get total stake for safety check
+        uint256 totalStake = aprContract.getValidatorStake(msg.sender, validator);
+        require(totalStake > 0, "No stake found");
+
+        // Safety check - rewards should not exceed 25% of stake
+        require(amount <= (totalStake * 25) / 100, "Reward amount exceeds reasonable threshold");
+
+        // Clear rewards on oracle to prevent reentrancy
+        oracle.clearUserClaimableRewardsForValidator(msg.sender, validator);
+
+        // Transfer rewards directly to the user
+        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
+        require(transferred, "Reward transfer failed");
+
+        // Convert XFI to MPX for the event
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
+
+        // Create a request record
+        uint256 requestId = _createRequest(
+            msg.sender,
+            amount,
+            validator,
+            RequestType.CLAIM_REWARDS
+        );
+
+        // Emit event
+        emit RewardsClaimedAPRForValidator(msg.sender, amount, mpxAmount, validator, requestId);
+
+        return amount;
+    }
+
+    /**
+     * @dev Claims all rewards from the APR model
      * @return amount The amount of rewards claimed
      */
     function claimRewardsAPR() 
@@ -586,8 +638,9 @@ contract NativeStakingManager is
         // Clear rewards on oracle to prevent reentrancy
         oracle.clearUserClaimableRewards(msg.sender);
         
-        // Call APR contract to handle the claim, passing the amount from oracle
-        aprContract.claimRewards(msg.sender, amount);
+        // Directly transfer the rewards tokens to the user
+        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
+        require(transferred, "Reward transfer failed");
         
         // Create a request record
         uint256 requestId = _createRequest(
@@ -596,10 +649,6 @@ contract NativeStakingManager is
             "", 
             RequestType.CLAIM_REWARDS
         );
-        
-        // Directly transfer the rewards tokens to the user
-        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
-        require(transferred, "Reward transfer failed");
         
         // Convert XFI to MPX for the event
         uint256 rewardsMpxAmount = oracle.convertXFItoMPX(amount);

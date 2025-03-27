@@ -590,6 +590,28 @@ contract NativeStaking is
     }
     
     /**
+     * @dev Gets the amount staked with a specific validator by a user
+     * @param user The user to get the stake for
+     * @param validator The validator to get the stake for
+     * @return The amount staked with the validator
+     */
+    function getValidatorStake(address user, string calldata validator) 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        uint256 totalStake = 0;
+        for (uint256 i = 0; i < _userStakes[user].length; i++) {
+            StakeInfo storage stakeItem = _userStakes[user][i];
+            if (stakeItem.unbondingAt == 0 && stakeItem.amount > 0) {
+                totalStake += stakeItem.amount;
+            }
+        }
+        return totalStake;
+    }
+    
+    /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps

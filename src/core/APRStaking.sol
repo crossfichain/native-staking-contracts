@@ -100,11 +100,13 @@ contract APRStaking is
     {
         require(amount > 0, "Amount must be greater than 0");
         require(bytes(validator).length > 0, "Validator cannot be empty");
-        require(token == stakingToken, "Invalid token");
+        require(token == stakingToken || token == address(0), "Invalid token");
         
         // Transfer tokens from the manager to this contract
-        bool transferred = IERC20(token).transferFrom(msg.sender, address(this), amount);
-        require(transferred, "Token transfer failed");
+        if (token != address(0)) {
+            bool transferred = IERC20(token).transferFrom(msg.sender, address(this), amount);
+            require(transferred, "Token transfer failed");
+        }
         
         // Update staking state
         _userTotalStaked[user] += amount;

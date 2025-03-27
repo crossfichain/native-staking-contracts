@@ -3,36 +3,42 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../../src/core/NativeStakingVault.sol";
+import "../../src/interfaces/IOracle.sol";
 import "../mocks/MockERC20.sol";
-import "../mocks/MockStakingOracle.sol";
+import {MockStakingOracle} from "../mocks/MockStakingOracle.sol";
 import {INativeStakingVault} from "../../src/interfaces/INativeStakingVault.sol";
 
 contract NativeStakingVaultTest is Test {
-    // Test constants
+    // Constants
     address public constant ADMIN = address(0x1);
     address public constant USER = address(0x2);
     address public constant COMPOUNDER = address(0x3);
     
     // Contracts
     MockERC20 public xfi;
-    MockStakingOracle public oracle;
+    IOracle public oracle;
     NativeStakingVault public vault;
     
-    uint256 public constant INITIAL_BALANCE = 1000 ether;
+    // Test constants
+    uint256 public constant INITIAL_BALANCE = 10000 ether;
     uint256 public constant DEPOSIT_AMOUNT = 100 ether;
     uint256 public constant APY = 1000; // 10% in basis points
-    uint256 public constant UNBONDING_PERIOD = 7 days;
+    uint256 public constant UNBONDING_PERIOD = 14 days;
     
     function setUp() public {
+        vm.startPrank(ADMIN);
+        
         // Deploy mock contracts
         xfi = new MockERC20("XFI", "XFI", 18);
-        oracle = new MockStakingOracle();
+        oracle = IOracle(address(new MockStakingOracle()));
+        
+        // Setup oracle values
+        MockStakingOracle(address(oracle)).setCurrentAPY(APY);
+        MockStakingOracle(address(oracle)).setUnbondingPeriod(UNBONDING_PERIOD);
+        MockStakingOracle(address(oracle)).setXfiPrice(1e18); // Set XFI price to 1 USD
         
         // Deploy vault
         vault = new NativeStakingVault();
-        
-        // Initialize vault with admin as msg.sender
-        vm.startPrank(ADMIN);
         vault.initialize(
             address(xfi),
             address(oracle),
@@ -41,16 +47,14 @@ contract NativeStakingVaultTest is Test {
         );
         
         // Setup roles
+        vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), ADMIN);
         vault.grantRole(vault.COMPOUNDER_ROLE(), COMPOUNDER);
-        vm.stopPrank();
         
-        // Setup initial balances
+        // Give users some XFI
         xfi.mint(USER, INITIAL_BALANCE);
+        xfi.mint(COMPOUNDER, INITIAL_BALANCE);
         
-        // Setup oracle values
-        oracle.setAPY(APY);
-        oracle.setUnbondingPeriod(UNBONDING_PERIOD);
-        oracle.setPrice(1e18); // Set XFI price to 1 USD
+        vm.stopPrank();
     }
     
     function testInitialization() public {

@@ -88,4 +88,25 @@ interface IOracle {
      * @return newAmount The new reward amount after decrease
      */
     function decreaseUserClaimableRewards(address user, uint256 amount) external returns (uint256 newAmount);
+
+    /**
+     * @dev Gets the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of claimable rewards
+     */
+    function getUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256);
+
+    /**
+     * @dev Clears the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of rewards that were cleared
+     */
+    function clearUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        returns (uint256);
 } 

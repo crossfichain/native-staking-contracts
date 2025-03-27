@@ -397,8 +397,17 @@ contract NativeStakingVault is
         uint256 timeElapsed = block.timestamp - _lastCompoundTimestamp;
         uint256 currentAssets = rawAssets + pendingWithdrawals;
         
+        // If there are no assets or no time has elapsed, return current assets
+        if (currentAssets == 0 || timeElapsed == 0) {
+            return currentAssets;
+        }
+        
         // Calculate rewards using APY formula: rewards = principal * (APY/100) * (time/365 days)
         uint256 apy = oracle.getCurrentAPY();
+        if (apy == 0) {
+            return currentAssets;
+        }
+        
         uint256 rewardsAmount = (currentAssets * apy * timeElapsed) / (365 days * 10000); // APY is in basis points
         
         // Calculate total with compounding
@@ -412,7 +421,7 @@ contract NativeStakingVault is
      * @return The maximum amount of assets available for immediate withdrawal
      */
     function _maxWithdrawalLiquidity() private view returns (uint256) {
-        uint256 totalVaultAssets = super.totalAssets();
+        uint256 totalVaultAssets = _calculateTotalAssetsWithCompounding();
         
         // Subtract pending withdrawals
         if (totalVaultAssets <= _totalPendingWithdrawals) {
