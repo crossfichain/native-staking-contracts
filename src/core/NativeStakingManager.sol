@@ -520,8 +520,8 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Claims XFI from a completed APY withdrawal request
-     * @param requestId The ID of the withdrawal request to claim
+     * @dev Claims a withdrawal request from the APY model
+     * @param requestId The ID of the withdrawal request
      * @return assets The amount of XFI claimed
      */
     function claimWithdrawalAPY(bytes calldata requestId) 
@@ -537,25 +537,65 @@ contract NativeStakingManager is
             // If already in a proper format, use directly
             vaultRequestId = requestId;
         } else {
-            // For structured IDs, we need to extract the sequence component
-            // First decode the numeric ID
-            uint256 numericId = abi.decode(requestId, (uint256));
+            // Try to decode as uint256, handle potential decoding errors
+            bool decodingSuccess = false;
+            uint256 numericId = 0;
             
-            // Check if it's a structured ID
-            if (isStructuredRequestId(numericId)) {
+            // Manual decoding attempt without try-catch
+            if (requestId.length == 32) {
+                decodingSuccess = true;
+                assembly {
+                    numericId := mload(add(requestId.offset, 32))
+                }
+            }
+            
+            if (decodingSuccess && isStructuredRequestId(numericId)) {
                 // Extract the sequence (last 4 bytes)
                 uint256 sequence = getSequenceFromId(numericId);
                 
                 // Re-encode as bytes for the vault
                 vaultRequestId = abi.encode(sequence);
             } else {
-                // Use as-is if not structured
+                // Use as-is if not structured or decoding failed
                 vaultRequestId = requestId;
             }
         }
         
-        // Call the vault with the properly formatted request ID
-        assets = apyContract.claimWithdrawal(vaultRequestId);
+        // First attempt with transformed request ID
+        bool success = false;
+        bytes memory returnData;
+        
+        // Manual low-level call instead of try-catch
+        (success, returnData) = address(apyContract).call(
+            abi.encodeWithSelector(apyContract.claimWithdrawal.selector, vaultRequestId)
+        );
+        
+        if (success) {
+            // Decode the returned assets
+            assets = abi.decode(returnData, (uint256));
+        } else {
+            // Only try the original ID if it's different from what we tried
+            if (keccak256(vaultRequestId) != keccak256(requestId)) {
+                // Try again with the original request ID
+                (success, returnData) = address(apyContract).call(
+                    abi.encodeWithSelector(apyContract.claimWithdrawal.selector, requestId)
+                );
+                
+                if (success) {
+                    assets = abi.decode(returnData, (uint256));
+                } else {
+                    // If both attempts failed, revert with the original error
+                    assembly {
+                        revert(add(returnData, 32), mload(returnData))
+                    }
+                }
+            } else {
+                // If we already tried with the original ID, revert
+                assembly {
+                    revert(add(returnData, 32), mload(returnData))
+                }
+            }
+        }
         
         // Convert XFI to MPX for the event
         uint256 mpxAssets = oracle.convertXFItoMPX(assets);
@@ -866,8 +906,6 @@ contract NativeStakingManager is
         pure 
         returns (uint256) 
     {
-        // Use bitwise AND to mask only the last 4 bytes (32 bits)
-        // This prevents overflow by directly extracting the bits
         return requestId & 0xFFFFFFFF;
     }
 
@@ -881,7 +919,6 @@ contract NativeStakingManager is
         pure 
         returns (uint256) 
     {
-        // Extract bits 32-95 (8 bytes) using bitwise operations
         return (requestId >> 32) & 0xFFFFFFFFFFFFFFFF;
     }
     

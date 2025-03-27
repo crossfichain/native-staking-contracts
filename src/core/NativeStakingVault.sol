@@ -257,6 +257,114 @@ contract NativeStakingVault is
     }
     
     /**
+     * @dev Finds a withdrawal request by its ID or extracted sequence
+     * @param requestId The request ID to find
+     * @return The withdrawal request
+     */
+    function _findWithdrawalRequest(bytes calldata requestId) 
+        internal 
+        view 
+        returns (WithdrawalRequest storage) 
+    {
+        // Direct lookup first (most efficient path)
+        WithdrawalRequest storage request = _withdrawalRequests[requestId];
+        
+        // If found via direct lookup, return it
+        if (request.owner != address(0)) {
+            return request;
+        }
+        
+        // If not found and format seems structured (has minimum expected length)
+        if (requestId.length >= 62) {
+            address requestOwner;
+            uint256 sequence;
+            
+            // Extract owner from position 6 (after 2-byte type + 4-byte timestamp)
+            assembly {
+                let offset := add(requestId.offset, 6)
+                requestOwner := shr(96, calldataload(offset))
+            }
+            
+            // Extract sequence from last 4 bytes
+            assembly {
+                let len := requestId.length
+                let offset := add(requestId.offset, sub(len, 4))
+                sequence := and(calldataload(offset), 0xFFFFFFFF)
+            }
+            
+            // Look through this user's requests for matching sequence
+            bytes[] storage userRequests = _userWithdrawalRequestIds[requestOwner];
+            for (uint256 i = 0; i < userRequests.length; i++) {
+                bytes memory storedId = userRequests[i];
+                if (storedId.length >= 4) {
+                    // Extract sequence from stored ID
+                    uint256 storedSequence;
+                    assembly {
+                        let len := mload(storedId)
+                        let ptr := add(add(storedId, 0x20), sub(len, 4))
+                        storedSequence := and(mload(ptr), 0xFFFFFFFF)
+                    }
+                    
+                    if (storedSequence == sequence) {
+                        return _withdrawalRequests[storedId];
+                    }
+                }
+            }
+        }
+        
+        // If direct lookup and sequence extraction failed, try numeric ID extraction
+        if (requestId.length == 32) {
+            // Try to decode as uint256
+            uint256 numericId;
+            assembly {
+                numericId := calldataload(requestId.offset)
+            }
+            
+            // Only extract sequence if it's a structured ID
+            if (numericId >= 4294967296) { // 2^32
+                uint256 sequence = numericId & 0xFFFFFFFF; // Extract last 4 bytes
+                
+                // Try to find by sequence across all users (slower path)
+                address[] memory allUsers = _getAllUsers();
+                for (uint256 u = 0; u < allUsers.length; u++) {
+                    bytes[] storage userRequests = _userWithdrawalRequestIds[allUsers[u]];
+                    for (uint256 i = 0; i < userRequests.length; i++) {
+                        bytes memory storedId = userRequests[i];
+                        if (storedId.length >= 4) {
+                            uint256 storedSequence;
+                            assembly {
+                                let len := mload(storedId)
+                                let ptr := add(add(storedId, 0x20), sub(len, 4))
+                                storedSequence := and(mload(ptr), 0xFFFFFFFF)
+                            }
+                            
+                            if (storedSequence == sequence) {
+                                return _withdrawalRequests[storedId];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fall back to empty request if nothing found
+        return request;
+    }
+    
+    /**
+     * @dev Helper function to get all users with withdrawal requests
+     * @return Array of user addresses
+     * @dev This is a simplified implementation that would need optimization in production
+     */
+    function _getAllUsers() internal view returns (address[] memory) {
+        // This is a simplified implementation
+        // In production, maintain a mapping of all users with withdrawal requests
+        address[] memory users = new address[](1);
+        users[0] = msg.sender;
+        return users;
+    }
+    
+    /**
      * @dev Claims assets from a completed withdrawal request
      * @param requestId The ID of the withdrawal request
      * @return assets The amount of assets claimed
@@ -267,7 +375,7 @@ contract NativeStakingVault is
         nonReentrant 
         returns (uint256 assets) 
     {
-        WithdrawalRequest storage request = _withdrawalRequests[requestId];
+        WithdrawalRequest storage request = _findWithdrawalRequest(requestId);
         require(request.owner != address(0), "Invalid request ID");
         require(!request.completed, "Already claimed");
         require(block.timestamp >= request.unlockTime, "Still in unbonding period");

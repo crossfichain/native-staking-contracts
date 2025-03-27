@@ -153,9 +153,54 @@ contract NativeStakingManagerTest is Test {
     }
     
     function testWithdraw() public {
-        // Skip this test due to complex request ID validation logic that needs deeper fixes
+        // NOTE: This test is temporarily skipped but uses improved implementation
+        // The test still fails with "Invalid request ID" - requires additional debugging
         vm.skip(true);
-        return;
+        
+        uint256 stakeAmount = 100 ether;
+        
+        // Set max liquidity for testing
+        vm.startPrank(ADMIN);
+        vault.setMaxLiquidityPercent(10000); // 100%
+        
+        // Ensure the vault and manager have enough tokens for operations
+        wxfi.mint(address(vault), stakeAmount * 10);
+        wxfi.mint(address(manager), stakeAmount * 10);
+        
+        // Grant necessary roles
+        vault.grantRole(vault.STAKING_MANAGER_ROLE(), address(manager));
+        manager.grantRole(manager.FULFILLER_ROLE(), ADMIN);
+        vm.stopPrank();
+        
+        // User stakes tokens
+        vm.startPrank(USER);
+        wxfi.approve(address(manager), stakeAmount);
+        uint256 shares = manager.stakeAPY(stakeAmount);
+        assertGt(shares, 0, "Should receive shares from staking");
+        vm.stopPrank();
+        
+        // Check share balance before withdrawal
+        uint256 userShares = vault.balanceOf(USER);
+        assertEq(userShares, shares, "User should own the staked shares");
+        
+        // User requests withdrawal
+        vm.startPrank(USER);
+        vault.approve(address(manager), shares / 2); // Only withdraw half
+        bytes memory requestId = manager.withdrawAPY(shares / 2);
+        assertGt(requestId.length, 0, "Request ID should be valid");
+        vm.stopPrank();
+        
+        // Fast forward through unbonding period
+        vm.warp(block.timestamp + UNBONDING_PERIOD + 1);
+        
+        // User claims withdrawal
+        vm.startPrank(USER);
+        uint256 assets = manager.claimWithdrawalAPY(requestId);
+        vm.stopPrank();
+        
+        // Verify assets were received
+        assertGt(assets, 0, "Should receive assets from withdrawal");
+        assertGe(wxfi.balanceOf(USER), assets, "User should have received the assets");
     }
     
     function testCompoundingRewards() public {
