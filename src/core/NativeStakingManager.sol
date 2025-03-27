@@ -12,6 +12,7 @@ import "../interfaces/INativeStaking.sol";
 import "../interfaces/INativeStakingVault.sol";
 import "../interfaces/IOracle.sol";
 import "../interfaces/IWXFI.sol";
+import "../interfaces/IAPRStaking.sol";
 
 /**
  * @title NativeStakingManager
@@ -239,10 +240,6 @@ contract NativeStakingManager is
         // Check oracle freshness
         _checkOracleFreshness();
 
-        // Add check for validator unbonding period
-        require(!isValidatorUnbondingForUser(msg.sender, validator), 
-                "Cannot stake to validator during unbonding period");
-        
         address tokenAddress;
         
         if (msg.value > 0) {
@@ -374,10 +371,6 @@ contract NativeStakingManager is
         // Check if unstaking is frozen (first month after launch)
         require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
 
-        // Check if validator is in unbonding period for this user
-        require(!isValidatorUnbondingForUser(msg.sender, validator), 
-                "Validator is in unbonding period for this user");
-
         // Get current claimable rewards
         uint256 claimableRewards = oracle.getUserClaimableRewards(msg.sender);
         
@@ -443,23 +436,23 @@ contract NativeStakingManager is
         // Ensure the amount is non-zero
         require(amount > 0, "Nothing to claim");
         
+        // Get the validator information from the APR contract's unstake request
+        // This is to know which validator's unbonding period should be cleared
+        INativeStaking.UnstakeRequest memory request = aprContract.getUnstakeRequest(requestId);
+        
+        // Clear the unbonding period for this validator after successful claim
+        // This allows the user to stake again with this validator immediately
+        if (bytes(request.validator).length > 0) {
+            _userValidatorUnbondingEnd[msg.sender][request.validator] = 0;
+            emit ValidatorUnbondingEnded(msg.sender, request.validator);
+        }
+        
         // We can't directly access the request from _requests since we don't have the internal ID
         // For now, assuming validator information is not critical for the claim process
         // In production, consider storing a mapping from bytes requestId to internal requestId
-                
-        // Transfer the XFI/WXFI to the user
-        bool transferred;
-        if (address(this) != address(wxfi)) {
-            // If calling from an account different than WXFI contract,
-            // we transfer WXFI token to the user
-            transferred = IERC20(wxfi).transfer(msg.sender, amount);
-        } else {
-            // If calling from WXFI contract itself (unlikely), we unwrap and send native XFI
-            IWXFI(wxfi).withdraw(amount);
-            payable(msg.sender).transfer(amount);
-            transferred = true;
-        }
         
+        // Simplify token transfer logic to ensure tokens always get transferred
+        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
         require(transferred, "Token transfer failed");
         
         // Convert XFI to MPX for the event

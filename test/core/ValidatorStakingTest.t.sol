@@ -222,7 +222,7 @@ contract ValidatorStakingTest is Test {
         
         // Try to unstake more than available balance
         vm.startPrank(USER);
-        vm.expectRevert("Validator is in unbonding period for this user");
+        vm.expectRevert("Insufficient stake for this validator");
         manager.unstakeAPR(100e18, VALIDATOR1);
         vm.stopPrank();
     }

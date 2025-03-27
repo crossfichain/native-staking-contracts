@@ -23,14 +23,18 @@ interface INativeStaking {
     
     /**
      * @dev Struct to track pending unstake requests
+     * @param user The user who is unstaking
      * @param amount The amount to unstake
-     * @param unlockTime The timestamp when funds can be claimed
-     * @param completed Whether the unstake has been completed (claimed)
+     * @param validator The validator address/ID
+     * @param timestamp The timestamp when the request was made
+     * @param claimed Whether the unstake has been claimed
      */
     struct UnstakeRequest {
+        address user;
         uint256 amount;
-        uint256 unlockTime;
-        bool completed;
+        string validator;
+        uint256 timestamp;
+        bool claimed;
     }
     
     /**
@@ -61,6 +65,13 @@ interface INativeStaking {
     function claimUnstake(address user, bytes calldata requestId) external returns (uint256 amount);
     
     /**
+     * @dev Gets a specific unstake request
+     * @param requestId The ID of the request
+     * @return The UnstakeRequest struct
+     */
+    function getUnstakeRequest(bytes calldata requestId) external view returns (UnstakeRequest memory);
+    
+    /**
      * @dev Claims staking rewards for a user
      * @param user The user to claim rewards for
      * @param rewardAmount The amount of rewards to claim (determined by oracle)
@@ -83,7 +94,7 @@ interface INativeStaking {
     function getUserUnstakeRequests(address user) external view returns (UnstakeRequest[] memory);
     
     /**
-     * @dev Gets a specific unstake request for a user
+     * @dev Gets a specific unstake request for a user (legacy function)
      * @param user The user to get the request for
      * @param requestId The ID of the request
      * @return The UnstakeRequest struct

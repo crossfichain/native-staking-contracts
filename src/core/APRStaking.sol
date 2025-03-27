@@ -47,15 +47,7 @@ contract APRStaking is
     mapping(string => uint256) private _validatorTotalStaked;
     
     // Unstaking state
-    struct UnstakeRequest {
-        address user;
-        uint256 amount;
-        string validator;
-        uint256 timestamp;
-        bool claimed;
-    }
-    
-    mapping(bytes => UnstakeRequest) private _unstakeRequests;
+    mapping(bytes => IAPRStaking.UnstakeRequest) private _unstakeRequests;
     uint256 private _nextUnstakeRequestId;
     
     // Events
@@ -247,7 +239,7 @@ contract APRStaking is
             sequenceValue             // Sequence counter
         );
         
-        _unstakeRequests[requestId] = UnstakeRequest({
+        _unstakeRequests[requestId] = IAPRStaking.UnstakeRequest({
             user: user,
             amount: amount,
             validator: validator,
@@ -274,7 +266,7 @@ contract APRStaking is
         returns (uint256 amount) 
     {
         // Get the request directly using the bytes requestId
-        UnstakeRequest storage request = _unstakeRequests[requestId];
+        IAPRStaking.UnstakeRequest storage request = _unstakeRequests[requestId];
         require(request.user == user, "Not request owner");
         require(!request.claimed, "Already claimed");
         require(block.timestamp >= request.timestamp + oracle.getUnbondingPeriod(), "Still in unbonding period");
@@ -282,8 +274,13 @@ contract APRStaking is
         amount = request.amount;
         request.claimed = true;
         
-        // Transfer tokens back to the manager
-        bool transferred = IERC20(stakingToken).transfer(msg.sender, amount);
+        // Make sure we have enough tokens to transfer
+        IERC20 token = IERC20(stakingToken);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= amount, "Insufficient contract balance");
+        
+        // Transfer tokens back to the caller
+        bool transferred = token.transfer(msg.sender, amount);
         require(transferred, "Token transfer failed");
         
         emit UnstakeClaimed(user, amount, requestId);
@@ -375,6 +372,22 @@ contract APRStaking is
         returns (string[] memory) 
     {
         return _userValidators[user];
+    }
+    
+    /**
+     * @dev Gets details of an unstake request
+     * @param requestId The ID of the unstake request
+     * @return request The unstake request details
+     */
+    function getUnstakeRequest(
+        bytes calldata requestId
+    )
+        external
+        view
+        override
+        returns (IAPRStaking.UnstakeRequest memory)
+    {
+        return _unstakeRequests[requestId];
     }
     
     /**

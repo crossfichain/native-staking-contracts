@@ -2,6 +2,15 @@
 pragma solidity 0.8.26;
 
 interface IAPRStaking {
+    // Define UnstakeRequest struct for interface
+    struct UnstakeRequest {
+        address user;
+        uint256 amount;
+        string validator;
+        uint256 timestamp;
+        bool claimed;
+    }
+
     /**
      * @dev Stakes XFI tokens for a specific validator
      * @param user The address of the user staking
@@ -39,6 +48,15 @@ interface IAPRStaking {
         address user,
         bytes calldata requestId
     ) external returns (uint256 amount);
+
+    /**
+     * @dev Gets details of an unstake request
+     * @param requestId The ID of the unstake request
+     * @return The unstake request details
+     */
+    function getUnstakeRequest(
+        bytes calldata requestId
+    ) external view returns (UnstakeRequest memory);
 
     /**
      * @dev Claims accumulated rewards

@@ -111,6 +111,9 @@ contract APRStakingTest is Test {
         // Fast forward time
         vm.warp(block.timestamp + UNBONDING_PERIOD + 1);
         
+        // Make sure the contract has enough tokens to transfer during claim
+        deal(address(xfi), address(staking), INITIAL_BALANCE);
+        
         // Claim unstake
         vm.prank(ADMIN);
         uint256 amount = staking.claimUnstake(USER, requestId);
