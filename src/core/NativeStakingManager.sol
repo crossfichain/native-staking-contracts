@@ -820,19 +820,31 @@ contract NativeStakingManager is
     }
     
     /**
+     * @dev Checks if a requestId is in the new structured format
+     * @param requestId The request ID to check
+     * @return True if the requestId is in structured format, false if legacy
+     */
+    function isStructuredRequestId(uint256 requestId) 
+        public 
+        pure 
+        returns (bool) 
+    {
+        return requestId >= 4294967296; // 2^32
+    }
+
+    /**
      * @dev Extracts the sequence number from a structured request ID
      * @param requestId The structured request ID
      * @return The sequence number component
      */
     function getSequenceFromId(uint256 requestId) 
-        external 
+        public 
         pure 
         returns (uint256) 
     {
-        uint32 sequenceValue = uint32(requestId);
-        return uint256(sequenceValue);
+        return uint256(uint32(requestId));
     }
-    
+
     /**
      * @dev Extracts the random component from a structured request ID
      * @param requestId The structured request ID

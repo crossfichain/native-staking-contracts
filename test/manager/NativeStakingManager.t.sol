@@ -294,8 +294,8 @@ contract NativeStakingManagerTest is Test {
         
         // Claim rewards from both validators
         vm.startPrank(USER);
-        uint256 claimedAmount1 = manager.claimRewardsAPRForValidator(validator1);
-        uint256 claimedAmount2 = manager.claimRewardsAPRForValidator(validator2);
+        uint256 claimedAmount1 = manager.claimRewardsAPRForValidator(validator1, rewardAmount1);
+        uint256 claimedAmount2 = manager.claimRewardsAPRForValidator(validator2, rewardAmount2);
         vm.stopPrank();
         
         // Verify

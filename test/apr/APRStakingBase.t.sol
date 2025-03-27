@@ -87,7 +87,11 @@ contract APRStakingBase is Test {
             address(0), // No APY contract for this test
             address(wxfi),
             address(oracle),
-            false // Do not enforce minimum amounts for tests
+            false, // Do not enforce minimum amounts for tests
+            30 days, // Initial freeze time (30 days)
+            50 ether, // Minimum stake amount
+            10 ether, // Minimum unstake amount
+            1 ether   // Minimum reward claim amount
         );
         
         TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
@@ -113,6 +117,10 @@ contract APRStakingBase is Test {
         oracle.setLaunchTimestamp(block.timestamp - 31 days);
         
         vm.stopPrank();
+
+        // Mint initial WXFI for tests
+        mintWXFI(USER, 1000 ether);
+        mintWXFI(SECOND_USER, 1000 ether);
     }
     
     /**

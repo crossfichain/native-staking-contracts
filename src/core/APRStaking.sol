@@ -180,7 +180,16 @@ contract APRStaking is
         nonReentrant 
         returns (uint256 amount) 
     {
-        UnstakeRequest storage request = _unstakeRequests[requestId];
+        // Extract the actual request ID when it's a structured ID
+        uint256 actualRequestId = requestId;
+        
+        // Check if this is a structured requestId (using same threshold as NativeStaking)
+        if (requestId >= 4294967296) { // 2^32
+            // Extract the sequence number from the last 4 bytes (same as in NativeStaking)
+            actualRequestId = uint256(uint32(requestId));
+        }
+        
+        UnstakeRequest storage request = _unstakeRequests[actualRequestId];
         require(request.user == user, "Not request owner");
         require(!request.claimed, "Already claimed");
         require(block.timestamp >= request.timestamp + oracle.getUnbondingPeriod(), "Still in unbonding period");

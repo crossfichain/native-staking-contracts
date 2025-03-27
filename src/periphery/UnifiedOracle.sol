@@ -51,6 +51,9 @@ contract UnifiedOracle is
     // Mapping to track claimable rewards per user per validator
     mapping(address => mapping(string => uint256)) private _userValidatorClaimableRewards;
     
+    // Mapping to track validator stakes by user
+    mapping(address => mapping(string => uint256)) private _validatorStakes;
+    
     // Events
     event PriceUpdated(string indexed symbol, uint256 price);
     event DiaOracleUpdated(address indexed newOracle);
@@ -533,6 +536,20 @@ contract UnifiedOracle is
         for (uint256 i = 0; i < users.length; i++) {
             _userValidatorClaimableRewards[users[i]][validators[i]] = amounts[i];
         }
+    }
+    
+    /**
+     * @dev Sets the validator stake for a user
+     * @param user The user address
+     * @param validator The validator ID
+     * @param amount The stake amount
+     */
+    function setValidatorStake(address user, string calldata validator, uint256 amount)
+        external
+        onlyRole(ORACLE_UPDATER_ROLE)
+        whenNotPaused
+    {
+        _validatorStakes[user][validator] = amount;
     }
     
     /**
