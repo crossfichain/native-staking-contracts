@@ -530,22 +530,32 @@ contract NativeStakingManager is
         nonReentrant 
         returns (uint256 assets) 
     {
-        // Since we've changed the parameter type, we'll need to extract a uint256 from the bytes
-        // Here we'll assume that for backward compatibility, we can extract a uint256 from the bytes
-        uint256 legacyRequestId;
+        // Extract the vault's request ID format from the requestId parameter
+        bytes memory vaultRequestId;
+        
         if (requestId.length <= 32) {
-            // Try to decode as uint256
-            legacyRequestId = abi.decode(requestId, (uint256));
+            // If already in a proper format, use directly
+            vaultRequestId = requestId;
         } else {
-            // For new format, we'll need to implement a way to look up the legacy requestId
-            // This is a simplified placeholder - in production, you'd need a proper mapping
-            legacyRequestId = uint256(keccak256(requestId)) % 1000000; // A simplified way to get a uint from bytes
+            // For structured IDs, we need to extract the sequence component
+            // First decode the numeric ID
+            uint256 numericId = abi.decode(requestId, (uint256));
+            
+            // Check if it's a structured ID
+            if (isStructuredRequestId(numericId)) {
+                // Extract the sequence (last 4 bytes)
+                uint256 sequence = getSequenceFromId(numericId);
+                
+                // Re-encode as bytes for the vault
+                vaultRequestId = abi.encode(sequence);
+            } else {
+                // Use as-is if not structured
+                vaultRequestId = requestId;
+            }
         }
         
-        // Convert back to bytes for the call
-        bytes memory legacyRequestIdBytes = abi.encode(legacyRequestId);
-        
-        assets = apyContract.claimWithdrawal(legacyRequestIdBytes);
+        // Call the vault with the properly formatted request ID
+        assets = apyContract.claimWithdrawal(vaultRequestId);
         
         // Convert XFI to MPX for the event
         uint256 mpxAssets = oracle.convertXFItoMPX(assets);

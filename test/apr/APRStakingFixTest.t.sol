@@ -102,8 +102,8 @@ contract APRStakingFixTest is Test {
     
     function setUp() public {
         // Create hardcoded structured requestId with the last 4 bytes being 0x0000002A (42 in decimal)
-        // This is manually crafted to avoid any arithmetic operations that might overflow
-        structuredRequestId = 0x0000000000000000000000000000000000000000000000000000000100000042;
+        // Using a safe value to avoid arithmetic overflows
+        structuredRequestId = 0x100000002A;
         console.log("Structured request ID:", structuredRequestId);
         
         // Create mock contract
@@ -135,8 +135,13 @@ contract APRStakingFixTest is Test {
      * This tests the core fix for the "Invalid requestId" issue
      */
     function testStructuredRequestId() public {
-        // Skip this test due to arithmetic overflow issues
-        vm.skip(true);
-        return;
+        // Create hardcoded structured requestId with the last 4 bytes being 42 (0x2A)
+        uint256 hardcodedId = 0x100000002A;
+        
+        // Test the claim with structured ID
+        uint256 claimed = mockAPRStaking.claimUnstake(USER, hardcodedId);
+        
+        // Verify correct amount claimed
+        assertEq(claimed, amount, "Should claim correct amount with structured ID");
     }
 } 
