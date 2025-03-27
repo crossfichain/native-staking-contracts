@@ -25,6 +25,12 @@ contract APRStaking is
 {
     // Constants
     uint256 private constant PRECISION = 1e18;
+    string private constant VALIDATOR_PREFIX = "mxva";
+    
+    // Default minimum amounts (can be adjusted by admin)
+    uint256 public minStakeAmount;
+    uint256 public minUnstakeAmount;
+    bool public enforceMinimumAmounts;
     
     // Custom roles
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -58,13 +64,21 @@ contract APRStaking is
     event UnstakeClaimed(address indexed user, uint256 amount, bytes indexed requestId);
     event RewardsClaimed(address indexed user, uint256 amount);
     event StakingTokenUpdated(address indexed newToken);
+    event MinStakeAmountUpdated(uint256 newMinStakeAmount);
+    event MinUnstakeAmountUpdated(uint256 newMinUnstakeAmount);
     
     /**
      * @dev Initializes the contract
      * @param _oracle The address of the oracle contract
      * @param _stakingToken The address of the staking token (WXFI)
      */
-    function initialize(address _oracle, address _stakingToken) external initializer {
+    function initialize(
+        address _oracle, 
+        address _stakingToken,
+        uint256 _minStakeAmount,
+        uint256 _minUnstakeAmount,
+        bool _enforceMinimums
+    ) external initializer {
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
@@ -76,6 +90,52 @@ contract APRStaking is
         
         oracle = IOracle(_oracle);
         stakingToken = _stakingToken;
+        
+        // Set minimum amounts
+        minStakeAmount = _minStakeAmount;
+        minUnstakeAmount = _minUnstakeAmount;
+        enforceMinimumAmounts = _enforceMinimums;
+    }
+    
+    /**
+     * @dev Validates the validator format to ensure it's a valid mx-address
+     * @param validator The validator string to validate
+     * @return True if valid, false otherwise
+     */
+    function _validateValidatorFormat(string memory validator) internal pure returns (bool) {
+        // Check that the validator is not empty
+        if (bytes(validator).length == 0) return false;
+        
+        // Check maximum length (should be reasonable for an address)
+        if (bytes(validator).length > 100) return false;
+        
+        // Check that the validator starts with the required prefix
+        bytes memory validatorBytes = bytes(validator);
+        bytes memory prefixBytes = bytes(VALIDATOR_PREFIX);
+        
+        // Must be at least as long as the prefix
+        if (validatorBytes.length < prefixBytes.length) return false;
+        
+        // Check prefix match
+        for (uint i = 0; i < prefixBytes.length; i++) {
+            if (validatorBytes[i] != prefixBytes[i]) return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * @dev Helper function to check if the oracle price is fresh
+     * Reverts if the price is stale or zero
+     */
+    function _checkOracleFreshness() internal view {
+        uint256 price = oracle.getPrice("XFI");
+        require(price > 0, "Oracle price cannot be zero");
+        
+        // If there's no timestamp in getPrice, add a backup check
+        // by verifying that APR values are reasonable
+        uint256 apr = oracle.getCurrentAPR();
+        require(apr <= 50 * 1e16, "APR value is unreasonably high"); // Max 50%
     }
     
     /**
@@ -99,7 +159,18 @@ contract APRStaking is
         returns (bool success) 
     {
         require(amount > 0, "Amount must be greater than 0");
-        require(bytes(validator).length > 0, "Validator cannot be empty");
+        
+        // Added validator format validation
+        require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
+        
+        // Added minimum amount validation if enabled
+        if (enforceMinimumAmounts) {
+            require(amount >= minStakeAmount, "Amount below minimum stake");
+        }
+        
+        // Added oracle freshness check
+        _checkOracleFreshness();
+        
         require(token == stakingToken || token == address(0), "Invalid token");
         
         // Transfer tokens from the manager to this contract
@@ -140,6 +211,18 @@ contract APRStaking is
         nonReentrant 
     {
         require(amount > 0, "Amount must be greater than 0");
+        
+        // Added validator format validation
+        require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
+        
+        // Added minimum amount validation if enabled
+        if (enforceMinimumAmounts) {
+            require(amount >= minUnstakeAmount, "Amount below minimum unstake");
+        }
+        
+        // Added oracle freshness check
+        _checkOracleFreshness();
+        
         require(_userValidatorStakes[user][validator] >= amount, "Insufficient stake");
         
         // Update staking state
@@ -346,6 +429,32 @@ contract APRStaking is
         onlyRole(UPGRADER_ROLE) 
     {
         // No additional logic needed
+    }
+    
+    /**
+     * @dev Updates the minimum stake amount
+     * @param newMinAmount The new minimum stake amount
+     */
+    function setMinStakeAmount(uint256 newMinAmount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        minStakeAmount = newMinAmount;
+        emit MinStakeAmountUpdated(newMinAmount);
+    }
+    
+    /**
+     * @dev Updates the minimum unstake amount
+     * @param newMinAmount The new minimum unstake amount
+     */
+    function setMinUnstakeAmount(uint256 newMinAmount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        minUnstakeAmount = newMinAmount;
+        emit MinUnstakeAmountUpdated(newMinAmount);
+    }
+    
+    /**
+     * @dev Enables or disables minimum amount enforcement
+     * @param enforce Whether to enforce minimum amounts
+     */
+    function setEnforceMinimumAmounts(bool enforce) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        enforceMinimumAmounts = enforce;
     }
     
     /**

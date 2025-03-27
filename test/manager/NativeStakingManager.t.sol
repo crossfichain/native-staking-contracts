@@ -62,7 +62,13 @@ contract NativeStakingManagerTest is Test {
             1 ether // Min reward claim amount
         );
         
-        aprContract.initialize(address(oracle), address(wxfi));
+        aprContract.initialize(
+            address(oracle), 
+            address(wxfi),
+            50 ether, // Min stake amount
+            10 ether, // Min unstake amount
+            false // Do not enforce minimum amounts for tests
+        );
         vault.initialize(
             address(wxfi),
             address(oracle),

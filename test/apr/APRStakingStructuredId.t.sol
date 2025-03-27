@@ -44,7 +44,13 @@ contract StructuredRequestIdTest is Test {
         
         // Initialize contracts
         oracle.initialize(address(diaOracle));
-        aprStaking.initialize(address(oracle), address(wxfi));
+        aprStaking.initialize(
+            address(oracle), 
+            address(wxfi),
+            50 ether, // Min stake amount
+            10 ether, // Min unstake amount
+            false // Do not enforce minimum amounts for tests
+        );
         
         // Add structured requestId extraction to APRStaking during test
         vm.stopPrank();

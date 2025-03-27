@@ -38,8 +38,11 @@ contract APRStakingTest is Test {
         // Deploy staking contract
         staking = new APRStaking();
         staking.initialize(
+            address(oracle),
             address(xfi),
-            address(oracle)
+            50 ether, // Min stake amount
+            10 ether, // Min unstake amount
+            false // Do not enforce minimum amounts for tests
         );
         
         // Setup roles

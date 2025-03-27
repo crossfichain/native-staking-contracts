@@ -57,7 +57,10 @@ contract NativeStakingE2ETest is Test {
         aprContract = new APRStaking();
         aprContract.initialize(
             address(oracle),
-            address(xfi)
+            address(xfi),
+            50 ether, // Min stake amount
+            10 ether, // Min unstake amount
+            false // Do not enforce minimum amounts for tests
         );
         
         // Deploy vault
