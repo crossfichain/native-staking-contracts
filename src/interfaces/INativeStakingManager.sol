@@ -61,6 +61,40 @@ interface INativeStakingManager {
     function claimRewardsAPR() external returns (uint256 amount);
     
     /**
+     * @dev Claims rewards from a specific validator in the APR model
+     * @param validator The validator address/ID
+     * @param amount The amount of rewards to claim
+     * @return requestId The ID of the request
+     */
+    function claimRewardsAPRForValidator(string calldata validator, uint256 amount) external returns (bytes memory requestId);
+    
+    /**
+     * @dev Claims rewards and converts them to native XFI
+     * @return amount The amount of rewards claimed
+     */
+    function claimRewardsAPRNative() external returns (uint256 amount);
+    
+    /**
+     * @dev Claims unstaked tokens as native XFI
+     * @param requestId The ID of the unstake request to claim
+     * @return amount The amount of native XFI claimed
+     */
+    function claimUnstakeAPRNative(bytes calldata requestId) external returns (uint256 amount);
+    
+    /**
+     * @dev Adds rewards to the contract for distribution
+     * @return success Boolean indicating if the operation was successful
+     */
+    function paybackRewards() external payable returns (bool success);
+    
+    /**
+     * @dev Checks if the contract has enough balance to pay rewards
+     * @param amount The amount of rewards to check
+     * @return hasEnoughBalance Boolean indicating if the contract has enough balance
+     */
+    function hasEnoughRewardBalance(uint256 amount) external view returns (bool);
+    
+    /**
      * @dev Gets the address of the APR staking contract
      * @return The address of the APR staking contract
      */

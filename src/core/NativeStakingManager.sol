@@ -109,6 +109,9 @@ contract NativeStakingManager is
     event ValidatorUnbondingStarted(address indexed user, string validator, uint256 endTime);
     event ValidatorUnbondingEnded(address indexed user, string validator);
     event RewardsClaimedAPRForValidator(address indexed user, uint256 xfiAmount, uint256 mpxAmount, string validator, bytes indexed requestId);
+    event RewardsPayback(address indexed payer, uint256 amount);
+    event UnstakeClaimedAPRNative(address indexed user, bytes indexed requestId, uint256 xfiAmount, uint256 mpxAmount);
+    event RewardsClaimedAPRNative(address indexed user, uint256 xfiAmount, uint256 mpxAmount, bytes indexed requestId);
     
     /**
      * @dev Initializes the contract
@@ -465,144 +468,45 @@ contract NativeStakingManager is
     }
     
     /**
-     * @dev Withdraws XFI from the APY staking model
-     * @param shares The amount of vault shares to withdraw
-     * @return requestId The withdrawal request ID (the vault's request ID or a generated one for direct withdrawals)
+     * @dev Claims XFI from a completed APR unstake request and sends native XFI
+     * @param requestId The request ID to claim
+     * @return amount The amount of native XFI claimed
      */
-    function withdrawAPY(uint256 shares) 
+    function claimUnstakeAPRNative(bytes calldata requestId) 
         external 
-        override 
-        whenNotPaused 
+        override
         nonReentrant 
-        returns (bytes memory requestId) 
+        returns (uint256 amount) 
     {
-        // Check if unstaking is frozen (first month after launch)
-        require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
+        // Call the APR contract to claim the unstake
+        amount = aprContract.claimUnstake(msg.sender, requestId);
         
-        // Check if user has approved shares for withdrawal
-        require(apyContract.allowance(msg.sender, address(this)) >= shares, "Insufficient share allowance");
+        // Ensure the amount is non-zero
+        require(amount > 0, "Nothing to claim");
         
-        // Create a request record for tracking
-        uint256 internalRequestId = _createRequest(
-            msg.sender, 
-            shares, 
-            "", 
-            RequestType.UNSTAKE
-        );
+        // Get the validator information from the APR contract's unstake request
+        INativeStaking.UnstakeRequest memory request = aprContract.getUnstakeRequest(requestId);
         
-        // First try a direct withdrawal
-        try apyContract.redeem(shares, msg.sender, msg.sender) returns (uint256 redeemedAssets) {
-            // Immediate withdrawal successful
-            uint256 assets = redeemedAssets;
-            
-            // Convert XFI to MPX for the event
-            uint256 mpxAssets = oracle.convertXFItoMPX(assets);
-            
-            // Convert to bytes for the return value
-            requestId = abi.encode(internalRequestId);
-            
-            emit WithdrawnAPY(msg.sender, shares, assets, mpxAssets, requestId);
-        } catch {
-            // Not enough liquid assets, use delayed withdrawal
-            uint256 previewAssets = apyContract.previewRedeem(shares);
-            
-            // Make the vault withdrawal request
-            // The vault maintains its own request ID system internally
-            requestId = apyContract.requestWithdrawal(previewAssets, msg.sender, msg.sender);
-            
-            // Convert XFI to MPX for the event
-            uint256 mpxAssets = oracle.convertXFItoMPX(previewAssets);
-            
-            emit WithdrawalRequestedAPY(msg.sender, previewAssets, mpxAssets, abi.encode(internalRequestId));
+        // Clear the unbonding period for this validator
+        if (bytes(request.validator).length > 0) {
+            _userValidatorUnbondingEnd[msg.sender][request.validator] = 0;
+            emit ValidatorUnbondingEnded(msg.sender, request.validator);
         }
         
-        return requestId;
-    }
-    
-    /**
-     * @dev Claims a withdrawal request from the APY model
-     * @param requestId The ID of the withdrawal request
-     * @return assets The amount of XFI claimed
-     */
-    function claimWithdrawalAPY(bytes calldata requestId) 
-        external 
-        override 
-        nonReentrant 
-        returns (uint256 assets) 
-    {
-        // Extract the vault's request ID format from the requestId parameter
-        bytes memory vaultRequestId;
+        // Unwrap WXFI to native XFI
+        wxfi.withdraw(amount);
         
-        if (requestId.length <= 32) {
-            // If already in a proper format, use directly
-            vaultRequestId = requestId;
-        } else {
-            // Try to decode as uint256, handle potential decoding errors
-            bool decodingSuccess = false;
-            uint256 numericId = 0;
-            
-            // Manual decoding attempt without try-catch
-            if (requestId.length == 32) {
-                decodingSuccess = true;
-                assembly {
-                    numericId := mload(add(requestId.offset, 32))
-                }
-            }
-            
-            if (decodingSuccess && isStructuredRequestId(numericId)) {
-                // Extract the sequence (last 4 bytes)
-                uint256 sequence = getSequenceFromId(numericId);
-                
-                // Re-encode as bytes for the vault
-                vaultRequestId = abi.encode(sequence);
-            } else {
-                // Use as-is if not structured or decoding failed
-                vaultRequestId = requestId;
-            }
-        }
-        
-        // First attempt with transformed request ID
-        bool success = false;
-        bytes memory returnData;
-        
-        // Manual low-level call instead of try-catch
-        (success, returnData) = address(apyContract).call(
-            abi.encodeWithSelector(apyContract.claimWithdrawal.selector, vaultRequestId)
-        );
-        
-        if (success) {
-            // Decode the returned assets
-            assets = abi.decode(returnData, (uint256));
-        } else {
-            // Only try the original ID if it's different from what we tried
-            if (keccak256(vaultRequestId) != keccak256(requestId)) {
-                // Try again with the original request ID
-                (success, returnData) = address(apyContract).call(
-                    abi.encodeWithSelector(apyContract.claimWithdrawal.selector, requestId)
-                );
-                
-                if (success) {
-                    assets = abi.decode(returnData, (uint256));
-                } else {
-                    // If both attempts failed, revert with the original error
-                    assembly {
-                        revert(add(returnData, 32), mload(returnData))
-                    }
-                }
-            } else {
-                // If we already tried with the original ID, revert
-                assembly {
-                    revert(add(returnData, 32), mload(returnData))
-                }
-            }
-        }
+        // Transfer native XFI to user
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Native XFI transfer failed");
         
         // Convert XFI to MPX for the event
-        uint256 mpxAssets = oracle.convertXFItoMPX(assets);
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
         
-        emit WithdrawalClaimedAPY(msg.sender, requestId, assets, mpxAssets);
+        // Emit the event with the requestId
+        emit UnstakeClaimedAPRNative(msg.sender, requestId, amount, mpxAmount);
         
-        return assets;
+        return amount;
     }
     
     /**
@@ -611,9 +515,12 @@ contract NativeStakingManager is
      * @param amount The amount of rewards to claim
      * @return requestId The ID of the request
      */
-    function claimRewardsAPRForValidator(string calldata validator, uint256 amount) 
+    function claimRewardsAPRForValidator(
+        string calldata validator, 
+        uint256 amount
+    )   
         external 
-        whenNotPaused 
+        override
         nonReentrant 
         returns (bytes memory requestId) 
     {
@@ -633,6 +540,10 @@ contract NativeStakingManager is
         
         // Safety check: reward amount should not exceed 25% of stake
         require(amount <= userStake / 4, "Reward amount exceeds reasonable threshold");
+        
+        // Check if contract has enough balance
+        uint256 contractBalance = IERC20(wxfi).balanceOf(address(this));
+        require(contractBalance >= amount, "Insufficient contract balance");
         
         // Clear rewards on oracle first to prevent reentrancy
         uint256 clearedAmount = oracle.clearUserClaimableRewardsForValidator(msg.sender, validator);
@@ -699,6 +610,10 @@ contract NativeStakingManager is
         uint256 maxReasonableReward = totalStaked / 4; // 25% of stake (100% APR / 4 for quarterly max)
         require(amount <= maxReasonableReward, "Reward amount exceeds safety threshold");
         
+        // Check if contract has enough balance
+        uint256 contractBalance = IERC20(wxfi).balanceOf(address(this));
+        require(contractBalance >= amount, "Insufficient contract balance");
+        
         // Clear rewards on oracle to prevent reentrancy
         oracle.clearUserClaimableRewards(msg.sender);
         
@@ -721,6 +636,91 @@ contract NativeStakingManager is
         emit RewardsClaimedAPR(msg.sender, amount, rewardsMpxAmount, abi.encode(requestId));
         
         return amount;
+    }
+    
+    /**
+     * @dev Claims all rewards from the APR model and unwraps to native XFI
+     * @return amount The amount of rewards claimed as native XFI
+     */
+    function claimRewardsAPRNative() 
+        external 
+        override
+        nonReentrant 
+        returns (uint256 amount) 
+    {
+        // Check oracle freshness
+        _checkOracleFreshness();
+        
+        // Get claimable rewards from the oracle (set by backend)
+        amount = oracle.getUserClaimableRewards(msg.sender);
+        require(amount > 0, "No rewards to claim");
+        
+        // Check minimum reward claim amount
+        if (enforceMinimumAmounts) {
+            require(amount >= minRewardClaimAmount, "Reward amount below minimum");
+        }
+        
+        // Get user's total staked amount for validation
+        uint256 totalStaked = aprContract.getTotalStaked(msg.sender);
+        require(totalStaked > 0, "User has no stake");
+        
+        // Validate rewards are not unreasonably high (max 100% APR for safety check)
+        uint256 maxReasonableReward = totalStaked / 4; // 25% of stake (100% APR / 4 for quarterly max)
+        require(amount <= maxReasonableReward, "Reward amount exceeds safety threshold");
+        
+        // Check if contract has enough balance
+        uint256 contractBalance = IERC20(wxfi).balanceOf(address(this));
+        require(contractBalance >= amount, "Insufficient contract balance");
+        
+        // Clear rewards on oracle to prevent reentrancy
+        oracle.clearUserClaimableRewards(msg.sender);
+        
+        // Unwrap to native XFI
+        wxfi.withdraw(amount);
+        
+        // Send native XFI to user
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Native XFI transfer failed");
+        
+        // Create a request record
+        uint256 requestId = _createRequest(
+            msg.sender, 
+            amount, 
+            "", 
+            RequestType.CLAIM_REWARDS
+        );
+        
+        // Convert XFI to MPX for the event
+        uint256 rewardsMpxAmount = oracle.convertXFItoMPX(amount);
+        
+        // Emit event with request ID
+        emit RewardsClaimedAPRNative(msg.sender, amount, rewardsMpxAmount, abi.encode(requestId));
+        
+        return amount;
+    }
+    
+    /**
+     * @dev Allows adding rewards to the contract for distribution
+     * @return success Boolean indicating if the operation was successful
+     */
+    function paybackRewards() 
+        external 
+        payable 
+        override
+        returns (bool success) 
+    {
+        uint256 amount = msg.value;
+        
+        if (msg.value > 0) {
+            // Handle native XFI
+            wxfi.deposit{value: amount}();
+        } else {
+            // Handle WXFI - require approval first
+            require(IERC20(wxfi).transferFrom(msg.sender, address(this), amount), "WXFI transfer failed");
+        }
+        
+        emit RewardsPayback(msg.sender, amount);
+        return true;
     }
     
     /**
@@ -1065,12 +1065,34 @@ contract NativeStakingManager is
      * @dev Checks if unstaking is frozen (during the initial freeze period after launch)
      * @return True if unstaking is still frozen
      */
-    function isUnstakingFrozen() public view returns (bool) {
+    function isUnstakingFrozen() public view override returns (bool) {
         // If manually frozen, check against launch timestamp
         if (_isManuallyFrozen) {
             return (block.timestamp < _launchTimestamp + _unstakeFreezeTime);
         }
         return false;
+    }
+    
+    /**
+     * @dev Checks if the contract has enough balance to pay rewards
+     * @param amount The amount of rewards to check
+     * @return hasEnoughBalance Boolean indicating if the contract has enough balance
+     */
+    function hasEnoughRewardBalance(uint256 amount) 
+        public 
+        view 
+        override
+        returns (bool) 
+    {
+        return IERC20(wxfi).balanceOf(address(this)) >= amount;
+    }
+    
+    /**
+     * @dev Gets total claimable rewards for all users according to oracle
+     * @return totalRewards The total amount of claimable rewards
+     */
+    function getTotalClaimableRewards() public view returns (uint256) {
+        return oracle.getTotalClaimableRewards();
     }
     
     /**

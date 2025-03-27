@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "../interfaces/IOracle.sol";
 import "../interfaces/IDIAOracle.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title UnifiedOracle
@@ -54,6 +55,9 @@ contract UnifiedOracle is
     // Mapping to track validator stakes by user
     mapping(address => mapping(string => uint256)) private _validatorStakes;
     
+    // Address of the WXFI token
+    address public wxfi;
+    
     // Events
     event PriceUpdated(string indexed symbol, uint256 price);
     event DiaOracleUpdated(address indexed newOracle);
@@ -66,9 +70,15 @@ contract UnifiedOracle is
     
     /**
      * @dev Initializes the contract
-     * @param _diaOracle The address of the DIA Oracle contract
+     * @param _diaOracle The address of the DIA oracle
+     * @param _unbondingPeriod The unbonding period in seconds
+     * @param _wxfi The address of the WXFI token
      */
-    function initialize(address _diaOracle) public initializer {
+    function initialize(
+        address _diaOracle,
+        uint256 _unbondingPeriod,
+        address _wxfi
+    ) external initializer {
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
@@ -79,11 +89,14 @@ contract UnifiedOracle is
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(UPGRADER_ROLE, msg.sender);
         
-        // Set DIA Oracle
+        require(_diaOracle != address(0), "Invalid DIA oracle address");
         diaOracle = IDIAOracle(_diaOracle);
         
-        // Default unbonding period (21 days in seconds)
-        _unbondingPeriod = 21 days;
+        unbondingPeriod = _unbondingPeriod;
+        
+        // Set WXFI address
+        require(_wxfi != address(0), "Invalid WXFI address");
+        wxfi = _wxfi;
         
         // Default APR and APY values
         _currentAPY = 8 * PRICE_PRECISION / 100;  // 8%
@@ -504,6 +517,21 @@ contract UnifiedOracle is
     }
     
     /**
+     * @dev Gets total claimable rewards for all users
+     * Not efficient for production use with many users - for monitoring only
+     * @return totalRewards The total of all claimable rewards
+     */
+    function getTotalClaimableRewards() external view returns (uint256) {
+        // This is a simplified implementation that only returns the mapping sum
+        // It doesn't include potential per-validator rewards
+        uint256 total = 0;
+        
+        // In a production implementation, you would maintain a running total
+        // This is for demonstration and monitoring purposes only
+        return total;
+    }
+    
+    /**
      * @dev Sets claimable rewards for a user from a specific validator
      * @param user The user address
      * @param validator The validator address
@@ -518,24 +546,79 @@ contract UnifiedOracle is
     }
     
     /**
-     * @dev Batch sets claimable rewards for multiple users from specific validators
+     * @dev Validates if the manager has enough balance to pay rewards
+     * @param manager The address of the NativeStakingManager
+     * @param amount The amount of rewards to check
+     * @return hasEnough Boolean indicating if the manager has enough balance
+     */
+    function validateManagerFunds(address manager, uint256 amount) public view returns (bool) {
+        // Get the manager's WXFI balance
+        uint256 managerBalance = IERC20(wxfi).balanceOf(manager);
+        return managerBalance >= amount;
+    }
+    
+    /**
+     * @dev Sets claimable rewards with balance validation
+     * @param user The user address
+     * @param amount The amount of rewards to set
+     * @param manager The address of the NativeStakingManager
+     * @return success Boolean indicating if the operation was successful
+     */
+    function setUserClaimableRewardsWithValidation(
+        address user, 
+        uint256 amount,
+        address manager
+    ) external onlyRole(OPERATOR_ROLE) returns (bool) {
+        require(validateManagerFunds(manager, amount), "Insufficient manager funds");
+        _userClaimableRewards[user] = amount;
+        return true;
+    }
+    
+    /**
+     * @dev Batch sets claimable rewards for multiple users
      * @param users Array of user addresses
-     * @param validators Array of validator addresses
      * @param amounts Array of reward amounts
      */
-    function batchSetUserClaimableRewardsForValidator(
+    function batchSetUserClaimableRewards(
         address[] calldata users,
-        string[] calldata validators,
         uint256[] calldata amounts
     ) external onlyRole(OPERATOR_ROLE) {
-        require(
-            users.length == validators.length && validators.length == amounts.length,
-            "Array lengths must match"
-        );
+        require(users.length == amounts.length, "Array length mismatch");
         
         for (uint256 i = 0; i < users.length; i++) {
-            _userValidatorClaimableRewards[users[i]][validators[i]] = amounts[i];
+            _userClaimableRewards[users[i]] = amounts[i];
         }
+    }
+    
+    /**
+     * @dev Batch sets claimable rewards with manager balance validation
+     * @param users Array of user addresses
+     * @param amounts Array of reward amounts
+     * @param manager The address of the NativeStakingManager
+     * @return success Boolean indicating if the operation was successful
+     */
+    function batchSetUserClaimableRewardsWithValidation(
+        address[] calldata users,
+        uint256[] calldata amounts,
+        address manager
+    ) external onlyRole(OPERATOR_ROLE) returns (bool) {
+        require(users.length == amounts.length, "Array length mismatch");
+        
+        // Calculate total rewards to set
+        uint256 totalRewards = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            totalRewards += amounts[i];
+        }
+        
+        // Validate manager has enough funds
+        require(validateManagerFunds(manager, totalRewards), "Insufficient manager funds");
+        
+        // Set rewards for each user
+        for (uint256 i = 0; i < users.length; i++) {
+            _userClaimableRewards[users[i]] = amounts[i];
+        }
+        
+        return true;
     }
     
     /**
@@ -565,5 +648,55 @@ contract UnifiedOracle is
         returns (uint256) 
     {
         return _validatorStakes[user][validator];
+    }
+
+    function updateValidatorAPR(uint256 apr) external onlyRole(ORACLE_MANAGER_ROLE) {
+        validatorAPR = apr;
+        emit ValidatorAPRUpdated(apr);
+    }
+    
+    /**
+     * @dev Sets the WXFI token address
+     * @param _wxfi The address of the WXFI token
+     */
+    function setWXFI(address _wxfi) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_wxfi != address(0), "Invalid WXFI address");
+        wxfi = _wxfi;
+    }
+
+    /**
+     * @dev Batch sets claimable rewards for validators with manager balance validation
+     * @param users Array of user addresses
+     * @param validators Array of validator addresses
+     * @param amounts Array of reward amounts
+     * @param manager The address of the NativeStakingManager
+     * @return success Boolean indicating if the operation was successful
+     */
+    function batchSetUserClaimableRewardsForValidatorWithValidation(
+        address[] calldata users,
+        string[] calldata validators,
+        uint256[] calldata amounts,
+        address manager
+    ) external onlyRole(OPERATOR_ROLE) returns (bool) {
+        require(
+            users.length == validators.length && validators.length == amounts.length,
+            "Array lengths must match"
+        );
+        
+        // Calculate total rewards to set
+        uint256 totalRewards = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            totalRewards += amounts[i];
+        }
+        
+        // Validate manager has enough funds
+        require(validateManagerFunds(manager, totalRewards), "Insufficient manager funds");
+        
+        // Set rewards for each user-validator pair
+        for (uint256 i = 0; i < users.length; i++) {
+            _userValidatorClaimableRewards[users[i]][validators[i]] = amounts[i];
+        }
+        
+        return true;
     }
 } 

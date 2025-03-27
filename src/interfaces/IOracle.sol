@@ -120,4 +120,10 @@ interface IOracle {
         external 
         view 
         returns (uint256);
+
+    /**
+     * @dev Gets total claimable rewards for all users
+     * @return totalRewards The total of all claimable rewards
+     */
+    function getTotalClaimableRewards() external view returns (uint256);
 } 
