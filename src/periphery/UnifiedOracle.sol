@@ -67,6 +67,7 @@ contract UnifiedOracle is
     event UnbondingPeriodUpdated(uint256 period);
     event UserRewardsUpdated(address indexed user, uint256 amount);
     event LaunchTimestampSet(uint256 timestamp);
+    event ValidatorAPRUpdated(uint256 apr);
     
     /**
      * @dev Initializes the contract
@@ -92,7 +93,7 @@ contract UnifiedOracle is
         require(_diaOracle != address(0), "Invalid DIA oracle address");
         diaOracle = IDIAOracle(_diaOracle);
         
-        unbondingPeriod = _unbondingPeriod;
+        _unbondingPeriod = _unbondingPeriod;
         
         // Set WXFI address
         require(_wxfi != address(0), "Invalid WXFI address");
@@ -322,11 +323,10 @@ contract UnifiedOracle is
      * @param users Array of user addresses
      * @param amounts Array of reward amounts
      */
-    function batchSetUserClaimableRewards(address[] calldata users, uint256[] calldata amounts) 
-        external 
-        onlyRole(ORACLE_UPDATER_ROLE) 
-        whenNotPaused 
-    {
+    function batchSetUserClaimableRewards(
+        address[] calldata users,
+        uint256[] calldata amounts
+    ) external onlyRole(ORACLE_UPDATER_ROLE) whenNotPaused {
         require(users.length == amounts.length, "Length mismatch");
         
         for (uint256 i = 0; i < users.length; i++) {
@@ -575,53 +575,6 @@ contract UnifiedOracle is
     }
     
     /**
-     * @dev Batch sets claimable rewards for multiple users
-     * @param users Array of user addresses
-     * @param amounts Array of reward amounts
-     */
-    function batchSetUserClaimableRewards(
-        address[] calldata users,
-        uint256[] calldata amounts
-    ) external onlyRole(OPERATOR_ROLE) {
-        require(users.length == amounts.length, "Array length mismatch");
-        
-        for (uint256 i = 0; i < users.length; i++) {
-            _userClaimableRewards[users[i]] = amounts[i];
-        }
-    }
-    
-    /**
-     * @dev Batch sets claimable rewards with manager balance validation
-     * @param users Array of user addresses
-     * @param amounts Array of reward amounts
-     * @param manager The address of the NativeStakingManager
-     * @return success Boolean indicating if the operation was successful
-     */
-    function batchSetUserClaimableRewardsWithValidation(
-        address[] calldata users,
-        uint256[] calldata amounts,
-        address manager
-    ) external onlyRole(OPERATOR_ROLE) returns (bool) {
-        require(users.length == amounts.length, "Array length mismatch");
-        
-        // Calculate total rewards to set
-        uint256 totalRewards = 0;
-        for (uint256 i = 0; i < amounts.length; i++) {
-            totalRewards += amounts[i];
-        }
-        
-        // Validate manager has enough funds
-        require(validateManagerFunds(manager, totalRewards), "Insufficient manager funds");
-        
-        // Set rewards for each user
-        for (uint256 i = 0; i < users.length; i++) {
-            _userClaimableRewards[users[i]] = amounts[i];
-        }
-        
-        return true;
-    }
-    
-    /**
      * @dev Sets the validator stake for a user
      * @param user The user address
      * @param validator The validator ID
@@ -650,8 +603,8 @@ contract UnifiedOracle is
         return _validatorStakes[user][validator];
     }
 
-    function updateValidatorAPR(uint256 apr) external onlyRole(ORACLE_MANAGER_ROLE) {
-        validatorAPR = apr;
+    function updateValidatorAPR(uint256 apr) external onlyRole(ORACLE_UPDATER_ROLE) {
+        _currentAPR = apr;
         emit ValidatorAPRUpdated(apr);
     }
     

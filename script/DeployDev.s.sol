@@ -7,6 +7,7 @@ import "../src/core/NativeStakingManager.sol";
 import "../src/core/NativeStakingVault.sol";
 import "../src/oracle/UnifiedOracle.sol";
 import "../src/periphery/WXFI.sol";
+import "../src/core/ConcreteNativeStakingManager.sol";
 
 contract DeployDev is Script {
     // Configuration constants
@@ -48,7 +49,7 @@ contract DeployDev is Script {
         );
 
         // Deploy Manager
-        NativeStakingManager manager = new NativeStakingManager();
+        ConcreteNativeStakingManager manager = new ConcreteNativeStakingManager();
         manager.initialize(
             address(aprStaking),
             address(apyVault),

@@ -13,6 +13,7 @@ contract MockStakingOracle is IOracle {
     uint256 private _currentAPR;
     uint256 private _unbondingPeriod;
     mapping(address => mapping(string => uint256)) private _userValidatorStakes;
+    mapping(address => mapping(bytes => uint256)) private _userUnstakes;
 
     function getPrice(string calldata symbol) external view returns (uint256) {
         if (keccak256(bytes(symbol)) == keccak256(bytes("XFI"))) {
@@ -133,5 +134,24 @@ contract MockStakingOracle is IOracle {
     function setValidatorStake(address user, string calldata validator, uint256 amount) external {
         _userValidatorStakes[user][validator] = amount;
         _totalStakedXFI += amount;
+    }
+
+    function setUserUnstake(address user, bytes calldata requestId, uint256 amount) external {
+        _userUnstakes[user][requestId] = amount;
+    }
+
+    function getUserUnstake(address user, bytes calldata requestId) external view returns (uint256) {
+        return _userUnstakes[user][requestId];
+    }
+    
+    function clearUserUnstake(address user, bytes calldata requestId) external returns (uint256) {
+        uint256 amount = _userUnstakes[user][requestId];
+        _userUnstakes[user][requestId] = 0;
+        return amount;
+    }
+
+    function getTotalClaimableRewards() external view returns (uint256) {
+        // This is a mock, so we return a hardcoded value or sum of all rewards
+        return 1000 ether; // Example value
     }
 } 

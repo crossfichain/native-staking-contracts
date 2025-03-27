@@ -7,6 +7,7 @@ import "../../src/core/NativeStakingVault.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockStakingOracle} from "../mocks/MockStakingOracle.sol";
 import "../../src/core/APRStaking.sol";
+import {ConcreteNativeStakingManager} from "./NativeStakingManagerRewards.t.sol";
 
 /**
  * @title NativeStakingManagerTest
@@ -45,7 +46,7 @@ contract NativeStakingManagerTest is Test {
         oracle.setUnbondingPeriod(UNBONDING_PERIOD);
         
         // Deploy contracts
-        manager = new NativeStakingManager();
+        manager = new ConcreteNativeStakingManager();
         aprContract = new APRStaking();
         vault = new NativeStakingVault();
         

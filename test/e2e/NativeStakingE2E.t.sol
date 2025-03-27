@@ -6,7 +6,7 @@ import "forge-std/console.sol";
 import "../mocks/MockERC20.sol";
 import {MockStakingOracle} from "../mocks/MockStakingOracle.sol";
 import "../../src/core/NativeStakingVault.sol";
-import "../../src/core/NativeStakingManager.sol";
+import "../../src/core/ConcreteNativeStakingManager.sol";
 import "../../src/core/APRStaking.sol";
 
 /**
@@ -22,7 +22,7 @@ contract NativeStakingE2ETest is Test {
     MockStakingOracle public oracle;
     MockERC20 public xfi;
     NativeStakingVault public vault;
-    NativeStakingManager public manager;
+    ConcreteNativeStakingManager public manager;
     APRStaking public aprContract;
     
     // Test accounts
@@ -73,7 +73,7 @@ contract NativeStakingE2ETest is Test {
         );
         
         // Deploy manager
-        manager = new NativeStakingManager();
+        manager = new ConcreteNativeStakingManager();
         manager.initialize(
             address(aprContract),
             address(vault),

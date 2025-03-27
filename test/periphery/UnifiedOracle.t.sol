@@ -29,7 +29,7 @@ contract UnifiedOracleTest is Test {
         // Deploy Oracle implementation
         UnifiedOracle oracleImpl = new UnifiedOracle();
         // Initialize the oracle
-        oracleImpl.initialize(address(diaOracle));
+        oracleImpl.initialize(address(diaOracle), 14 days, address(0xEE));
         
         // Set oracle reference
         oracle = oracleImpl;

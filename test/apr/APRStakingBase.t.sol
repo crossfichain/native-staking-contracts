@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../../src/core/NativeStaking.sol";
-import "../../src/core/NativeStakingManager.sol";
+import "../../src/core/ConcreteNativeStakingManager.sol";
 import "../../src/periphery/UnifiedOracle.sol"; 
 import "../../src/periphery/WXFI.sol";
 import "../utils/MockDIAOracle.sol";
@@ -28,7 +28,7 @@ contract APRStakingBase is Test {
     MockDIAOracle public diaOracle;
     UnifiedOracle public oracle;
     NativeStaking public staking;
-    NativeStakingManager public manager;
+    ConcreteNativeStakingManager public manager;
     ProxyAdmin public proxyAdmin;
 
     /**
@@ -80,7 +80,7 @@ contract APRStakingBase is Test {
         staking = NativeStaking(address(stakingProxy));
         
         // Deploy NativeStakingManager
-        NativeStakingManager managerImpl = new NativeStakingManager();
+        ConcreteNativeStakingManager managerImpl = new ConcreteNativeStakingManager();
         bytes memory managerData = abi.encodeWithSelector(
             NativeStakingManager.initialize.selector,
             address(staking),
@@ -100,7 +100,7 @@ contract APRStakingBase is Test {
             managerData
         );
         
-        manager = NativeStakingManager(payable(address(managerProxy)));
+        manager = ConcreteNativeStakingManager(payable(address(managerProxy)));
         
         // Grant roles
         staking.grantRole(staking.STAKING_MANAGER_ROLE(), address(manager));

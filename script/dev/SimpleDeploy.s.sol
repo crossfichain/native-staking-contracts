@@ -5,7 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import "../../src/periphery/UnifiedOracle.sol";
 import "../../src/core/NativeStaking.sol";
 import "../../src/core/NativeStakingVault.sol";
-import "../../src/core/NativeStakingManager.sol";
+import "../../src/core/ConcreteNativeStakingManager.sol";
 import "../../src/periphery/WXFI.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
@@ -181,7 +181,7 @@ contract SimpleDeploy is Script {
         console.log("APY Staking Proxy deployed at:", apyStakingProxy);
         
         // Step 5: Deploy NativeStakingManager with proxy
-        NativeStakingManager nativeStakingManagerImpl = new NativeStakingManager();
+        ConcreteNativeStakingManager nativeStakingManagerImpl = new ConcreteNativeStakingManager();
         bytes memory nativeStakingManagerInitData = abi.encodeWithSelector(
             NativeStakingManager.initialize.selector,
             aprStakingProxy,
@@ -213,7 +213,7 @@ contract SimpleDeploy is Script {
         UnifiedOracle oracle = UnifiedOracle(oracleProxy);
         NativeStaking aprStaking = NativeStaking(aprStakingProxy);
         NativeStakingVault apyStaking = NativeStakingVault(apyStakingProxy);
-        NativeStakingManager stakingManager = NativeStakingManager(payable(stakingManagerProxy));
+        ConcreteNativeStakingManager stakingManager = ConcreteNativeStakingManager(payable(stakingManagerProxy));
         
         // 1. Configure Oracle settings
         console.log("Setting Oracle parameters...");

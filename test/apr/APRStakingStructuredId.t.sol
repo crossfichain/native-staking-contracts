@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../../src/core/APRStaking.sol";
-import "../../src/core/NativeStakingManager.sol";
+import "../../src/core/ConcreteNativeStakingManager.sol";
 import "../../src/periphery/UnifiedOracle.sol";
 import "../../src/periphery/WXFI.sol";
 import "../utils/MockDIAOracle.sol";
@@ -15,7 +15,7 @@ import "../utils/MockDIAOracle.sol";
 contract StructuredRequestIdTest is Test {
     // Test contracts
     APRStaking public aprStaking;
-    NativeStakingManager public manager;
+    ConcreteNativeStakingManager public manager;
     UnifiedOracle public oracle;
     WXFI public wxfi;
     MockDIAOracle public diaOracle;
@@ -39,11 +39,11 @@ contract StructuredRequestIdTest is Test {
         wxfi = new WXFI();
         diaOracle = new MockDIAOracle();
         oracle = new UnifiedOracle();
-        manager = new NativeStakingManager();
+        manager = new ConcreteNativeStakingManager();
         aprStaking = new APRStaking();
         
         // Initialize contracts
-        oracle.initialize(address(diaOracle));
+        oracle.initialize(address(diaOracle), 14 days, address(wxfi));
         aprStaking.initialize(
             address(oracle), 
             address(wxfi),

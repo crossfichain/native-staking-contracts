@@ -120,4 +120,8 @@ contract MockUnifiedOracle is IOracle {
     {
         return _validatorStakes[user][validator];
     }
+
+    function getTotalClaimableRewards() external view override returns (uint256) {
+        return 1000 ether; // Example value
+    }
 } 

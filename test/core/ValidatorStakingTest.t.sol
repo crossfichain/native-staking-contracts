@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../../src/core/NativeStaking.sol";
-import "../../src/core/NativeStakingManager.sol";
+import "../../src/core/ConcreteNativeStakingManager.sol";
 import "../../src/periphery/UnifiedOracle.sol"; 
 import "../../src/periphery/WXFI.sol";
 import "../utils/MockDIAOracle.sol";
@@ -28,7 +28,7 @@ contract ValidatorStakingTest is Test {
     MockDIAOracle public diaOracle;
     UnifiedOracle public oracle;
     NativeStaking public staking;
-    NativeStakingManager public manager;
+    ConcreteNativeStakingManager public manager;
     ProxyAdmin public proxyAdmin;
 
     function setUp() public {
@@ -48,7 +48,9 @@ contract ValidatorStakingTest is Test {
         
         bytes memory oracleData = abi.encodeWithSelector(
             UnifiedOracle.initialize.selector,
-            address(diaOracle)
+            address(diaOracle),
+            14 days, // Unbonding period
+            address(wxfi) // WXFI address
         );
         
         TransparentUpgradeableProxy oracleProxy = new TransparentUpgradeableProxy(
@@ -77,7 +79,7 @@ contract ValidatorStakingTest is Test {
         staking = NativeStaking(address(stakingProxy));
         
         // Deploy NativeStakingManager
-        NativeStakingManager managerImpl = new NativeStakingManager();
+        ConcreteNativeStakingManager managerImpl = new ConcreteNativeStakingManager();
         bytes memory managerData = abi.encodeWithSelector(
             NativeStakingManager.initialize.selector,
             address(staking),
@@ -91,13 +93,18 @@ contract ValidatorStakingTest is Test {
             1 ether   // Minimum reward claim amount
         );
         
+        // Use a different approach to create the proxy to avoid issues with the receive function
         TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
             address(managerImpl),
             address(proxyAdmin),
-            managerData
+            new bytes(0) // Empty data for initial deployment
         );
         
-        manager = NativeStakingManager(payable(address(managerProxy)));
+        // Initialize separately after deployment
+        (bool success, ) = address(managerProxy).call(managerData);
+        require(success, "Manager initialization failed");
+        
+        manager = ConcreteNativeStakingManager(payable(address(managerProxy)));
         
         // Grant roles
         staking.grantRole(staking.STAKING_MANAGER_ROLE(), address(manager));

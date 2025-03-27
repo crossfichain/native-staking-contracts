@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../../src/core/NativeStakingVault.sol";
-import "../../src/core/NativeStakingManager.sol";
+import "../../src/core/ConcreteNativeStakingManager.sol";
 import "../../src/interfaces/IOracle.sol";
 import "../mocks/MockERC20.sol";
 import {MockStakingOracle} from "../mocks/MockStakingOracle.sol";
@@ -23,7 +23,7 @@ contract APYStakingTest is Test {
     MockERC20 public wxfi;
     IOracle public oracle;
     NativeStakingVault public vault;
-    NativeStakingManager public manager;
+    ConcreteNativeStakingManager public manager;
     
     // Test constants
     uint256 public constant INITIAL_BALANCE = 10000 ether;
@@ -55,7 +55,7 @@ contract APYStakingTest is Test {
         );
         
         // Deploy manager
-        manager = new NativeStakingManager();
+        manager = new ConcreteNativeStakingManager();
         manager.initialize(
             address(0), // No APR contract for this test
             address(vault),

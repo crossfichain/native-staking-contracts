@@ -16,12 +16,10 @@ import "../interfaces/IAPRStaking.sol";
 
 /**
  * @title NativeStakingManager
- * @dev Central router contract for the Native Staking system
- * Routes staking operations to the appropriate staking contract (APR or APY)
- * Handles both native XFI and wrapped XFI (WXFI)
+ * @dev Manages staking operations by routing to the appropriate staking contract
  * Validator information is now only passed to events for off-chain processing
  */
-contract NativeStakingManager is 
+abstract contract NativeStakingManager is 
     Initializable, 
     AccessControlUpgradeable, 
     PausableUpgradeable, 
@@ -1048,6 +1046,7 @@ contract NativeStakingManager is
     function _authorizeUpgrade(address newImplementation) 
         internal 
         override 
+        virtual
         onlyRole(UPGRADER_ROLE) 
     {
         // No additional logic needed
@@ -1056,7 +1055,7 @@ contract NativeStakingManager is
     /**
      * @dev Receive function to handle native XFI transfers
      */
-    receive() external payable {
+    receive() external payable virtual {
         // Only accept direct transfers if the contract is not paused
         require(!paused(), "Contract is paused");
     }
