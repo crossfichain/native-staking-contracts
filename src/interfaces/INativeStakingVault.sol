@@ -72,4 +72,10 @@ interface INativeStakingVault is IERC4626Upgradeable {
      * @return The total staked amount with 18 decimals
      */
     function getTotalStaked() external view returns (uint256);
+    
+    /**
+     * @dev Gets the total amount of tokens that are pending withdrawal
+     * @return The total pending withdrawals
+     */
+    function getTotalPendingWithdrawals() external view returns (uint256);
 } 

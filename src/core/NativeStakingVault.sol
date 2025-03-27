@@ -247,6 +247,8 @@ contract NativeStakingVault is
         });
         
         _userWithdrawalRequestIds[owner].push(requestId);
+        
+        // Update total pending withdrawals - use the actual asset amount, not the shares
         _totalPendingWithdrawals += assets;
         
         emit WithdrawalRequested(owner, receiver, requestId, assets, shares, unlockTime);
@@ -403,30 +405,24 @@ contract NativeStakingVault is
         // Get the raw asset balance
         uint256 rawAssets = IERC20Upgradeable(asset()).balanceOf(address(this));
         
-        // Add pending withdrawals (assets that are being withdrawn)
-        uint256 pendingWithdrawals = _totalPendingWithdrawals;
-        
         // Calculate rewards based on APY since last compound
         uint256 timeElapsed = block.timestamp - _lastCompoundTimestamp;
-        uint256 currentAssets = rawAssets + pendingWithdrawals;
         
-        // If there are no assets or no time has elapsed, return current assets
-        if (currentAssets == 0 || timeElapsed == 0) {
-            return currentAssets;
+        // If there are no assets or no time has elapsed, return raw assets
+        if (rawAssets == 0 || timeElapsed == 0) {
+            return rawAssets;
         }
         
         // Calculate rewards using APY formula: rewards = principal * (APY/100) * (time/365 days)
         uint256 apy = oracle.getCurrentAPY();
         if (apy == 0) {
-            return currentAssets;
+            return rawAssets;
         }
         
-        uint256 rewardsAmount = (currentAssets * apy * timeElapsed) / (365 days * 10000); // APY is in basis points
+        uint256 rewardsAmount = (rawAssets * apy * timeElapsed) / (365 days * 10000); // APY is in basis points
         
         // Calculate total with compounding
-        uint256 calculatedTotalAssets = currentAssets + rewardsAmount;
-        
-        return calculatedTotalAssets;
+        return rawAssets + rewardsAmount;
     }
     
     /**
@@ -434,17 +430,19 @@ contract NativeStakingVault is
      * @return The maximum amount of assets available for immediate withdrawal
      */
     function _maxWithdrawalLiquidity() private view returns (uint256) {
-        uint256 totalVaultAssets = _calculateTotalAssetsWithCompounding();
+        // Get actual token balance in the vault
+        uint256 actualBalance = IERC20Upgradeable(asset()).balanceOf(address(this));
         
-        // Subtract pending withdrawals
-        if (totalVaultAssets <= _totalPendingWithdrawals) {
+        // Ensure we don't promise more than we have
+        if (actualBalance <= _totalPendingWithdrawals) {
             return 0;
         }
         
-        uint256 availableAssets = totalVaultAssets - _totalPendingWithdrawals;
+        // Available liquidity is the actual balance minus tokens reserved for pending withdrawals
+        uint256 availableLiquidity = actualBalance - _totalPendingWithdrawals;
         
         // Apply max liquidity percent
-        return availableAssets * maxLiquidityPercent / MAX_BPS;
+        return availableLiquidity * maxLiquidityPercent / MAX_BPS;
     }
     
     /**
@@ -608,5 +606,13 @@ contract NativeStakingVault is
 
     function previewRedeem(uint256 shares) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
         return ERC4626Upgradeable.previewRedeem(shares);
+    }
+
+    /**
+     * @dev Gets the total amount of tokens that are pending withdrawal
+     * @return The total pending withdrawals
+     */
+    function getTotalPendingWithdrawals() external view returns (uint256) {
+        return _totalPendingWithdrawals;
     }
 } 
