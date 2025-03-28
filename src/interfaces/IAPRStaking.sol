@@ -105,4 +105,17 @@ interface IAPRStaking {
      * @return The latest request ID (bytes)
      */
     function getLatestRequestId() external view returns (bytes memory);
+
+    /**
+     * @dev Claims accumulated rewards from a specific validator
+     * @param user The address of the user claiming rewards
+     * @param validator The validator to claim rewards from
+     * @param amount The amount of rewards to claim
+     * @return The amount claimed
+     */
+    function claimRewardsForValidator(
+        address user,
+        string calldata validator,
+        uint256 amount
+    ) external returns (uint256);
 } 

@@ -41,20 +41,33 @@ contract E2EValidatorStakingTest is E2ETestBase {
         // Setup two validators
         string memory validator1 = "mxvaoper123456789";
         string memory validator2 = "mxvaoper987654321";
+        uint256 stakeAmount = 1000 ether;
         uint256 rewardAmount1 = 10 ether;
         uint256 rewardAmount2 = 20 ether;
         
         // Set initial balances and approvals
-        xfi.mint(address(this), 10 ether); // Just some token balance for the test contract
+        xfi.mint(address(this), stakeAmount * 2 + 10 ether); // Ensure enough balance for staking
         uint256 initialBalance = xfi.balanceOf(address(this));
         
         // Make sure manager has enough tokens to transfer as rewards
         xfi.mint(address(manager), rewardAmount1 + rewardAmount2);
         
+        // First stake with both validators to ensure we have validator stake
+        vm.startPrank(address(this));
+        xfi.approve(address(manager), stakeAmount * 2);
+        manager.stakeAPR(stakeAmount, validator1);
+        manager.stakeAPR(stakeAmount, validator2);
+        vm.stopPrank();
+
+        // Update oracle timestamp to avoid freshness check
+        vm.startPrank(admin);
+        manager.updateOracleTimestamp();
+        vm.stopPrank();
+        
         // Mock the oracle calls that the manager will make
         // Setup validator stakes (this is just for the safety check in manager)
-        oracle.setValidatorStake(address(this), validator1, 1000 ether);
-        oracle.setValidatorStake(address(this), validator2, 1000 ether);
+        oracle.setValidatorStake(address(this), validator1, stakeAmount);
+        oracle.setValidatorStake(address(this), validator2, stakeAmount);
         
         // Setup claimable rewards
         oracle.setUserClaimableRewardsForValidator(address(this), validator1, rewardAmount1);
@@ -66,7 +79,7 @@ contract E2EValidatorStakingTest is E2ETestBase {
         vm.stopPrank();
         
         // Verify first claim - requestId1 is now bytes, but we're checking the reward amount
-        assertEq(xfi.balanceOf(address(this)), initialBalance + rewardAmount1, "Balance should increase by first reward amount");
+        assertEq(xfi.balanceOf(address(this)), initialBalance - stakeAmount * 2 + rewardAmount1, "Balance should include first reward amount");
         
         // Claim rewards from the second validator
         vm.startPrank(address(this));
@@ -74,8 +87,8 @@ contract E2EValidatorStakingTest is E2ETestBase {
         vm.stopPrank();
         
         // Verify second claim
-        assertEq(xfi.balanceOf(address(this)), initialBalance + rewardAmount1 + rewardAmount2, 
-            "Balance should increase by both rewards");
+        assertEq(xfi.balanceOf(address(this)), initialBalance - stakeAmount * 2 + rewardAmount1 + rewardAmount2, 
+            "Balance should include both rewards");
             
         // The requestIds should be of type bytes
         assertTrue(requestId1.length > 0, "Request ID 1 should not be empty");

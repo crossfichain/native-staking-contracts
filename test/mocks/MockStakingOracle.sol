@@ -23,6 +23,10 @@ contract MockStakingOracle is IOracle {
     }
 
     function isValidatorActive(string calldata validator) external view returns (bool) {
+        if (bytes(validator).length > 0 && _validatorActive[validator]) {
+            return true;
+        }
+        // Default to true for backward compatibility
         return true;
     }
 
@@ -31,6 +35,9 @@ contract MockStakingOracle is IOracle {
     }
 
     function getValidatorAPR(string calldata validator) external view returns (uint256) {
+        if (_validatorAPRs[validator] > 0) {
+            return _validatorAPRs[validator];
+        }
         return _currentAPR;
     }
 
@@ -153,5 +160,34 @@ contract MockStakingOracle is IOracle {
     function getTotalClaimableRewards() external view returns (uint256) {
         // This is a mock, so we return a hardcoded value or sum of all rewards
         return 1000 ether; // Example value
+    }
+
+    // Map to store validator-specific APRs
+    mapping(string => uint256) private _validatorAPRs;
+    
+    function setValidatorAPR(string calldata validator, uint256 apr) external {
+        _validatorAPRs[validator] = apr;
+    }
+
+    // Map to store validator active status
+    mapping(string => bool) private _validatorActive;
+    
+    function setIsValidatorActive(string calldata validator, bool active) external {
+        _validatorActive[validator] = active;
+    }
+
+    // Map to store validator-specific unbonding periods
+    mapping(string => uint256) private _validatorUnbondingPeriods;
+    
+    function setValidatorUnbondingPeriod(string calldata validator, uint256 period) external {
+        _validatorUnbondingPeriods[validator] = period;
+    }
+    
+    // Implement the getValidatorUnbondingPeriod function
+    function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256) {
+        if (_validatorUnbondingPeriods[validator] > 0) {
+            return _validatorUnbondingPeriods[validator];
+        }
+        return _unbondingPeriod;
     }
 } 

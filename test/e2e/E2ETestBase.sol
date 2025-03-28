@@ -88,6 +88,9 @@ abstract contract E2ETestBase is Test {
         vault.grantRole(vault.COMPOUNDER_ROLE(), compounder);
         aprContract.grantRole(aprContract.DEFAULT_ADMIN_ROLE(), admin);
         aprContract.grantRole(aprContract.DEFAULT_ADMIN_ROLE(), address(manager));
+        aprContract.grantRole(aprContract.STAKING_MANAGER_ROLE(), address(manager));
+        // Grant STAKING_MANAGER_ROLE to all test contracts
+        aprContract.grantRole(aprContract.STAKING_MANAGER_ROLE(), address(this));
         manager.grantRole(manager.DEFAULT_ADMIN_ROLE(), admin);
         manager.grantRole(manager.FULFILLER_ROLE(), admin);
         

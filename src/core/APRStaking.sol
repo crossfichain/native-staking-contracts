@@ -329,6 +329,58 @@ contract APRStaking is
     }
     
     /**
+     * @dev Claims accumulated rewards from a specific validator
+     * @param user The address of the user claiming rewards
+     * @param validator The validator to claim rewards from
+     * @param amount The amount of rewards to claim
+     * @return The amount claimed
+     */
+    function claimRewardsForValidator(
+        address user,
+        string calldata validator,
+        uint256 amount
+    ) external override whenNotPaused nonReentrant returns (uint256) {
+        require(amount > 0, "Amount must be greater than 0");
+        require(hasRole(STAKING_MANAGER_ROLE, msg.sender), "Caller must have manager role");
+        
+        // Verify that the validator format is valid
+        require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
+        
+        // Check that the user has stakes with this validator
+        require(_userValidatorStakes[user][validator] > 0, "No stake found for this validator");
+        
+        // Added oracle freshness check
+        _checkOracleFreshness();
+        
+        // Transfer the rewards to the user
+        bool transferred = IERC20(stakingToken).transfer(user, amount);
+        require(transferred, "Reward transfer failed");
+        
+        // Convert to structured request ID format
+        bytes memory requestId = abi.encodePacked(
+            uint16(1),                // Request type (1 for claim rewards)
+            uint32(block.timestamp),  // Timestamp (last 4 bytes)
+            uint32(_nextUnstakeRequestId++)  // Sequence counter
+        );
+        
+        // Store the latest request ID
+        _latestRequestId = requestId;
+        
+        // Create an unstake request record for tracking
+        _unstakeRequests[requestId] = IAPRStaking.UnstakeRequest({
+            user: user,
+            amount: amount,
+            validator: validator,
+            timestamp: block.timestamp,
+            claimed: true
+        });
+        
+        emit RewardsClaimed(user, amount);
+        
+        return amount;
+    }
+    
+    /**
      * @dev Gets the total amount staked by a user
      * @param user The address of the user
      * @return The total amount staked

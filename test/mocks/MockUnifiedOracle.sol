@@ -124,4 +124,8 @@ contract MockUnifiedOracle is IOracle {
     function getTotalClaimableRewards() external view override returns (uint256) {
         return 1000 ether; // Example value
     }
+
+    function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256) {
+        return 86400; // 1 day in seconds
+    }
 } 

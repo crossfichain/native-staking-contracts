@@ -126,4 +126,11 @@ interface IOracle {
      * @return totalRewards The total of all claimable rewards
      */
     function getTotalClaimableRewards() external view returns (uint256);
+
+    /**
+     * @dev Gets the validator's unbonding period
+     * @param validator The validator to check
+     * @return The unbonding period in seconds
+     */
+    function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256);
 } 

@@ -72,12 +72,12 @@ contract UnifiedOracle is
     /**
      * @dev Initializes the contract
      * @param _diaOracle The address of the DIA oracle
-     * @param _unbondingPeriod The unbonding period in seconds
+     * @param unbondingPeriodValue The unbonding period in seconds
      * @param _wxfi The address of the WXFI token
      */
     function initialize(
         address _diaOracle,
-        uint256 _unbondingPeriod,
+        uint256 unbondingPeriodValue,
         address _wxfi
     ) external initializer {
         __AccessControl_init();
@@ -93,7 +93,7 @@ contract UnifiedOracle is
         require(_diaOracle != address(0), "Invalid DIA oracle address");
         diaOracle = IDIAOracle(_diaOracle);
         
-        _unbondingPeriod = _unbondingPeriod;
+        _unbondingPeriod = unbondingPeriodValue;
         
         // Set WXFI address
         require(_wxfi != address(0), "Invalid WXFI address");
@@ -651,5 +651,16 @@ contract UnifiedOracle is
         }
         
         return true;
+    }
+
+    /**
+     * @dev Gets the validator's unbonding period
+     * @param validator The validator to check
+     * @return The unbonding period in seconds
+     */
+    function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256) {
+        // For now, just return the global unbonding period
+        // In the future, this could be extended to support per-validator unbonding periods
+        return _unbondingPeriod;
     }
 } 

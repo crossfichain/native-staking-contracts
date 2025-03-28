@@ -51,6 +51,7 @@ contract NativeStaking is
     mapping(address => UnstakeRequest[]) private _userUnstakeRequests;
     mapping(address => uint256) private _totalStakedByUser;
     mapping(address => uint256) private _lastClaimTime;
+    mapping(address => mapping(string => uint256)) private _userValidatorStake;
     
     // New mapping to map requestId (as bytes) to array index
     mapping(address => mapping(bytes32 => uint256)) private _requestIdToIndex;
@@ -131,6 +132,7 @@ contract NativeStaking is
                 
                 // Update existing stake
                 stakeItem.amount += amount;
+                _userValidatorStake[user][validator] += amount;
                 existingStakeFound = true;
                 emit Staked(user, amount, validator, i);
                 break;
@@ -148,6 +150,9 @@ contract NativeStaking is
             });
             
             _userStakes[user].push(newStake);
+            
+            // Update validator-specific stake
+            _userValidatorStake[user][validator] += amount;
             
             // Emit event with validator information
             uint256 stakeId = _userStakes[user].length - 1;
@@ -279,6 +284,9 @@ contract NativeStaking is
         
         // Update total staked amount
         _totalStakedByUser[user] -= amount;
+        
+        // Update validator-specific stake
+        _userValidatorStake[user][validator] -= amount;
         
         // Emit event with validator information for off-chain processing
         emit UnstakeRequested(user, amount, validator, requestId, unlockTime);
@@ -767,6 +775,31 @@ contract NativeStaking is
      */
     function getLatestRequestId() external view override returns (bytes memory) {
         return _latestRequestId;
+    }
+    
+    /**
+     * @dev Claims accumulated rewards from a specific validator
+     * @param user The address of the user claiming rewards
+     * @param validator The validator to claim rewards from
+     * @param amount The amount of rewards to claim
+     * @return The amount claimed
+     */
+    function claimRewardsForValidator(
+        address user,
+        string calldata validator,
+        uint256 amount
+    ) external override onlyRole(STAKING_MANAGER_ROLE) returns (uint256) {
+        require(amount > 0, "Amount must be greater than 0");
+        
+        // Check that the user has staked with this validator
+        uint256 validatorStake = _userValidatorStake[user][validator];
+        require(validatorStake > 0, "No stake found for this validator");
+        
+        // Transfer the reward tokens to the user
+        bool transferred = stakingToken.transfer(user, amount);
+        require(transferred, "Token transfer failed");
+        
+        return amount;
     }
     
     /**

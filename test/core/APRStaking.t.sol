@@ -112,7 +112,7 @@ contract APRStakingTest is Test {
             if (entries[i].topics[0] == keccak256("UnstakeRequested(address,uint256,string,bytes)")) {
                 // The requestId is in the data portion, but we need to decode it correctly
                 // The data contains amount, validator and requestId (non-indexed parameters)
-                (uint256 amount, string memory validator, bytes memory id) = abi.decode(entries[i].data, (uint256, string, bytes));
+                (uint256 decodedAmount, string memory validator, bytes memory id) = abi.decode(entries[i].data, (uint256, string, bytes));
                 requestId = id;
                 break;
             }

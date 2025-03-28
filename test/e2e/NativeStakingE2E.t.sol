@@ -234,20 +234,33 @@ contract NativeStakingE2ETest is Test {
         // Setup two validators
         string memory validator1 = "mxvaopervalidator1";
         string memory validator2 = "mxvaopervalidator2";
+        uint256 stakeAmount = 1000 ether;
         uint256 rewardAmount1 = 100 ether;
         uint256 rewardAmount2 = 200 ether;
         
         // Set initial balances and approvals
-        xfi.mint(address(this), 10 ether); // Just some token balance for the test contract
+        xfi.mint(address(this), stakeAmount * 2 + 10 ether); // Ensure enough balance for staking
         uint256 initialBalance = xfi.balanceOf(address(this));
         
         // Make sure manager has enough tokens to transfer as rewards
         xfi.mint(address(manager), rewardAmount1 + rewardAmount2);
         
+        // First stake with both validators to ensure we have validator stake
+        vm.startPrank(address(this));
+        xfi.approve(address(manager), stakeAmount * 2);
+        manager.stakeAPR(stakeAmount, validator1);
+        manager.stakeAPR(stakeAmount, validator2);
+        vm.stopPrank();
+        
+        // Update oracle timestamp to avoid freshness check
+        vm.startPrank(admin);
+        manager.updateOracleTimestamp();
+        vm.stopPrank();
+        
         // Mock the oracle calls that the manager will make
         // Setup validator stakes (this is just for the safety check in manager)
-        oracle.setValidatorStake(address(this), validator1, 1000 ether);
-        oracle.setValidatorStake(address(this), validator2, 1000 ether);
+        oracle.setValidatorStake(address(this), validator1, stakeAmount);
+        oracle.setValidatorStake(address(this), validator2, stakeAmount);
         
         // Setup claimable rewards
         oracle.setUserClaimableRewardsForValidator(address(this), validator1, rewardAmount1);
@@ -259,7 +272,7 @@ contract NativeStakingE2ETest is Test {
         vm.stopPrank();
         
         // Verify first claim - requestId1 is now bytes, but we're checking the reward amount
-        assertEq(xfi.balanceOf(address(this)), initialBalance + rewardAmount1, "Balance should increase by first reward amount");
+        assertEq(xfi.balanceOf(address(this)), initialBalance - stakeAmount * 2 + rewardAmount1, "Balance should include first reward amount");
         
         // Claim rewards from the second validator
         vm.startPrank(address(this));
@@ -267,8 +280,8 @@ contract NativeStakingE2ETest is Test {
         vm.stopPrank();
         
         // Verify second claim
-        assertEq(xfi.balanceOf(address(this)), initialBalance + rewardAmount1 + rewardAmount2, 
-            "Balance should increase by both rewards");
+        assertEq(xfi.balanceOf(address(this)), initialBalance - stakeAmount * 2 + rewardAmount1 + rewardAmount2, 
+            "Balance should include both rewards");
             
         // The requestIds should be of type bytes
         assertTrue(requestId1.length > 0, "Request ID 1 should not be empty");
@@ -656,5 +669,64 @@ contract NativeStakingE2ETest is Test {
         
         assertEq(unstaked, stakeAmount, "Unstake amount incorrect");
         assertEq(address(user1).balance, initialNativeBalance + rewardAmount + stakeAmount, "Native tokens not received");
+    }
+
+    /**
+     * @dev Tests claiming rewards from a specific validator
+     */
+    function testClaimRewardsForSpecificValidator() public {
+        string memory validator1 = "mxvaoper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+        string memory validator2 = "mxvaoper2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+        uint256 stakeAmount = 100 ether;
+        
+        // Set up validator info
+        oracle.setValidatorAPR(validator1, 1000); // 10% APR
+        oracle.setValidatorAPR(validator2, 2000); // 20% APR
+        oracle.setIsValidatorActive(validator1, true);
+        oracle.setIsValidatorActive(validator2, true);
+        
+        // User stakes in two different validators
+        vm.startPrank(user1);
+        xfi.approve(address(manager), stakeAmount * 2);
+        manager.stakeAPR(stakeAmount, validator1);
+        manager.stakeAPR(stakeAmount, validator2);
+        vm.stopPrank();
+        
+        // Oracle updates validator stakes
+        oracle.setValidatorStake(user1, validator1, stakeAmount);
+        oracle.setValidatorStake(user1, validator2, stakeAmount);
+        
+        // Set different rewards for each validator
+        uint256 reward1 = 1 ether; // 1% of stake for validator1
+        uint256 reward2 = 2 ether; // 2% of stake for validator2
+        oracle.setUserClaimableRewardsForValidator(user1, validator1, reward1);
+        oracle.setUserClaimableRewardsForValidator(user1, validator2, reward2);
+        
+        // Fund the manager contract for rewards
+        xfi.mint(address(manager), reward1 + reward2);
+        
+        // User claims rewards only from validator1
+        vm.startPrank(user1);
+        uint256 initialBalance = xfi.balanceOf(user1);
+        
+        // Update oracle timestamp to avoid freshness check
+        vm.stopPrank();
+        vm.startPrank(admin);
+        manager.updateOracleTimestamp();
+        vm.stopPrank();
+        
+        // Now claim the rewards
+        vm.startPrank(user1);
+        bytes memory requestId = manager.claimRewardsAPRForValidator(validator1, reward1);
+        vm.stopPrank();
+        
+        // Verify the user received only rewards from validator1
+        assertEq(xfi.balanceOf(user1), initialBalance + reward1, "User should receive rewards only from validator1");
+        
+        // Verify validator1 rewards are claimed
+        assertEq(oracle.getUserClaimableRewardsForValidator(user1, validator1), 0, "Validator1 rewards should be claimed");
+        
+        // Verify validator2 rewards are still available
+        assertEq(oracle.getUserClaimableRewardsForValidator(user1, validator2), reward2, "Validator2 rewards should still be available");
     }
 } 

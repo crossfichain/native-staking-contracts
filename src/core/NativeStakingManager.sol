@@ -71,6 +71,10 @@ abstract contract NativeStakingManager is
     IWXFI public wxfi;
     IOracle public oracle;
     
+    // Oracle freshness tracking
+    uint256 public oracleLastUpdated;
+    uint256 public oracleFreshnessThreshold = 1 days; // Default threshold of 1 day
+    
     // Unstaking freeze period variables
     uint256 private _launchTimestamp;
     uint256 private _unstakeFreezeTime;
@@ -117,6 +121,10 @@ abstract contract NativeStakingManager is
     event RewardsClaimed(address indexed user, uint256 amount, uint256 mpxAmount, bytes requestId);
     event StakingUnstakeRequested(address indexed user, address indexed stakingContract, uint256 amount, bytes requestId);
     event UnstakeAPRRequested(address indexed user, string validator, uint256 amount, bytes requestId);
+    
+    // Error definitions
+    error OracleDataNotFresh(uint256 lastUpdated, uint256 currentTime);
+    error ValidatorInfoNotFound(string validator);
     
     /**
      * @dev Initializes the contract
@@ -582,13 +590,21 @@ abstract contract NativeStakingManager is
         external 
         override
         nonReentrant 
+        nonZeroAddress
+        whenNotPaused
         returns (bytes memory requestId) 
     {
-        require(amount >= minRewardClaimAmount, "Amount must be at least minRewardClaimAmount");
-        require(oracle.isValidatorActive(validator), "Validator is not active");
+        if (enforceMinimumAmounts) {
+            require(amount >= minRewardClaimAmount, "Amount must be at least minRewardClaimAmount");
+        }
         
-        // Check oracle freshness
-        _checkOracleFreshness();
+        // Check if oracle data is fresh
+        if (block.timestamp >= oracleLastUpdated + oracleFreshnessThreshold) {
+            revert OracleDataNotFresh(oracleLastUpdated, block.timestamp);
+        }
+        
+        // Check if validator is active
+        require(oracle.isValidatorActive(validator), "Validator is not active");
         
         // Get user's claimable rewards for this validator
         uint256 claimableRewards = oracle.getUserClaimableRewardsForValidator(msg.sender, validator);
@@ -609,13 +625,10 @@ abstract contract NativeStakingManager is
         uint256 clearedAmount = oracle.clearUserClaimableRewardsForValidator(msg.sender, validator);
         require(clearedAmount >= amount, "Failed to clear rewards");
         
-        // Transfer rewards to user
-        require(wxfi.transfer(msg.sender, amount), "Failed to transfer rewards");
+        // Use the new claimRewardsForValidator function in APRStaking
+        aprContract.claimRewardsForValidator(msg.sender, validator, amount);
         
-        // Create request record using the new structured ID format
-        uint256 legacyRequestId = _nextRequestId++;
-        
-        // Generate the new formatted request ID
+        // Generate the request ID using our structured format
         requestId = _generateStructuredRequestId(
             RequestType.CLAIM_REWARDS,
             msg.sender,
@@ -623,19 +636,11 @@ abstract contract NativeStakingManager is
             validator
         );
         
-        // Store using the legacy ID for backward compatibility
-        _requests[legacyRequestId] = Request({
-            user: msg.sender,
-            amount: amount,
-            validator: validator,
-            timestamp: block.timestamp,
-            requestType: RequestType.CLAIM_REWARDS,
-            status: RequestStatus.FULFILLED,
-            statusReason: "Success"
-        });
+        // Convert XFI to MPX for the event
+        uint256 mpxAmount = oracle.convertXFItoMPX(amount);
         
-        emit RewardsClaimedAPRForValidator(msg.sender, amount, 0, validator, requestId);
-        emit RequestFulfilled(legacyRequestId, msg.sender, RequestStatus.FULFILLED, "Success");
+        // Emit both events
+        emit RewardsClaimedAPRForValidator(msg.sender, amount, mpxAmount, validator, requestId);
         
         return requestId;
     }
@@ -1434,5 +1439,24 @@ abstract contract NativeStakingManager is
                    
         // Convert to bytes
         return abi.encode(numericId);
+    }
+
+    /**
+     * @dev Updates the oracle last updated timestamp
+     * @notice Only callable by ORACLE_MANAGER_ROLE
+     */
+    function updateOracleTimestamp() external onlyRole(ORACLE_MANAGER_ROLE) {
+        oracleLastUpdated = block.timestamp;
+    }
+
+    /**
+     * @dev Sets the oracle freshness threshold
+     * @param threshold The new freshness threshold in seconds
+     * @notice Only callable by DEFAULT_ADMIN_ROLE
+     */
+    function setOracleFreshnessThreshold(uint256 threshold) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(threshold > 0, "Threshold must be greater than 0");
+        require(threshold <= 7 days, "Threshold must be <= 7 days");
+        oracleFreshnessThreshold = threshold;
     }
 } 
