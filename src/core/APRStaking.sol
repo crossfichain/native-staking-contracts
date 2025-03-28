@@ -31,6 +31,7 @@ contract APRStaking is
     bool public enforceMinimumAmounts;
     
     uint256 private _nextUnstakeRequestId;
+    bytes private _latestRequestId; // Store the latest request ID
     
     // Mappings for staking data
     mapping(address => uint256) private _userTotalStaked;
@@ -50,6 +51,7 @@ contract APRStaking is
     // Custom roles
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant STAKING_MANAGER_ROLE = keccak256("STAKING_MANAGER_ROLE");
     
     // Events
     event Staked(address indexed user, uint256 amount, string validator);
@@ -192,6 +194,7 @@ contract APRStaking is
      * @param user The address of the user unstaking
      * @param amount The amount of XFI to unstake
      * @param validator The validator address to unstake from
+     * @return requestId The ID of the unstake request
      */
     function requestUnstake(
         address user,
@@ -202,8 +205,10 @@ contract APRStaking is
         override 
         whenNotPaused 
         nonReentrant 
+        returns (bytes memory requestId)
     {
         require(amount > 0, "Amount must be greater than 0");
+        require(hasRole(STAKING_MANAGER_ROLE, msg.sender), "Caller must have manager role");
         
         // Added validator format validation
         require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
@@ -235,7 +240,7 @@ contract APRStaking is
         
         // Create a structured requestId as bytes
         // Format: [2 bytes type][4 bytes timestamp][4 bytes sequence]
-        bytes memory requestId = abi.encodePacked(
+        requestId = abi.encodePacked(
             uint16(0),                // Request type (0 for unstake)
             uint32(block.timestamp),  // Timestamp (last 4 bytes)
             sequenceValue             // Sequence counter (deterministic)
@@ -244,6 +249,9 @@ contract APRStaking is
         // Store mappings between IDs
         _requestIdToLegacyId[requestId] = legacyRequestId;
         _legacyIdToRequestId[legacyRequestId] = requestId;
+        
+        // Store the latest request ID
+        _latestRequestId = requestId;
         
         _unstakeRequests[requestId] = IAPRStaking.UnstakeRequest({
             user: user,
@@ -254,6 +262,8 @@ contract APRStaking is
         });
         
         emit UnstakeRequested(user, amount, validator, requestId);
+        
+        return requestId;
     }
     
     /**
@@ -273,7 +283,8 @@ contract APRStaking is
     {
         // Get the request directly using the bytes requestId
         IAPRStaking.UnstakeRequest storage request = _unstakeRequests[requestId];
-        require(request.user == user, "Not request owner");
+        // Only allow the specific user or the manager contract to claim
+        require(request.user == user || hasRole(STAKING_MANAGER_ROLE, msg.sender), "Not request owner");
         require(!request.claimed, "Already claimed");
         require(block.timestamp >= request.timestamp + oracle.getUnbondingPeriod(), "Still in unbonding period");
         
@@ -397,6 +408,14 @@ contract APRStaking is
     }
     
     /**
+     * @dev Gets the latest request ID that was created
+     * @return The latest request ID (bytes)
+     */
+    function getLatestRequestId() external view override returns (bytes memory) {
+        return _latestRequestId;
+    }
+    
+    /**
      * @dev Updates the staking token address
      * @param newToken The new staking token address
      */
@@ -507,5 +526,5 @@ contract APRStaking is
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[50] private __gap;
+    uint256[49] private __gap;
 } 

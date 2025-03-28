@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../mocks/MockERC20.sol";
+import "../mocks/MockWXFI.sol";
 import {MockStakingOracle} from "../mocks/MockStakingOracle.sol";
 import "../../src/core/NativeStakingVault.sol";
 import "../../src/core/ConcreteNativeStakingManager.sol";
@@ -43,15 +44,15 @@ contract NativeStakingE2ETest is Test {
         vm.startPrank(admin);
         
         // Deploy mock contracts
-        xfi = new MockERC20("XFI", "XFI", 18);
-        oracle = new MockStakingOracle();
+        xfi = MockERC20(address(new MockWXFI()));
+        oracle = MockStakingOracle(address(new MockStakingOracle()));
         
         // Setup oracle values
-        oracle.setCurrentAPY(APY);
-        oracle.setCurrentAPR(1000); // 10% APR
-        oracle.setUnbondingPeriod(UNBONDING_PERIOD);
-        oracle.setXfiPrice(1e18); // Set XFI price to 1 USD
-        oracle.setMpxPrice(1e18); // Set MPX price to 1 USD
+        MockStakingOracle(address(oracle)).setCurrentAPY(1 ether);
+        MockStakingOracle(address(oracle)).setCurrentAPR(1000); // 10% with two decimals
+        MockStakingOracle(address(oracle)).setUnbondingPeriod(UNBONDING_PERIOD);
+        MockStakingOracle(address(oracle)).setXfiPrice(1 ether); // Set XFI price to 1 USD
+        MockStakingOracle(address(oracle)).setMpxPrice(1 ether); // Set MPX price to 1 USD
         
         // Deploy APR contract
         aprContract = new APRStaking();
@@ -91,6 +92,7 @@ contract NativeStakingE2ETest is Test {
         vault.grantRole(vault.COMPOUNDER_ROLE(), compounder);
         aprContract.grantRole(aprContract.DEFAULT_ADMIN_ROLE(), admin);
         aprContract.grantRole(aprContract.DEFAULT_ADMIN_ROLE(), address(manager));
+        aprContract.grantRole(aprContract.STAKING_MANAGER_ROLE(), address(manager));
         manager.grantRole(manager.DEFAULT_ADMIN_ROLE(), admin);
         manager.grantRole(manager.FULFILLER_ROLE(), admin);
         

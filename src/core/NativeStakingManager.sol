@@ -110,6 +110,13 @@ abstract contract NativeStakingManager is
     event RewardsPayback(address indexed payer, uint256 amount);
     event UnstakeClaimedAPRNative(address indexed user, bytes indexed requestId, uint256 xfiAmount, uint256 mpxAmount);
     event RewardsClaimedAPRNative(address indexed user, uint256 xfiAmount, uint256 mpxAmount, bytes indexed requestId);
+    event Staked(address indexed user, uint256 amount, uint256 mpxAmount, string validator, bytes requestId);
+    event StakedAsConversion(address indexed user, uint256 amount, uint256 mpxAmount, string validator, bytes requestId);
+    event UnstakeRequested(address indexed user, uint256 amount, uint256 mpxAmount, string validator, bytes requestId);
+    event UnstakeClaimed(address indexed user, uint256 amount, uint256 mpxAmount, bytes requestId);
+    event RewardsClaimed(address indexed user, uint256 amount, uint256 mpxAmount, bytes requestId);
+    event StakingUnstakeRequested(address indexed user, address indexed stakingContract, uint256 amount, bytes requestId);
+    event UnstakeAPRRequested(address indexed user, string validator, uint256 amount, bytes requestId);
     
     /**
      * @dev Initializes the contract
@@ -210,6 +217,37 @@ abstract contract NativeStakingManager is
         }
         
         return true;
+    }
+    
+    // Modifiers
+    /**
+     * @dev Ensures the function caller is not a zero address
+     */
+    modifier nonZeroAddress() {
+        require(msg.sender != address(0), "Zero address not allowed");
+        _;
+    }
+
+    /**
+     * @dev Ensures the amount is greater than zero and meets minimum requirements if enforced
+     */
+    modifier validAmount(uint256 amount) {
+        require(amount > 0, "Amount must be greater than zero");
+        
+        // Enforce minimum amount if enabled
+        if (enforceMinimumAmounts) {
+            require(amount >= minUnstakeAmount, "Amount must be at least 10 XFI");
+        }
+        _;
+    }
+
+    /**
+     * @dev Validates the validator format
+     */
+    modifier validValidator(string memory validator) {
+        require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
+        require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
+        _;
     }
     
     /**
@@ -346,32 +384,24 @@ abstract contract NativeStakingManager is
     }
     
     /**
-     * @dev Requests to unstake XFI from the APR model
+     * @dev Requests to unstake XFI tokens from a validator on the APR model
      * @param amount The amount of XFI to unstake
-     * @param validator The validator address/ID to unstake from (only for events)
+     * @param validator The validator address to unstake from
      * @return requestId The ID of the unstake request
      */
-    function unstakeAPR(uint256 amount, string calldata validator) 
-        external 
-        override 
-        whenNotPaused 
-        nonReentrant 
-        returns (bytes memory requestId) 
+    function unstakeAPR(
+        uint256 amount,
+        string calldata validator
+    )
+        external
+        override
+        whenNotPaused
+        nonReentrant
+        nonZeroAddress
+        validAmount(amount)
+        validValidator(validator)
+        returns (bytes memory requestId)
     {
-        // Validate amount
-        require(amount > 0, "Amount must be greater than zero");
-        
-        // Enforce minimum amount if enabled
-        if (enforceMinimumAmounts) {
-            require(amount >= minUnstakeAmount, "Amount must be at least 10 XFI");
-        }
-        
-        // Validate validator format
-        require(_validateValidatorFormat(validator), "Invalid validator format: must start with 'mxva'");
-        
-        // Check if unstaking is frozen (first month after launch)
-        require(!isUnstakingFrozen(), "Unstaking is frozen for the first month");
-
         // Get current claimable rewards
         uint256 claimableRewards = oracle.getUserClaimableRewards(msg.sender);
         
@@ -387,14 +417,25 @@ abstract contract NativeStakingManager is
             bool transferred = IERC20(wxfi).transfer(msg.sender, claimableRewards);
             require(transferred, "Reward transfer failed");
             
+            // Create a request ID for the event
+            bytes memory rewardRequestId = _generateStructuredRequestId(
+                RequestType.CLAIM_REWARDS,
+                msg.sender,
+                claimableRewards,
+                validator
+            );
+            
             // Emit rewards claimed event
             uint256 rewardsMpxAmount = oracle.convertXFItoMPX(claimableRewards);
-            emit RewardsClaimedAPR(msg.sender, claimableRewards, rewardsMpxAmount, abi.encode(requestId));
+            emit RewardsClaimedAPR(msg.sender, claimableRewards, rewardsMpxAmount, rewardRequestId);
         }
         
-        // Call the APR staking contract to request unstake
-        requestId = aprContract.requestUnstake(msg.sender, amount, validator);
+        // Call APRStaking's requestUnstake to initiate the unstake
+        aprContract.requestUnstake(msg.sender, amount, validator);
         
+        // Retrieve the actual request ID from the APRStaking contract
+        requestId = aprContract.getLatestRequestId();
+
         // Set unbonding period for this user-validator pair
         uint256 unbondingPeriod = oracle.getUnbondingPeriod();
         _userValidatorUnbondingEnd[msg.sender][validator] = block.timestamp + unbondingPeriod;
@@ -411,8 +452,10 @@ abstract contract NativeStakingManager is
         // Convert XFI to MPX for the event
         uint256 mpxAmount = oracle.convertXFItoMPX(amount);
         
-        // Emit event with request ID - use the bytes requestId from the contract
-        emit UnstakedAPR(msg.sender, amount, mpxAmount, validator, abi.encode(internalRequestId));
+        // Emit events with request ID
+        emit StakingUnstakeRequested(msg.sender, address(aprContract), amount, requestId);
+        emit UnstakeAPRRequested(msg.sender, validator, amount, requestId);
+        emit UnstakedAPR(msg.sender, amount, mpxAmount, validator, requestId);
         
         return requestId;
     }

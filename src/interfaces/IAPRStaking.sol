@@ -31,12 +31,13 @@ interface IAPRStaking {
      * @param user The address of the user unstaking
      * @param amount The amount of XFI to unstake
      * @param validator The validator address to unstake from
+     * @return requestId The ID of the unstake request
      */
     function requestUnstake(
         address user,
         uint256 amount,
         string calldata validator
-    ) external;
+    ) external returns (bytes memory requestId);
 
     /**
      * @dev Claims unstaked XFI tokens after the unbonding period
@@ -98,4 +99,10 @@ interface IAPRStaking {
      * @return An array of validator addresses
      */
     function getUserValidators(address user) external view returns (string[] memory);
+    
+    /**
+     * @dev Gets the latest request ID that was created
+     * @return The latest request ID (bytes)
+     */
+    function getLatestRequestId() external view returns (bytes memory);
 } 

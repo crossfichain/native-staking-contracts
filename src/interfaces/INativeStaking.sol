@@ -122,4 +122,10 @@ interface INativeStaking {
      * @return The total amount of unclaimed rewards
      */
     function getUnclaimedRewards(address user) external view returns (uint256);
+
+    /**
+     * @dev Gets the latest request ID that was created
+     * @return The latest request ID (bytes)
+     */
+    function getLatestRequestId() external view returns (bytes memory);
 } 

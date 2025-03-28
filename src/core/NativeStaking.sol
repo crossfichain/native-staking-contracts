@@ -55,6 +55,9 @@ contract NativeStaking is
     // New mapping to map requestId (as bytes) to array index
     mapping(address => mapping(bytes32 => uint256)) private _requestIdToIndex;
     
+    // Add a private field to track the latest request ID
+    bytes private _latestRequestId;
+    
     // Events
     event Staked(address indexed user, uint256 amount, string validator, uint256 stakeId);
     event UnstakeRequested(address indexed user, uint256 amount, string validator, bytes indexed requestId, uint256 unlockTime);
@@ -234,6 +237,9 @@ contract NativeStaking is
         // Store the mapping from requestId hash to array index
         bytes32 requestIdHash = keccak256(requestId);
         _requestIdToIndex[user][requestIdHash] = arrayIndex;
+        
+        // Store the latest request ID for getLatestRequestId function
+        _latestRequestId = requestId;
         
         // Increment the counter for future requests (for legacy support)
         _nextRequestId++;
@@ -753,6 +759,14 @@ contract NativeStaking is
         
         require(index < _userUnstakeRequests[user].length, "Invalid request ID");
         return _userUnstakeRequests[user][index];
+    }
+    
+    /**
+     * @dev Gets the latest request ID that was created
+     * @return The latest request ID (bytes)
+     */
+    function getLatestRequestId() external view override returns (bytes memory) {
+        return _latestRequestId;
     }
     
     /**
