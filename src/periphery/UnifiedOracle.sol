@@ -68,6 +68,7 @@ contract UnifiedOracle is
     event UserRewardsUpdated(address indexed user, uint256 amount);
     event LaunchTimestampSet(uint256 timestamp);
     event ValidatorAPRUpdated(uint256 apr);
+    event ValidatorStakeUpdated(address indexed user, string indexed validator, uint256 amount);
     
     /**
      * @dev Initializes the contract
@@ -575,17 +576,21 @@ contract UnifiedOracle is
     }
     
     /**
-     * @dev Sets the validator stake for a user
-     * @param user The user address
-     * @param validator The validator ID
-     * @param amount The stake amount
+     * @dev Sets the validator stake for a user - restricted to oracle updater role
+     * @param user The user whose stake is being updated
+     * @param validator The validator ID 
+     * @param amount The new stake amount
      */
-    function setValidatorStake(address user, string calldata validator, uint256 amount)
-        external
-        onlyRole(ORACLE_UPDATER_ROLE)
-        whenNotPaused
+    function setValidatorStake(address user, string calldata validator, uint256 amount) 
+        external 
+        override 
+        onlyRole(ORACLE_UPDATER_ROLE) 
     {
+        // Update internal tracking
         _validatorStakes[user][validator] = amount;
+        
+        // Emit event for tracking
+        emit ValidatorStakeUpdated(user, validator, amount);
     }
     
     /**
@@ -662,5 +667,30 @@ contract UnifiedOracle is
         // For now, just return the global unbonding period
         // In the future, this could be extended to support per-validator unbonding periods
         return _unbondingPeriod;
+    }
+
+    /**
+     * @dev Safely converts amounts while handling decimal precision concerns
+     * @param amount The amount to convert
+     * @param fromDecimals The decimal precision of the input amount
+     * @param toDecimals The decimal precision of the output amount
+     * @return The converted amount with proper decimal precision
+     */
+    function _safeDecimalConversion(
+        uint256 amount,
+        uint8 fromDecimals,
+        uint8 toDecimals
+    ) internal pure returns (uint256) {
+        if (fromDecimals == toDecimals) {
+            return amount;
+        } else if (fromDecimals > toDecimals) {
+            // Scale down - division first to prevent overflow
+            uint256 factor = 10**(fromDecimals - toDecimals);
+            return amount / factor;
+        } else {
+            // Scale up - multiply first
+            uint256 factor = 10**(toDecimals - fromDecimals);
+            return amount * factor;
+        }
     }
 } 

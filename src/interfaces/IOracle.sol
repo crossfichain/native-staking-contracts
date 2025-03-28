@@ -133,4 +133,12 @@ interface IOracle {
      * @return The unbonding period in seconds
      */
     function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256);
+
+    /**
+     * @dev Sets the validator stake for a user
+     * @param user The user whose stake is being updated
+     * @param validator The validator ID 
+     * @param amount The new stake amount
+     */
+    function setValidatorStake(address user, string calldata validator, uint256 amount) external;
 } 

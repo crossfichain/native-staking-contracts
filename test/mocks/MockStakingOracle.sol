@@ -138,9 +138,14 @@ contract MockStakingOracle is IOracle {
         _userValidatorClaimableRewards[user][validator] = amount;
     }
 
+    /**
+     * @dev Sets the validator stake for a user
+     * @param user The user whose stake is being updated
+     * @param validator The validator ID 
+     * @param amount The new stake amount
+     */
     function setValidatorStake(address user, string calldata validator, uint256 amount) external {
         _userValidatorStakes[user][validator] = amount;
-        _totalStakedXFI += amount;
     }
 
     function setUserUnstake(address user, bytes calldata requestId, uint256 amount) external {

@@ -128,4 +128,14 @@ contract MockUnifiedOracle is IOracle {
     function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256) {
         return 86400; // 1 day in seconds
     }
+
+    /**
+     * @dev Sets the validator stake for a user
+     * @param user The user whose stake is being updated
+     * @param validator The validator ID 
+     * @param amount The new stake amount
+     */
+    function setValidatorStake(address user, string calldata validator, uint256 amount) external {
+        // Mock implementation - no actual storage
+    }
 } 

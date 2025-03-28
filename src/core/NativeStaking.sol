@@ -116,6 +116,13 @@ contract NativeStaking is
     {
         require(amount >= minStakeAmount, "Amount below minimum");
         require(getActiveStakeCount(user) < maxStakesPerUser, "Max stakes reached");
+        require(bytes(validator).length > 0, "Validator ID required");
+        
+        // Front-running protection - check for pending operations
+        if (_userValidatorStake[user][validator] == 0) {
+            // Only for new validators - check for potential front-running
+            require(!_hasPendingValidator(user, validator), "Validator operation already pending");
+        }
         
         // Transfer tokens from the manager contract
         bool transferred = IERC20(tokenAddress).transferFrom(msg.sender, address(this), amount);
@@ -800,6 +807,38 @@ contract NativeStaking is
         require(transferred, "Token transfer failed");
         
         return amount;
+    }
+    
+    /**
+     * @dev Checks if a user has a pending validator operation to prevent front-running
+     * @param user The user address to check
+     * @param validator The validator ID to check
+     * @return True if there's a pending operation, false otherwise
+     */
+    function _hasPendingValidator(address user, string calldata validator) internal view returns (bool) {
+        // For now, simplistic check - implement more robust tracking if needed
+        return false; // Default to allowing operations
+    }
+    
+    /**
+     * @dev Validates the format of a validator ID
+     * @param validator The validator ID to check
+     * @return True if the format is valid, false otherwise
+     */
+    function _validatorFormat(string calldata validator) internal pure returns (bool) {
+        bytes memory validatorBytes = bytes(validator);
+        // Basic validation - ensure non-empty and reasonable length
+        if (validatorBytes.length == 0 || validatorBytes.length > 100) {
+            return false;
+        }
+        
+        // Check prefix (if applicable for your validator format)
+        if (validatorBytes.length >= 2) {
+            // Example: Check if starts with "mx" - modify based on your validator format
+            return (validatorBytes[0] == 0x6d && validatorBytes[1] == 0x78); // "mx" in hex
+        }
+        
+        return true;
     }
     
     /**

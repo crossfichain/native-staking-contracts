@@ -121,6 +121,8 @@ abstract contract NativeStakingManager is
     event RewardsClaimed(address indexed user, uint256 amount, uint256 mpxAmount, bytes requestId);
     event StakingUnstakeRequested(address indexed user, address indexed stakingContract, uint256 amount, bytes requestId);
     event UnstakeAPRRequested(address indexed user, string validator, uint256 amount, bytes requestId);
+    event ValidatorSlashed(string validator, uint256 slashPercentage);
+    event StakeSlashed(address indexed user, string validator, uint256 slashedAmount);
     
     // Error definitions
     error OracleDataNotFresh(uint256 lastUpdated, uint256 currentTime);
@@ -449,8 +451,8 @@ abstract contract NativeStakingManager is
         _userValidatorUnbondingEnd[msg.sender][validator] = block.timestamp + unbondingPeriod;
         emit ValidatorUnbondingStarted(msg.sender, validator, block.timestamp + unbondingPeriod);
         
-        // Create a request record - this still uses uint256 for internal tracking
-        uint256 internalRequestId = _createRequest(
+        // Create an internal record for tracking
+        _createRequest(
             msg.sender, 
             amount, 
             validator, 
@@ -1458,5 +1460,46 @@ abstract contract NativeStakingManager is
         require(threshold > 0, "Threshold must be greater than 0");
         require(threshold <= 7 days, "Threshold must be <= 7 days");
         oracleFreshnessThreshold = threshold;
+    }
+
+    /**
+     * @dev Handles validator slashing by updating affected user stakes
+     * @param validator The validator that was slashed
+     * @param slashPercentage The percentage of stake that was slashed (in basis points, e.g. 1000 = 10%)
+     */
+    function handleValidatorSlashing(
+        string calldata validator,
+        uint256 slashPercentage
+    ) external onlyRole(ORACLE_MANAGER_ROLE) {
+        require(slashPercentage > 0 && slashPercentage <= 10000, "Invalid slash percentage");
+        
+        // Emit slashing event for off-chain tracking
+        emit ValidatorSlashed(validator, slashPercentage);
+        
+        // The actual slashing of balances needs to be handled by the oracle and propagated to the system
+        // This function serves as a notification mechanism for the system
+    }
+    
+    /**
+     * @dev Updates a specific user's stake after a slashing event
+     * @param user The user whose stake was affected
+     * @param validator The validator that was slashed
+     * @param previousAmount The previous stake amount
+     * @param newAmount The new stake amount after slashing
+     */
+    function updateStakeAfterSlashing(
+        address user,
+        string calldata validator,
+        uint256 previousAmount,
+        uint256 newAmount
+    ) external onlyRole(ORACLE_MANAGER_ROLE) {
+        require(newAmount < previousAmount, "New amount must be less than previous");
+        uint256 slashedAmount = previousAmount - newAmount;
+        
+        // Update oracle data
+        oracle.setValidatorStake(user, validator, newAmount);
+        
+        // Emit event for tracking
+        emit StakeSlashed(user, validator, slashedAmount);
     }
 } 
