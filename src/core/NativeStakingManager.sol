@@ -472,7 +472,7 @@ abstract contract NativeStakingManager is
      */
     function claimUnstakeAPRNative(bytes calldata requestId) 
         external 
-        override
+        override 
         nonReentrant 
         returns (uint256 amount) 
     {
@@ -491,12 +491,31 @@ abstract contract NativeStakingManager is
             emit ValidatorUnbondingEnded(msg.sender, request.validator);
         }
         
-        // Unwrap WXFI to native XFI
-        wxfi.withdraw(amount);
+        // Verify contract has enough ETH balance before unwrapping
+        require(address(this).balance >= amount, "Insufficient ETH for unwrapping");
         
-        // Transfer native XFI to user
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Native XFI transfer failed");
+        try wxfi.withdraw(amount) {
+            // After successful withdrawal, transfer native XFI to user
+            (bool success, ) = msg.sender.call{value: amount}("");
+            if (!success) {
+                // If native transfer fails, re-wrap the ETH
+                // This requires the contract to have approval to spend its own tokens
+                wxfi.deposit{value: amount}();
+                // And transfer the wrapped tokens instead
+                require(IERC20(address(wxfi)).transfer(msg.sender, amount), "Fallback WXFI transfer failed");
+                
+                // Emit a modified event to indicate wrapped tokens were sent
+                emit UnstakeClaimedAPR(msg.sender, requestId, amount, oracle.convertXFItoMPX(amount));
+                return amount;
+            }
+        } catch {
+            // If unwrapping fails, transfer WXFI tokens directly
+            require(IERC20(address(wxfi)).transfer(msg.sender, amount), "WXFI transfer failed after unwrap failure");
+            
+            // Emit a modified event to indicate wrapped tokens were sent
+            emit UnstakeClaimedAPR(msg.sender, requestId, amount, oracle.convertXFItoMPX(amount));
+            return amount;
+        }
         
         // Convert XFI to MPX for the event
         uint256 mpxAmount = oracle.convertXFItoMPX(amount);

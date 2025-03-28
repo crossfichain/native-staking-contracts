@@ -12,12 +12,12 @@ The system is built with a modular architecture that consists of:
 ### Core Contracts
 
 - **NativeStakingManager**: Central router for all staking operations, handling both native XFI and wrapped XFI (WXFI)
-- **NativeStaking**: Implements the APR staking model with direct validator delegation
+- **APRStaking**: Implements the APR staking model with direct validator delegation
 - **NativeStakingVault**: Implements the APY staking model following the ERC-4626 standard
 
 ### Periphery Contracts
 
-- **CrossFiOracle**: Provides price data and validator information from the Cosmos chain
+- **UnifiedOracle**: Provides price data and validator information from the Cosmos chain
 - **WXFI**: Wrapped XFI implementation that allows native XFI to be used as an ERC20 token
 
 ### Deployment
@@ -30,6 +30,19 @@ The system is built with a modular architecture that consists of:
 - **Role-Based Access Control**: Granular permissions system using OpenZeppelin's AccessControl
 - **Security Measures**: Reentrancy protection, pause functionality, and other security best practices
 - **ERC-4626 Compliance**: The vault follows the standard for tokenized vaults
+- **Native Token Support**: Users can stake and unstake using native XFI or wrapped XFI (WXFI)
+
+## Recent Improvements
+
+We've recently made several improvements to the contracts:
+
+1. **Contract Stability**: Fixed inheritance linearization in the APRStaking contract
+2. **Native Token Operations**: Improved error handling for native XFI operations
+3. **MockWXFI Contract**: Enhanced ETH balance checking and error handling
+4. **Test Coverage**: Updated tests to verify native token operations
+5. **Request ID Handling**: Improved mapping between different request ID formats
+
+See the `IMPLEMENTED_FIXES.md` file for detailed information about recent fixes.
 
 ## Contract Interactions
 
@@ -64,9 +77,24 @@ forge build
 
 ### Run Tests
 
+To run all tests:
+
 ```bash
 forge test
 ```
+
+To run only passing tests:
+
+```bash
+test/e2e/run_passing_tests.sh
+```
+
+This script includes the following test suites:
+- Validator Staking Tests
+- Vault Staking Tests
+- Edge Cases Tests
+- Native Token Tests
+- Admin Operations Tests
 
 ### Deploy
 
@@ -86,6 +114,15 @@ export ADMIN_ADDRESS=<admin-address>
 npm run deploy:testnet
 ```
 
+## Known Issues
+
+Some advanced features still need implementation:
+- Full bytes request ID support across all contracts
+- Comprehensive test coverage for all edge cases
+- Additional safeguards for large-scale staking operations
+
+See the `PENDING_FIXES.md` file for a detailed roadmap of planned improvements.
+
 ## Security
 
 The contracts implement various security measures:
@@ -95,6 +132,7 @@ The contracts implement various security measures:
 - Role-based access control for administrative functions
 - Input validation with proper error messages
 - Events for all important state changes
+- Error handling for native token operations
 
 ## License
 

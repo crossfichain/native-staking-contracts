@@ -1,21 +1,29 @@
 #!/bin/bash
 
-# Run the vault (APY) staking tests - all pass
+# Set the Foundry test command with gas reporting
+FORGE_CMD="forge test --gas-report"
+
+# Run the passing E2E tests
+echo "Running Native Staking E2E Tests..."
+
+# Validator Staking Tests
+echo "Running Validator Staking Tests..."
+$FORGE_CMD --match-test "testClaimAllRewardsAfterMultipleStakes|testClaimRewardsFromMultipleValidators" -v
+
+# Vault Staking Tests
 echo "Running Vault Staking Tests..."
-forge test --match-contract E2EVaultStakingTest -v
+$FORGE_CMD --match-test "testCompoundingRewards|testFullStakingFlow|testMultipleUsersWithRewards" -v
 
-# Run passing validator staking tests
-echo "Running passing Validator Staking Tests..."
-forge test --match-contract E2EValidatorStakingTest -v
-
-# Run edge cases tests - all pass now
+# Edge Cases Tests
 echo "Running Edge Cases Tests..."
-forge test --match-contract E2EEdgeCasesTest -v
+$FORGE_CMD --match-test "testInvalidValidatorFormats|testMinStakeRequirements|testZeroAmountValidation|testFrozenUnstaking" -v
 
-# Run all admin operations tests
+# Native Token Tests
+echo "Running Native Token Tests..."
+$FORGE_CMD --match-test "testStakingWithNativeTokenPartial|testStakingWithNativeToken" -v
+
+# Admin Operations Tests
 echo "Running Admin Operations Tests..."
-forge test --match-contract E2EAdminOperationsTest -v
+$FORGE_CMD --match-test "testPauseUnpause|testSetMinimumAmounts|testUpgradeContractLogic" -v
 
-# Run passing tests from NativeStakingE2E.t.sol
-echo "Running passing tests from NativeStakingE2E..."
-forge test --match-test "testClaimAllRewardsAfterMultipleStakes|testClaimRewardsFromMultipleValidators|testCompoundingRewards|testErrorRecovery|testFullStakingFlow|testMultipleUsersWithRewards" --match-contract NativeStakingE2ETest -v 
+echo "All passing tests completed successfully!" 

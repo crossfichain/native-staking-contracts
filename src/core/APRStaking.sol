@@ -1,59 +1,60 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interfaces/IAPRStaking.sol";
 import "../interfaces/IOracle.sol";
+import "../interfaces/IAPRStaking.sol";
 
 /**
  * @title APRStaking
- * @dev Implementation of the APR staking model
- * Users stake XFI with specific validators and receive rewards based on APR
+ * @dev A contract for staking XFI tokens with validators for APR rewards
  */
 contract APRStaking is 
     Initializable,
+    PausableUpgradeable, 
     AccessControlUpgradeable,
-    PausableUpgradeable,
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable,
     IAPRStaking
 {
-    // Constants
-    uint256 private constant PRECISION = 1e18;
-    string private constant VALIDATOR_PREFIX = "mxva";
+    address public stakingToken;
+    IOracle public oracle;
     
-    // Default minimum amounts (can be adjusted by admin)
     uint256 public minStakeAmount;
     uint256 public minUnstakeAmount;
     bool public enforceMinimumAmounts;
+    
+    uint256 private _nextUnstakeRequestId;
+    
+    // Mappings for staking data
+    mapping(address => uint256) private _userTotalStaked;
+    mapping(address => string[]) private _userValidators;
+    mapping(address => mapping(string => uint256)) private _userValidatorStakes;
+    mapping(string => uint256) private _validatorTotalStaked;
+    mapping(bytes => IAPRStaking.UnstakeRequest) private _unstakeRequests;
+    
+    // Added mappings to track structured IDs
+    mapping(bytes => uint256) private _requestIdToLegacyId;
+    mapping(uint256 => bytes) private _legacyIdToRequestId;
+    
+    // Constants
+    uint256 private constant PRECISION = 1e18;
+    string private constant VALIDATOR_PREFIX = "mxva";
     
     // Custom roles
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
-    // State variables
-    IOracle public oracle;
-    address public stakingToken;
-    
-    // Staking state
-    mapping(address => uint256) private _userTotalStaked;
-    mapping(address => mapping(string => uint256)) private _userValidatorStakes;
-    mapping(address => string[]) private _userValidators;
-    mapping(string => uint256) private _validatorTotalStaked;
-    
-    // Unstaking state
-    mapping(bytes => IAPRStaking.UnstakeRequest) private _unstakeRequests;
-    uint256 private _nextUnstakeRequestId;
-    
     // Events
     event Staked(address indexed user, uint256 amount, string validator);
-    event UnstakeRequested(address indexed user, uint256 amount, string validator, bytes indexed requestId);
-    event UnstakeClaimed(address indexed user, uint256 amount, bytes indexed requestId);
+    event UnstakeRequested(address indexed user, uint256 amount, string validator, bytes requestId);
+    event UnstakeClaimed(address indexed user, uint256 amount, bytes requestId);
     event RewardsClaimed(address indexed user, uint256 amount);
     event StakingTokenUpdated(address indexed newToken);
     event MinStakeAmountUpdated(uint256 newMinStakeAmount);
@@ -227,17 +228,22 @@ contract APRStaking is
             _removeValidatorFromUser(user, validator);
         }
         
-        // Create unstake request with bytes requestId
+        // Create a simpler, deterministic requestId structure
         uint32 sequenceValue = uint32(_nextUnstakeRequestId);
+        uint256 legacyRequestId = _nextUnstakeRequestId;
         _nextUnstakeRequestId++;
         
         // Create a structured requestId as bytes
+        // Format: [2 bytes type][4 bytes timestamp][4 bytes sequence]
         bytes memory requestId = abi.encodePacked(
             uint16(0),                // Request type (0 for unstake)
             uint32(block.timestamp),  // Timestamp (last 4 bytes)
-            uint64(uint256(keccak256(abi.encodePacked(user, amount, validator)))), // Random component
-            sequenceValue             // Sequence counter
+            sequenceValue             // Sequence counter (deterministic)
         );
+        
+        // Store mappings between IDs
+        _requestIdToLegacyId[requestId] = legacyRequestId;
+        _legacyIdToRequestId[legacyRequestId] = requestId;
         
         _unstakeRequests[requestId] = IAPRStaking.UnstakeRequest({
             user: user,
@@ -468,6 +474,32 @@ contract APRStaking is
      */
     function setEnforceMinimumAmounts(bool enforce) external onlyRole(DEFAULT_ADMIN_ROLE) {
         enforceMinimumAmounts = enforce;
+    }
+    
+    /**
+     * @dev Gets the numeric ID from a bytes request ID
+     * @param requestId The bytes request ID
+     * @return The numeric request ID
+     */
+    function getNumericIdFromBytesId(bytes calldata requestId) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return _requestIdToLegacyId[requestId];
+    }
+    
+    /**
+     * @dev Gets the bytes ID from a numeric request ID
+     * @param legacyId The numeric request ID
+     * @return The bytes request ID
+     */
+    function getBytesIdFromNumericId(uint256 legacyId) 
+        external 
+        view 
+        returns (bytes memory) 
+    {
+        return _legacyIdToRequestId[legacyId];
     }
     
     /**

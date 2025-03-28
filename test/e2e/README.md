@@ -1,81 +1,67 @@
 # Native Staking E2E Tests
 
-This directory contains end-to-end tests for the Native Staking contracts. The tests are organized into separate files based on functionality to make them more maintainable and easier to debug.
+This directory contains end-to-end tests for the native staking contracts, covering various features and scenarios.
 
 ## Test Files
 
-- `E2ETestBase.sol` - Base contract with common setup code
-- `E2EVaultStakingTest.sol` - Tests for APY (vault) staking operations
-- `E2EValidatorStakingTest.sol` - Tests for APR (validator) staking operations
-- `E2EEdgeCasesTest.sol` - Tests for edge cases and error handling
-- `E2EAdminOperationsTest.sol` - Tests for admin operations
-- `E2ENativeTokenTest.sol` - Tests for native token operations
-- `NativeStakingE2E.t.sol` - The original E2E test file (kept for reference)
+- `E2EAdminOperationsTest.sol`: Tests for admin operations such as freezing unstaking, changing limits, etc.
+- `E2EEdgeCasesTest.sol`: Tests for edge cases like minimum/maximum amounts, slashing, recovery scenarios.
+- `E2ENativeTokenTest.sol`: Tests for operations using native tokens (ETH/XFI).
+- `E2EValidatorStakingTest.sol`: Tests for validator (APR) staking operations.
+- `E2EVaultStakingTest.sol`: Tests for vault (APY) staking operations.
+- `E2ETestBase.sol`: Base contract with common setup for all E2E tests.
+- `NativeStakingE2E.t.sol`: General E2E tests for staking operations.
 
 ## Passing Tests
 
-Currently, the following tests are passing:
-
-### Vault Staking (All Pass)
-- `testCompoundingRewards()`
-- `testFullStakingFlow()`
-- `testMultipleUsersWithRewards()`
-
-### Validator Staking (Partial Pass)
-- `testClaimAllRewardsAfterMultipleStakes()`
-- `testClaimRewardsFromMultipleValidators()`
-
-### Edge Cases (All Pass)
-- `testEdgeCases()`
-- `testErrorRecovery()`
-- `testInvalidValidatorFormats()`
-- `testZeroAmounts()`
-
-### Admin Operations (All Pass)
-- `testAdminOperations()`
-- `testParameterUpdates()`
-- `testRoleManagement()`
-
-### NativeStakingE2E (Partial Pass)
-- `testClaimAllRewardsAfterMultipleStakes()`
-- `testClaimRewardsFromMultipleValidators()`
-- `testCompoundingRewards()`
-- `testErrorRecovery()`
-- `testFullStakingFlow()`
-- `testMultipleUsersWithRewards()`
+- **Vault Staking**: All tests passing.
+- **Validator Staking**: Partial pass.
+  - `testClaimRewardsFromMultipleValidators`: Passes.
+  - `testClaimAllRewardsAfterMultipleStakes`: Passes.
+  - `testCompleteLifecycle` and `testMultipleUsersWithSameValidator`: Currently failing due to issues with `APRStaking.requestUnstake`.
+- **Edge Cases**: All tests passing after fixes.
+- **Native Token Operations**: Partial pass.
+  - `testStakingWithNativeTokenPartial`: Passes.
+  - Other tests fail due to issues with `WXFI.withdraw`.
+- **Admin Operations**: All tests passing.
+- **NativeStakingE2E**: Partial pass.
+  - Passing: `testClaimAllRewardsAfterMultipleStakes`, `testClaimRewardsFromMultipleValidators`, `testCompoundingRewards`, `testErrorRecovery`, `testFullStakingFlow`, `testMultipleUsersWithRewards`.
+  - Other tests fail due to issues with unstaking and native token operations.
 
 ## Known Issues
 
-1. **Native Token Operations** - Tests involving native token operations (`testNativeTokenOperations()` and `testStakingWithNativeToken()`) are failing due to issues with the `MockWXFI` contract. Specifically, the `withdraw()` function in `MockWXFI` reverts when trying to convert wrapped tokens back to native tokens. The error occurs when the manager attempts to use `claimRewardsAPRNative()` which calls `withdraw()` on the WXFI token contract.
+1. **`APRStaking.requestUnstake` Function Issue**: The request ID encoding and handling cause problems during the unstaking process. We've simplified the requestId format to make it more deterministic, but deeper issues remain in how requestIds are processed.
 
-   We've created a partial implementation with the `mockWithdraw()` function, but the current contract architecture requires withdrawing actual ETH, which is problematic in the test environment. As a workaround, we've created skip tests with details on the issue.
+2. **Native Token Withdraw Issues**: The `WXFI.withdraw` function has limitations with the gas limit (2300 for transfers) which causes problems in test environments. We've removed the gas limit for tests, but additional adjustments are needed in the core contracts to fully support native token operations.
 
-2. **APRStaking.requestUnstake Issues** - Tests that involve unstaking through the APR contract (`testCompleteLifecycle()` and `testMultipleUsersWithSameValidator()`) are failing due to issues in the `requestUnstake` function of the APRStaking contract. The function appears to have problems with the encoding/handling of requestIds. These tests have been skipped with explanatory messages until the underlying issue can be fixed in the APRStaking contract.
-
-3. **Multiple Users with Same Validator** - The test `testMultipleUsersWithSameValidator()` fails after migration to MockWXFI, suggesting there are specific issues with how multiple users interact with the same validator when using the WXFI contract's deposit and withdrawal functionality.
-
-4. **Complete Lifecycle** - `testCompleteLifecycle()` fails during the native token withdrawal phase, which is related to the same WXFI withdrawal issues mentioned above. The test runs through the full staking, reward claiming, and unstaking process, but encounters problems when trying to handle native token operations.
+3. **Multiple Users with Complete Lifecycle**: Tests involving multiple users going through the complete lifecycle encounter issues with request ID handling and unstaking fulfillment.
 
 ## Recent Fixes
 
-1. **Edge Cases Tests** - All edge case tests in `E2EEdgeCasesTest.sol` have been fixed and are now passing:
-   - `testEdgeCases()` was updated to simplify slashing simulation by directly reducing validator stake in the oracle instead of going through unstaking.
-   - `testErrorRecovery()` was modified to ensure the claim for rewards fails when the manager has insufficient balance and succeeds after replenishing the balance.
-   - `testInvalidValidatorFormats()` now correctly validates validator formats and verifies stake amounts.
-   - `testZeroAmounts()` was fixed to correctly test operations with zero amounts.
+1. **Edge Cases Tests**: Fixed and passing. We've improved the handling of slashing scenarios and ensured proper validation of validator formats.
 
-2. **Validator Staking Tests** - We've fixed and documented issues with the validator staking tests:
-   - Working tests (`testClaimAllRewardsAfterMultipleStakes()` and `testClaimRewardsFromMultipleValidators()`) are now included in the passing tests.
-   - Non-working tests related to unstaking have been marked as skipped with explanatory console messages.
+2. **APRStaking Request ID Format**: Simplified the format to make it more deterministic and easier to use in tests.
 
-## Running the Tests
+3. **MockWXFI Withdraw Function**: Removed the 2300 gas limit for tests to avoid issues with low-level ETH transfers.
+
+## Running Tests
 
 To run all E2E tests:
-```
-forge test --match-contract E2E
+```bash
+cd test/e2e
+forge test
 ```
 
 To run only the passing tests:
+```bash
+cd test/e2e
+./run_passing_tests.sh
 ```
-./test/e2e/run_passing_tests.sh
-``` 
+
+## Next Steps
+
+1. Fix the core issues in the `APRStaking.requestUnstake` function to properly handle request IDs consistently.
+
+2. Enhance the native token operations in the contracts to handle `ETH`/`XFI` transfers more reliably.
+
+3. Address the validator staking lifecycle tests to ensure complete passes through the entire flow. 

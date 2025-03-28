@@ -23,12 +23,15 @@ contract MockWXFI is MockERC20 {
     function withdraw(uint256 wad) public {
         require(balanceOf(msg.sender) >= wad, "WXFI: insufficient balance");
         
+        // Check if the contract has enough ETH balance
+        require(address(this).balance >= wad, "WXFI: insufficient ETH in contract");
+        
         // First burn the tokens
         _burn(msg.sender, wad);
         
-        // Then try to send the ETH, if this fails we revert everything
-        // using a low-level call with specific gas limit to avoid running out of gas
-        (bool success, ) = msg.sender.call{value: wad, gas: 2300}("");
+        // Then send the ETH without the restrictive gas limit for tests
+        // Using a low-level call without gas limit for test environments
+        (bool success, ) = msg.sender.call{value: wad}("");
         
         // If the transfer fails, we mint the tokens back to prevent loss of funds
         if (!success) {
