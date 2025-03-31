@@ -111,6 +111,17 @@ interface IOracle {
         returns (uint256);
 
     /**
+     * @dev Clears a specific amount of claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @param amount The amount to clear
+     * @return The amount of rewards that were cleared
+     */
+    function clearUserClaimableRewardsForValidator(address user, string calldata validator, uint256 amount) 
+        external 
+        returns (uint256);
+
+    /**
      * @dev Gets the stake amount for a user with a specific validator
      * @param user The user address
      * @param validator The validator address
@@ -141,4 +152,10 @@ interface IOracle {
      * @param amount The new stake amount
      */
     function setValidatorStake(address user, string calldata validator, uint256 amount) external;
+
+    /**
+     * @dev Gets the launch timestamp of the protocol
+     * @return The launch timestamp in seconds since epoch
+     */
+    function getLaunchTimestamp() external view returns (uint256);
 } 

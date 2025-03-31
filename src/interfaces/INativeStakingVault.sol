@@ -78,4 +78,10 @@ interface INativeStakingVault is IERC4626Upgradeable {
      * @return The total pending withdrawals
      */
     function getTotalPendingWithdrawals() external view returns (uint256);
+
+    function unstake(address user, uint256 amount) external;
+    function claimRewards(address user) external returns (uint256);
+    function balanceOf(address user) external view returns (uint256);
+    function getPendingRewards(address user) external view returns (uint256);
+    function stake(address user, uint256 amount) external returns (uint256);
 } 

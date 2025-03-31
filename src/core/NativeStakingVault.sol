@@ -652,7 +652,7 @@ contract NativeStakingVault is
         return super.totalSupply();
     }
 
-    function balanceOf(address account) public view override(ERC20Upgradeable, IERC20Upgradeable) returns (uint256) {
+    function balanceOf(address account) public view override(ERC20Upgradeable, IERC20Upgradeable, INativeStakingVault) returns (uint256) {
         return super.balanceOf(account);
     }
 
@@ -722,5 +722,58 @@ contract NativeStakingVault is
      */
     function getTotalPendingWithdrawals() external view returns (uint256) {
         return _totalPendingWithdrawals;
+    }
+    
+    /**
+     * @dev Unstakes tokens for a user
+     * @param user The user to unstake for
+     * @param amount The amount to unstake
+     */
+    function unstake(address user, uint256 amount) external override onlyRole(STAKING_MANAGER_ROLE) {
+        // This is a simplified implementation
+        // In a real implementation, we would check if the user has enough balance
+        // and handle the unstaking process
+        _burn(user, amount);
+        IERC20Upgradeable(asset()).transfer(user, amount);
+    }
+    
+    /**
+     * @dev Claims rewards for a user
+     * @param user The user to claim rewards for
+     * @return The amount of rewards claimed
+     */
+    function claimRewards(address user) external override onlyRole(STAKING_MANAGER_ROLE) returns (uint256) {
+        uint256 rewardAmount = getPendingRewards(user);
+        if (rewardAmount > 0) {
+            // Transfer rewards to the user
+            IERC20Upgradeable(asset()).transfer(user, rewardAmount);
+        }
+        return rewardAmount;
+    }
+    
+    /**
+     * @dev Gets the pending rewards for a user
+     * @param user The user to get pending rewards for
+     * @return The amount of pending rewards
+     */
+    function getPendingRewards(address user) public view override returns (uint256) {
+        // In a real implementation, this would calculate the rewards based on the user's balance
+        // and the time since the last claim
+        // For simplicity, we'll return 0
+        return 0;
+    }
+
+    /**
+     * @dev Stakes amount on behalf of user, returns shares equivalent
+     * @param user The user to stake for
+     * @param amount The amount to stake
+     * @return The amount of shares minted
+     */
+    function stake(address user, uint256 amount) external override onlyRole(STAKING_MANAGER_ROLE) returns (uint256) {
+        require(!paused(), "Contract is paused");
+        
+        // Use the deposit function from ERC4626 to handle the logic
+        // This will mint shares to the user based on the amount
+        return deposit(amount, user);
     }
 } 

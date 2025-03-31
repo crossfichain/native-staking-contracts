@@ -6,13 +6,16 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interfaces/INativeStakingManager.sol";
 import "../interfaces/INativeStaking.sol";
+import "../interfaces/INativeStakingManager.sol";
 import "../interfaces/INativeStakingVault.sol";
 import "../interfaces/IOracle.sol";
 import "../interfaces/IWXFI.sol";
+import "../core/NativeStaking.sol";
 import "../interfaces/IAPRStaking.sol";
+import "./NativeStakingManagerLib.sol";
 
 /**
  * @title NativeStakingManager
@@ -424,7 +427,7 @@ abstract contract NativeStakingManager is
             aprContract.claimRewards(msg.sender, claimableRewards);
             
             // Transfer rewards to user
-            bool transferred = IERC20(wxfi).transfer(msg.sender, claimableRewards);
+            bool transferred = IERC20(address(wxfi)).transfer(msg.sender, claimableRewards);
             require(transferred, "Reward transfer failed");
             
             // Create a request ID for the event
@@ -444,7 +447,8 @@ abstract contract NativeStakingManager is
         aprContract.requestUnstake(msg.sender, amount, validator);
         
         // Retrieve the actual request ID from the APRStaking contract
-        requestId = aprContract.getLatestRequestId();
+        // Cast to NativeStaking contract type to access the getLatestRequestId function
+        requestId = NativeStaking(address(aprContract)).getLatestRequestId();
 
         // Set unbonding period for this user-validator pair
         uint256 unbondingPeriod = oracle.getUnbondingPeriod();
@@ -485,14 +489,14 @@ abstract contract NativeStakingManager is
         // Note: This is a simplified approach since we can't directly convert bytes to the old uint256 requestId
         
         // Call the APR contract to claim the unstake
-        amount = aprContract.claimUnstake(msg.sender, requestId);
+        amount = NativeStaking(address(aprContract)).claimUnstake(msg.sender, requestId);
         
         // Ensure the amount is non-zero
         require(amount > 0, "Nothing to claim");
         
         // Get the validator information from the APR contract's unstake request
         // This is to know which validator's unbonding period should be cleared
-        INativeStaking.UnstakeRequest memory request = aprContract.getUnstakeRequest(requestId);
+        INativeStaking.UnstakeRequest memory request = NativeStaking(address(aprContract)).getUnstakeRequest(requestId);
         
         // Clear the unbonding period for this validator after successful claim
         // This allows the user to stake again with this validator immediately
@@ -506,7 +510,7 @@ abstract contract NativeStakingManager is
         // In production, consider storing a mapping from bytes requestId to internal requestId
         
         // Simplify token transfer logic to ensure tokens always get transferred
-        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
+        bool transferred = IERC20(address(wxfi)).transfer(msg.sender, amount);
         require(transferred, "Token transfer failed");
         
         // Convert XFI to MPX for the event
@@ -530,13 +534,13 @@ abstract contract NativeStakingManager is
         returns (uint256 amount) 
     {
         // Call the APR contract to claim the unstake
-        amount = aprContract.claimUnstake(msg.sender, requestId);
+        amount = NativeStaking(address(aprContract)).claimUnstake(msg.sender, requestId);
         
         // Ensure the amount is non-zero
         require(amount > 0, "Nothing to claim");
         
         // Get the validator information from the APR contract's unstake request
-        INativeStaking.UnstakeRequest memory request = aprContract.getUnstakeRequest(requestId);
+        INativeStaking.UnstakeRequest memory request = NativeStaking(address(aprContract)).getUnstakeRequest(requestId);
         
         // Clear the unbonding period for this validator
         if (bytes(request.validator).length > 0) {
@@ -620,7 +624,7 @@ abstract contract NativeStakingManager is
         require(amount <= userStake / 4, "Reward amount exceeds reasonable threshold");
         
         // Check if contract has enough balance
-        uint256 contractBalance = IERC20(wxfi).balanceOf(address(this));
+        uint256 contractBalance = IERC20(address(wxfi)).balanceOf(address(this));
         require(contractBalance >= amount, "Insufficient contract balance");
         
         // Clear rewards on oracle first to prevent reentrancy
@@ -628,7 +632,7 @@ abstract contract NativeStakingManager is
         require(clearedAmount >= amount, "Failed to clear rewards");
         
         // Use the new claimRewardsForValidator function in APRStaking
-        aprContract.claimRewardsForValidator(msg.sender, validator, amount);
+        NativeStaking(address(aprContract)).claimRewardsForValidator(msg.sender, validator, amount);
         
         // Generate the request ID using our structured format
         requestId = _generateStructuredRequestId(
@@ -670,7 +674,7 @@ abstract contract NativeStakingManager is
         }
         
         // Get user's total staked amount for validation
-        uint256 totalStaked = aprContract.getTotalStaked(msg.sender);
+        uint256 totalStaked = NativeStaking(address(aprContract)).getTotalStaked(msg.sender);
         require(totalStaked > 0, "User has no stake");
         
         // Validate rewards are not unreasonably high (max 100% APR for safety check)
@@ -678,14 +682,14 @@ abstract contract NativeStakingManager is
         require(amount <= maxReasonableReward, "Reward amount exceeds safety threshold");
         
         // Check if contract has enough balance
-        uint256 contractBalance = IERC20(wxfi).balanceOf(address(this));
+        uint256 contractBalance = IERC20(address(wxfi)).balanceOf(address(this));
         require(contractBalance >= amount, "Insufficient contract balance");
         
         // Clear rewards on oracle to prevent reentrancy
         oracle.clearUserClaimableRewards(msg.sender);
         
         // Directly transfer the rewards tokens to the user
-        bool transferred = IERC20(wxfi).transfer(msg.sender, amount);
+        bool transferred = IERC20(address(wxfi)).transfer(msg.sender, amount);
         require(transferred, "Reward transfer failed");
         
         // Create a request record
@@ -728,7 +732,7 @@ abstract contract NativeStakingManager is
         }
         
         // Get user's total staked amount for validation
-        uint256 totalStaked = aprContract.getTotalStaked(msg.sender);
+        uint256 totalStaked = NativeStaking(address(aprContract)).getTotalStaked(msg.sender);
         require(totalStaked > 0, "User has no stake");
         
         // Validate rewards are not unreasonably high (max 100% APR for safety check)
@@ -736,7 +740,7 @@ abstract contract NativeStakingManager is
         require(amount <= maxReasonableReward, "Reward amount exceeds safety threshold");
         
         // Check if contract has enough balance
-        uint256 contractBalance = IERC20(wxfi).balanceOf(address(this));
+        uint256 contractBalance = IERC20(address(wxfi)).balanceOf(address(this));
         require(contractBalance >= amount, "Insufficient contract balance");
         
         // Clear rewards on oracle to prevent reentrancy
@@ -783,7 +787,7 @@ abstract contract NativeStakingManager is
             wxfi.deposit{value: amount}();
         } else {
             // Handle WXFI - require approval first
-            require(IERC20(wxfi).transferFrom(msg.sender, address(this), amount), "WXFI transfer failed");
+            require(IERC20(address(wxfi)).transferFrom(msg.sender, address(this), amount), "WXFI transfer failed");
         }
         
         emit RewardsPayback(msg.sender, amount);
@@ -1149,10 +1153,10 @@ abstract contract NativeStakingManager is
     function hasEnoughRewardBalance(uint256 amount) 
         public 
         view 
-        override
+        virtual 
         returns (bool) 
     {
-        return IERC20(wxfi).balanceOf(address(this)) >= amount;
+        return IERC20(address(wxfi)).balanceOf(address(this)) >= amount;
     }
     
     /**

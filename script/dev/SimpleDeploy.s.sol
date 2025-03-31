@@ -5,7 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import "../../src/periphery/UnifiedOracle.sol";
 import "../../src/core/NativeStaking.sol";
 import "../../src/core/NativeStakingVault.sol";
-import "../../src/core/ConcreteNativeStakingManager.sol";
+import "../../src/core/SplitNativeStakingManager.sol";
 import "../../src/periphery/WXFI.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
@@ -27,6 +27,7 @@ contract SimpleDeploy is Script {
     address public constant OPERATOR = address(0x79F9860d48ef9dDFaF3571281c033664de05E6f5);    // Operator for daily tasks
     address public constant TREASURY = address(0xee2e617a42Aab5be36c290982493C6CC6C072982);    // Treasury for fees
     address public constant EMERGENCY = address(0xee2e617a42Aab5be36c290982493C6CC6C072982);   // Emergency pause/recovery
+    address public constant NEW_OPERATOR = address(0xc35e04979A78630F16e625902283720681f2932e); // New operator address
     
     // Initial configuration
     uint256 public constant INITIAL_APR = 10 ether;     // 10% APR (with 18 decimals)
@@ -74,6 +75,7 @@ contract SimpleDeploy is Script {
         console.log("Operator:  ", OPERATOR);
         console.log("Treasury:  ", TREASURY);
         console.log("Emergency: ", EMERGENCY);
+        console.log("New Operator:", NEW_OPERATOR);
         
         // Create deployments directory if it doesn't exist
         try vm.createDir("deployments", false) {} catch {}
@@ -135,7 +137,9 @@ contract SimpleDeploy is Script {
         UnifiedOracle oracleImpl = new UnifiedOracle();
         bytes memory oracleInitData = abi.encodeWithSelector(
             UnifiedOracle.initialize.selector,
-            mockDiaOracle
+            mockDiaOracle,
+            UNBONDING_PERIOD,
+            wxfi
         );
         
         TransparentUpgradeableProxy oracleProxyContract = new TransparentUpgradeableProxy(
@@ -181,9 +185,9 @@ contract SimpleDeploy is Script {
         console.log("APY Staking Proxy deployed at:", apyStakingProxy);
         
         // Step 5: Deploy NativeStakingManager with proxy
-        ConcreteNativeStakingManager nativeStakingManagerImpl = new ConcreteNativeStakingManager();
+        SplitNativeStakingManager nativeStakingManagerImpl = new SplitNativeStakingManager();
         bytes memory nativeStakingManagerInitData = abi.encodeWithSelector(
-            NativeStakingManager.initialize.selector,
+            BaseNativeStakingManager.initialize.selector,
             aprStakingProxy,
             apyStakingProxy,
             wxfi,
@@ -213,7 +217,7 @@ contract SimpleDeploy is Script {
         UnifiedOracle oracle = UnifiedOracle(oracleProxy);
         NativeStaking aprStaking = NativeStaking(aprStakingProxy);
         NativeStakingVault apyStaking = NativeStakingVault(apyStakingProxy);
-        ConcreteNativeStakingManager stakingManager = ConcreteNativeStakingManager(payable(stakingManagerProxy));
+        SplitNativeStakingManager stakingManager = SplitNativeStakingManager(payable(stakingManagerProxy));
         
         // 1. Configure Oracle settings
         console.log("Setting Oracle parameters...");
@@ -236,37 +240,49 @@ contract SimpleDeploy is Script {
         aprStaking.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR);
         apyStaking.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR);
         stakingManager.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR);
+        oracle.grantRole(DEFAULT_ADMIN_ROLE, NEW_OPERATOR);
+        aprStaking.grantRole(DEFAULT_ADMIN_ROLE, NEW_OPERATOR);
+        apyStaking.grantRole(DEFAULT_ADMIN_ROLE, NEW_OPERATOR);
+        stakingManager.grantRole(DEFAULT_ADMIN_ROLE, NEW_OPERATOR);
         
         // Oracle roles
         oracle.grantRole(ORACLE_UPDATER_ROLE, OPERATOR);
         oracle.grantRole(ORACLE_UPDATER_ROLE, ADMIN);
+        oracle.grantRole(ORACLE_UPDATER_ROLE, NEW_OPERATOR);
         oracle.grantRole(PAUSER_ROLE, OPERATOR);
         oracle.grantRole(PAUSER_ROLE, ADMIN);
         oracle.grantRole(PAUSER_ROLE, EMERGENCY);
+        oracle.grantRole(PAUSER_ROLE, NEW_OPERATOR);
         
         // Emergency roles
         aprStaking.grantRole(EMERGENCY_ROLE, EMERGENCY);
         aprStaking.grantRole(EMERGENCY_ROLE, ADMIN);
         aprStaking.grantRole(EMERGENCY_ROLE, OPERATOR);
+        aprStaking.grantRole(EMERGENCY_ROLE, NEW_OPERATOR);
         apyStaking.grantRole(EMERGENCY_ROLE, EMERGENCY);
         apyStaking.grantRole(EMERGENCY_ROLE, ADMIN);
         apyStaking.grantRole(EMERGENCY_ROLE, OPERATOR);
+        apyStaking.grantRole(EMERGENCY_ROLE, NEW_OPERATOR);
         
         // Staking manager role
         aprStaking.grantRole(STAKING_MANAGER_ROLE, stakingManagerProxy);
         aprStaking.grantRole(STAKING_MANAGER_ROLE, OPERATOR);
         aprStaking.grantRole(STAKING_MANAGER_ROLE, ADMIN);
+        aprStaking.grantRole(STAKING_MANAGER_ROLE, NEW_OPERATOR);
         apyStaking.grantRole(STAKING_MANAGER_ROLE, stakingManagerProxy);
         apyStaking.grantRole(STAKING_MANAGER_ROLE, OPERATOR);
         apyStaking.grantRole(STAKING_MANAGER_ROLE, ADMIN);
+        apyStaking.grantRole(STAKING_MANAGER_ROLE, NEW_OPERATOR);
         
         // Operator needs fulfiller role
         stakingManager.grantRole(FULFILLER_ROLE, OPERATOR);
         stakingManager.grantRole(FULFILLER_ROLE, ADMIN);
+        stakingManager.grantRole(FULFILLER_ROLE, NEW_OPERATOR);
         
         // Operator needs compounder role for APY Staking
         apyStaking.grantRole(COMPOUNDER_ROLE, OPERATOR);
         apyStaking.grantRole(COMPOUNDER_ROLE, ADMIN);
+        apyStaking.grantRole(COMPOUNDER_ROLE, NEW_OPERATOR);
         
         // Oracle updater role for manager so it can update rewards
         oracle.grantRole(ORACLE_UPDATER_ROLE, stakingManagerProxy);
@@ -274,12 +290,16 @@ contract SimpleDeploy is Script {
         // Grant UPGRADER_ROLE to admin and operator
         aprStaking.grantRole(UPGRADER_ROLE, ADMIN);
         aprStaking.grantRole(UPGRADER_ROLE, OPERATOR);
+        aprStaking.grantRole(UPGRADER_ROLE, NEW_OPERATOR);
         apyStaking.grantRole(UPGRADER_ROLE, ADMIN);
         apyStaking.grantRole(UPGRADER_ROLE, OPERATOR);
+        apyStaking.grantRole(UPGRADER_ROLE, NEW_OPERATOR);
         stakingManager.grantRole(UPGRADER_ROLE, ADMIN);
         stakingManager.grantRole(UPGRADER_ROLE, OPERATOR);
+        stakingManager.grantRole(UPGRADER_ROLE, NEW_OPERATOR);
         oracle.grantRole(UPGRADER_ROLE, ADMIN);
         oracle.grantRole(UPGRADER_ROLE, OPERATOR);
+        oracle.grantRole(UPGRADER_ROLE, NEW_OPERATOR);
         
         console.log("System configured successfully.");
     }
@@ -299,6 +319,7 @@ contract SimpleDeploy is Script {
         console.log("Operator:              ", OPERATOR);
         console.log("Treasury:              ", TREASURY);
         console.log("Emergency:             ", EMERGENCY);
+        console.log("New Operator:          ", NEW_OPERATOR);
         
         console.log("\n==== Fund test accounts ====");
         console.log("Run these commands to fund your test accounts:");
@@ -306,6 +327,7 @@ contract SimpleDeploy is Script {
         console.log(string.concat("cast send --value 1ether ", vm.toString(OPERATOR), " --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"));
         console.log(string.concat("cast send --value 1ether ", vm.toString(TREASURY), " --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"));
         console.log(string.concat("cast send --value 1ether ", vm.toString(EMERGENCY), " --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"));
+        console.log(string.concat("cast send --value 1ether ", vm.toString(NEW_OPERATOR), " --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"));
     }
     
     function saveAddressesToFile() internal {
@@ -340,7 +362,8 @@ contract SimpleDeploy is Script {
             "ADMIN_ADDRESS=", vm.toString(ADMIN), "\n",
             "OPERATOR_ADDRESS=", vm.toString(OPERATOR), "\n",
             "TREASURY_ADDRESS=", vm.toString(TREASURY), "\n", 
-            "EMERGENCY_ADDRESS=", vm.toString(EMERGENCY), "\n"
+            "EMERGENCY_ADDRESS=", vm.toString(EMERGENCY), "\n",
+            "NEW_OPERATOR_ADDRESS=", vm.toString(NEW_OPERATOR), "\n"
         );
         
         vm.writeFile("deployments/dev.env", envContent);

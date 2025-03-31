@@ -40,11 +40,46 @@ contract WXFI is ERC20, ReentrancyGuard, IWXFI {
     }
     
     /**
+     * @dev Override ERC20.balanceOf to also implement IWXFI.balanceOf
+     */
+    function balanceOf(address account) public view override(ERC20, IWXFI) returns (uint256) {
+        return super.balanceOf(account);
+    }
+    
+    /**
+     * @dev Override ERC20.transfer to also implement IWXFI.transfer
+     */
+    function transfer(address to, uint256 amount) public override(ERC20, IWXFI) returns (bool) {
+        return super.transfer(to, amount);
+    }
+    
+    /**
+     * @dev Override ERC20.transferFrom to also implement IWXFI.transferFrom
+     */
+    function transferFrom(address from, address to, uint256 amount) public override(ERC20, IWXFI) returns (bool) {
+        return super.transferFrom(from, to, amount);
+    }
+    
+    /**
+     * @dev Override ERC20.approve to also implement IWXFI.approve
+     */
+    function approve(address spender, uint256 amount) public override(ERC20, IWXFI) returns (bool) {
+        return super.approve(spender, amount);
+    }
+    
+    /**
      * @dev Receive function to handle native XFI transfers
      * Automatically wraps received XFI as WXFI
      */
     receive() external payable {
         _mint(msg.sender, msg.value);
         emit Transfer(address(0), msg.sender, msg.value);
+    }
+
+    /**
+     * @dev Override ERC20.allowance to also implement IWXFI.allowance
+     */
+    function allowance(address owner, address spender) public view override(ERC20, IWXFI) returns (uint256) {
+        return super.allowance(owner, spender);
     }
 } 

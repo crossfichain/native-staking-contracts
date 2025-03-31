@@ -37,6 +37,14 @@ contract NativeStaking is
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
+    // Structs
+    struct StakeInfo {
+        uint256 amount;
+        uint256 stakedAt;
+        uint256 unbondingAt;
+        string validator;
+    }
+    
     // State variables
     IERC20 public stakingToken;
     IOracle public oracle;
@@ -52,12 +60,65 @@ contract NativeStaking is
     mapping(address => uint256) private _totalStakedByUser;
     mapping(address => uint256) private _lastClaimTime;
     mapping(address => mapping(string => uint256)) private _userValidatorStake;
+    mapping(address => string[]) private _userValidators;
     
     // New mapping to map requestId (as bytes) to array index
     mapping(address => mapping(bytes32 => uint256)) private _requestIdToIndex;
     
     // Add a private field to track the latest request ID
     bytes private _latestRequestId;
+    
+    /**
+     * @dev Checks if a user has a pending operation with a validator
+     * @param user The user address
+     * @param validator The validator to check
+     * @return True if a pending operation exists
+     */
+    function _hasPendingValidator(address user, string memory validator) internal view returns (bool) {
+        // Check if any unstake request is pending for this validator
+        for (uint256 i = 0; i < _userUnstakeRequests[user].length; i++) {
+            UnstakeRequest memory request = _userUnstakeRequests[user][i];
+            if (keccak256(bytes(request.validator)) == keccak256(bytes(validator)) && !request.claimed) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * @dev Gets the number of active stakes for a user
+     * @param user The user address
+     * @return The count of active stakes
+     */
+    function getActiveStakeCount(address user) public view returns (uint256) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < _userStakes[user].length; i++) {
+            if (_userStakes[user][i].unbondingAt == 0 && _userStakes[user][i].amount > 0) {
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    /**
+     * @dev Gets the total stake amount for a user
+     * @param user The user address
+     * @return The total staked amount
+     */
+    function getTotalStake(address user) external view override returns (uint256) {
+        return _totalStakedByUser[user];
+    }
+    
+    /**
+     * @dev Gets the pending rewards for a user
+     * @param user The user address
+     * @return The pending rewards amount
+     */
+    function getPendingRewards(address user) external view override returns (uint256) {
+        // This would typically be calculated based on staking time, amount, and APR
+        // For simplicity, we'll return 0 as the actual reward calculation would be done by the oracle
+        return 0;
+    }
     
     // Events
     event Staked(address indexed user, uint256 amount, string validator, uint256 stakeId);
@@ -177,6 +238,61 @@ contract NativeStaking is
     }
     
     /**
+     * @dev Unstakes XFI from a specific validator
+     * @param user The user who is unstaking
+     * @param amount The amount of XFI to unstake
+     * @param validator The validator address/ID to unstake from
+     */
+    function unstake(address user, uint256 amount, string calldata validator) 
+        external 
+        override 
+        onlyRole(STAKING_MANAGER_ROLE) 
+        whenNotPaused 
+    {
+        require(amount > 0, "Amount must be > 0");
+        require(_userValidatorStake[user][validator] >= amount, "Insufficient staked amount with validator");
+        
+        // Update validator-specific stake
+        _userValidatorStake[user][validator] -= amount;
+        
+        // Update total staked amount
+        _totalStakedByUser[user] -= amount;
+        
+        // Find and update the stake in user's stakes array
+        for (uint256 i = 0; i < _userStakes[user].length; i++) {
+            StakeInfo storage stakeItem = _userStakes[user][i];
+            if (keccak256(bytes(stakeItem.validator)) == keccak256(bytes(validator)) && 
+                stakeItem.unbondingAt == 0 && 
+                stakeItem.amount > 0) {
+                
+                // If unstaking the entire amount, mark as unbonding
+                if (stakeItem.amount == amount) {
+                    stakeItem.unbondingAt = block.timestamp;
+                } else if (stakeItem.amount > amount) {
+                    // Partial unstake
+                    stakeItem.amount -= amount;
+                } else {
+                    // This should not happen due to the check above
+                    revert("Stake item amount mismatch");
+                }
+                break;
+            }
+        }
+        
+        // Remove validator from user's list if no stake left
+        if (_userValidatorStake[user][validator] == 0) {
+            for (uint256 i = 0; i < _userValidators[user].length; i++) {
+                if (keccak256(bytes(_userValidators[user][i])) == keccak256(bytes(validator))) {
+                    // Replace with the last element and pop
+                    _userValidators[user][i] = _userValidators[user][_userValidators[user].length - 1];
+                    _userValidators[user].pop();
+                    break;
+                }
+            }
+        }
+    }
+    
+    /**
      * @dev Requests to unstake XFI
      * @param user The user who is unstaking
      * @param amount The amount of XFI to unstake
@@ -219,6 +335,7 @@ contract NativeStaking is
             amount: amount,
             validator: validator,
             timestamp: block.timestamp,
+            unlockTime: unlockTime,
             claimed: false
         });
         
@@ -309,7 +426,6 @@ contract NativeStaking is
      */
     function claimUnstake(address user, bytes calldata requestId) 
         external 
-        override 
         onlyRole(STAKING_MANAGER_ROLE) 
         returns (uint256 amount) 
     {
@@ -452,7 +568,6 @@ contract NativeStaking is
     function getUserStakes(address user) 
         external 
         view 
-        override 
         returns (StakeInfo[] memory) 
     {
         uint256 activeStakeCount = getActiveStakeCount(user);
@@ -479,7 +594,6 @@ contract NativeStaking is
     function getUserUnstakeRequests(address user) 
         external 
         view 
-        override 
         returns (UnstakeRequest[] memory) 
     {
         return _userUnstakeRequests[user];
@@ -493,7 +607,6 @@ contract NativeStaking is
     function getTotalStaked(address user) 
         external 
         view 
-        override 
         returns (uint256) 
     {
         return _totalStakedByUser[user];
@@ -507,7 +620,6 @@ contract NativeStaking is
     function getUnclaimedRewards(address user) 
         public 
         view 
-        override 
         returns (uint256) 
     {
         if (_totalStakedByUser[user] == 0 || _lastClaimTime[user] == 0) {
@@ -656,25 +768,6 @@ contract NativeStaking is
     }
     
     /**
-     * @dev Gets the count of active stakes for a user (not in unbonding)
-     * @param user The user to get the count for
-     * @return The count of active stakes
-     */
-    function getActiveStakeCount(address user) 
-        public 
-        view 
-        returns (uint256) 
-    {
-        uint256 activeStakeCount = 0;
-        for (uint256 i = 0; i < _userStakes[user].length; i++) {
-            if (_userStakes[user][i].unbondingAt == 0 && _userStakes[user][i].amount > 0) {
-                activeStakeCount++;
-            }
-        }
-        return activeStakeCount;
-    }
-    
-    /**
      * @dev Gets the amount staked with a specific validator by a user
      * @param user The user to get the stake for
      * @param validator The validator to get the stake for
@@ -683,7 +776,6 @@ contract NativeStaking is
     function getValidatorStake(address user, string calldata validator) 
         external 
         view 
-        override 
         returns (uint256) 
     {
         uint256 validatorStake = 0;
@@ -701,86 +793,27 @@ contract NativeStaking is
     }
     
     /**
-     * @dev Gets a specific unstake request without needing the user address
+     * @dev Gets details about an unstake request
      * @param requestId The ID of the request
-     * @return The UnstakeRequest struct
+     * @return The unstake request details
      */
     function getUnstakeRequest(bytes calldata requestId) 
         external 
         view 
-        override 
         returns (UnstakeRequest memory) 
     {
-        // In this implementation, we need to extract the user address from the requestId
-        // This is a simplified implementation for compatibility
+        // Find the index for this request ID
+        uint256 index = _requestIdToIndex[msg.sender][keccak256(requestId)];
+        require(index < _userUnstakeRequests[msg.sender].length, "Request not found");
         
-        // Check if this is likely a legacy format (uint256 as bytes)
-        if (requestId.length <= 32) {
-            // Legacy format - use a default user (msg.sender) as this is just for compatibility
-            return this.getUnstakeRequest(msg.sender, requestId);
-        }
-        
-        // For structured IDs, we extract the user from bytes
-        // Since directly accessing calldata bytes is not allowed, we'll use a simpler approach
-        // This is a fallback implementation that will work for compatibility
-        // In a real implementation, you would need to properly decode the user from the requestId
-        
-        // For now, we'll return an empty struct if not found via the legacy method
-        try this.getUnstakeRequest(msg.sender, requestId) returns (UnstakeRequest memory request) {
-            return request;
-        } catch {
-            // Return an empty response - in production you would implement proper extraction
-            return UnstakeRequest({
-                user: address(0),
-                amount: 0,
-                validator: "",
-                timestamp: 0,
-                claimed: false
-            });
-        }
-    }
-    
-    /**
-     * @dev Gets a specific unstake request for a user (legacy function)
-     * @param user The user to get the request for
-     * @param requestId The ID of the request
-     * @return The UnstakeRequest struct
-     */
-    function getUnstakeRequest(address user, bytes calldata requestId) 
-        external 
-        view 
-        override 
-        returns (UnstakeRequest memory) 
-    {
-        // Extract the array index from the requestId using similar logic to claimUnstake
-        uint256 index;
-        
-        // Check if this is a bytes requestId or a legacy requestId (uint256 represented as bytes)
-        if (requestId.length > 32) {
-            // New format - get index from the requestId mapping
-            bytes32 requestIdHash = keccak256(requestId);
-            index = _requestIdToIndex[user][requestIdHash];
-        } else {
-            // Legacy format - parse as uint256 and extract index
-            uint256 legacyId = abi.decode(requestId, (uint256));
-            if (isStructuredRequestId(legacyId)) {
-                // Extract the array index from the last 4 bytes
-                index = getSequenceFromId(legacyId);
-            } else {
-                // Use the requestId directly as an index (very old legacy format)
-                index = legacyId;
-            }
-        }
-        
-        require(index < _userUnstakeRequests[user].length, "Invalid request ID");
-        return _userUnstakeRequests[user][index];
+        return _userUnstakeRequests[msg.sender][index];
     }
     
     /**
      * @dev Gets the latest request ID that was created
      * @return The latest request ID (bytes)
      */
-    function getLatestRequestId() external view override returns (bytes memory) {
+    function getLatestRequestId() external view returns (bytes memory) {
         return _latestRequestId;
     }
     
@@ -795,7 +828,7 @@ contract NativeStaking is
         address user,
         string calldata validator,
         uint256 amount
-    ) external override onlyRole(STAKING_MANAGER_ROLE) returns (uint256) {
+    ) external onlyRole(STAKING_MANAGER_ROLE) returns (uint256) {
         require(amount > 0, "Amount must be greater than 0");
         
         // Check that the user has staked with this validator
@@ -807,17 +840,6 @@ contract NativeStaking is
         require(transferred, "Token transfer failed");
         
         return amount;
-    }
-    
-    /**
-     * @dev Checks if a user has a pending validator operation to prevent front-running
-     * @param user The user address to check
-     * @param validator The validator ID to check
-     * @return True if there's a pending operation, false otherwise
-     */
-    function _hasPendingValidator(address user, string calldata validator) internal view returns (bool) {
-        // For now, simplistic check - implement more robust tracking if needed
-        return false; // Default to allowing operations
     }
     
     /**

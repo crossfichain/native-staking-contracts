@@ -510,6 +510,7 @@ contract UnifiedOracle is
     function clearUserClaimableRewardsForValidator(address user, string calldata validator) 
         external 
         override 
+        onlyRole(ORACLE_UPDATER_ROLE)
         returns (uint256) 
     {
         uint256 amount = _userValidatorClaimableRewards[user][validator];
@@ -692,5 +693,35 @@ contract UnifiedOracle is
             uint256 factor = 10**(toDecimals - fromDecimals);
             return amount * factor;
         }
+    }
+
+    /**
+     * @dev Gets the launch timestamp of the protocol
+     */
+    function getLaunchTimestamp() external view returns (uint256) {
+        return _launchTimestamp;
+    }
+
+    /**
+     * @dev Clears a specific amount of claimable rewards for a user from a specific validator
+     */
+    function clearUserClaimableRewardsForValidator(
+        address user,
+        string calldata validator,
+        uint256 amount
+    ) external override onlyRole(ORACLE_UPDATER_ROLE) returns (uint256) {
+        // Get current reward amount
+        uint256 currentReward = _userValidatorClaimableRewards[user][validator];
+        
+        // Ensure requested amount is valid
+        require(amount <= currentReward, "Amount exceeds available rewards");
+        
+        // Update rewards
+        _userValidatorClaimableRewards[user][validator] = currentReward - amount;
+        
+        // Update total rewards
+        _userClaimableRewards[user] = _userClaimableRewards[user] > amount ? _userClaimableRewards[user] - amount : 0;
+        
+        return amount;
     }
 } 

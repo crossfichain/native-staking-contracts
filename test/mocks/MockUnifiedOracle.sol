@@ -13,6 +13,7 @@ contract MockUnifiedOracle is IOracle {
     mapping(address => uint256) private _userClaimableRewards;
     mapping(address => mapping(string => uint256)) private _userValidatorClaimableRewards;
     mapping(address => mapping(string => uint256)) private _validatorStakes;
+    uint256 private _launchTimestamp = block.timestamp;
 
     function setXfiPrice(uint256 price) external {
         _xfiPrice = price;
@@ -113,6 +114,16 @@ contract MockUnifiedOracle is IOracle {
         return amount;
     }
 
+    function clearUserClaimableRewardsForValidator(
+        address user,
+        string calldata validator,
+        uint256 amount
+    ) external override returns (uint256) {
+        require(_userValidatorClaimableRewards[user][validator] >= amount, "Amount exceeds available rewards");
+        _userValidatorClaimableRewards[user][validator] -= amount;
+        return amount;
+    }
+
     function getValidatorStake(address user, string calldata validator) 
         external 
         view 
@@ -137,5 +148,13 @@ contract MockUnifiedOracle is IOracle {
      */
     function setValidatorStake(address user, string calldata validator, uint256 amount) external {
         // Mock implementation - no actual storage
+    }
+
+    function setLaunchTimestamp(uint256 timestamp) external {
+        _launchTimestamp = timestamp;
+    }
+
+    function getLaunchTimestamp() external view override returns (uint256) {
+        return _launchTimestamp;
     }
 } 
