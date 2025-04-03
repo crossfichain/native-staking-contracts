@@ -1,5 +1,5 @@
-// // SPDX-License-Identifier: MIT
-// pragma solidity 0.8.26;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
 
 // import {NativeStaking} from "../src/core/NativeStaking.sol";
 // import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";

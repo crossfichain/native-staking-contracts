@@ -6,10 +6,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/interfaces/IERC4626Upgradeable.sol";
 import "../interfaces/INativeStakingVault.sol";
 import "../interfaces/IOracle.sol";
 
@@ -45,8 +46,8 @@ contract NativeStakingVault is
     uint256 public minWithdrawalAmount;
     
     // Withdrawal request tracking
-    mapping(address => uint256[]) private _userWithdrawalRequestIds;
-    mapping(uint256 => WithdrawalRequest) private _withdrawalRequests;
+    mapping(address => bytes[]) private _userWithdrawalRequestIds;
+    mapping(bytes => WithdrawalRequest) private _withdrawalRequests;
     uint256 private _nextWithdrawalRequestId;
     
     // Mapping of last compound timestamp
@@ -56,8 +57,8 @@ contract NativeStakingVault is
     uint256 private _totalPendingWithdrawals;
     
     // Events
-    event WithdrawalRequested(address indexed owner, address indexed receiver, uint256 indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime);
-    event WithdrawalClaimed(address indexed receiver, uint256 indexed requestId, uint256 assets);
+    event WithdrawalRequested(address indexed owner, address indexed receiver, bytes indexed requestId, uint256 assets, uint256 shares, uint256 unlockTime);
+    event WithdrawalClaimed(address indexed receiver, bytes indexed requestId, uint256 assets);
     event CompoundExecuted(uint256 rewardsAdded, uint256 timestamp);
     event MaxLiquidityPercentUpdated(uint256 newPercent);
     event MinWithdrawalAmountUpdated(uint256 newAmount);
@@ -77,7 +78,7 @@ contract NativeStakingVault is
     ) external initializer {
         __AccessControl_init();
         __ERC20_init(_name, _symbol);
-        __ERC4626_init(IERC20(_asset));
+        __ERC4626_init(IERC20Upgradeable(_asset));
         __Pausable_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
@@ -101,7 +102,7 @@ contract NativeStakingVault is
      * @dev Override decimals function to resolve the inheritance conflict
      * @return The number of decimals for the token
      */
-    function decimals() public view override(ERC20Upgradeable, ERC4626Upgradeable, IERC20Metadata) returns (uint8) {
+    function decimals() public view override(ERC20Upgradeable, ERC4626Upgradeable, IERC20MetadataUpgradeable) returns (uint8) {
         return ERC4626Upgradeable.decimals();
     }
     
@@ -113,16 +114,13 @@ contract NativeStakingVault is
      */
     function deposit(uint256 assets, address receiver) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 shares) 
     {
         require(assets > 0, "Deposit amount must be > 0");
-        
-        // Call the parent implementation
         shares = super.deposit(assets, receiver);
-        
         return shares;
     }
     
@@ -134,16 +132,13 @@ contract NativeStakingVault is
      */
     function mint(uint256 shares, address receiver) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 assets) 
     {
         require(shares > 0, "Shares amount must be > 0");
-        
-        // Call the parent implementation
         assets = super.mint(shares, receiver);
-        
         return assets;
     }
     
@@ -156,20 +151,15 @@ contract NativeStakingVault is
      */
     function withdraw(uint256 assets, address receiver, address owner) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 shares) 
     {
         require(assets >= minWithdrawalAmount, "Amount below minimum");
-        
-        // Check if there's enough liquidity in the vault for immediate withdrawal
         uint256 availableLiquidity = _maxWithdrawalLiquidity();
         require(assets <= availableLiquidity, "Exceeds available liquidity");
-        
-        // Call the parent implementation
         shares = super.withdraw(assets, receiver, owner);
-        
         return shares;
     }
     
@@ -182,21 +172,16 @@ contract NativeStakingVault is
      */
     function redeem(uint256 shares, address receiver, address owner) 
         public 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         whenNotPaused 
         nonReentrant 
         returns (uint256 assets) 
     {
         assets = previewRedeem(shares);
         require(assets >= minWithdrawalAmount, "Amount below minimum");
-        
-        // Check if there's enough liquidity in the vault for immediate withdrawal
         uint256 availableLiquidity = _maxWithdrawalLiquidity();
         require(assets <= availableLiquidity, "Exceeds available liquidity");
-        
-        // Call the parent implementation
         assets = super.redeem(shares, receiver, owner);
-        
         return assets;
     }
     
@@ -217,7 +202,7 @@ contract NativeStakingVault is
         override 
         whenNotPaused 
         nonReentrant 
-        returns (uint256 requestId) 
+        returns (bytes memory requestId) 
     {
         require(assets >= minWithdrawalAmount, "Amount below minimum");
         require(assets <= maxRedeem(owner), "Insufficient shares");
@@ -237,9 +222,22 @@ contract NativeStakingVault is
         uint256 unbondingPeriod = oracle.getUnbondingPeriod();
         uint256 unlockTime = block.timestamp + unbondingPeriod;
         
-        // Create withdrawal request
-        requestId = _nextWithdrawalRequestId++;
+        // Create a structured requestId as bytes - similar format to other contracts
+        // Format: [2 bytes: type][4 bytes: timestamp][20 bytes: owner][32 bytes: hash][4 bytes: sequence]
+        bytes2 requestType = bytes2(0x0000); // Use 0 for withdrawal requests
+        bytes4 timestamp = bytes4(uint32(block.timestamp));
         
+        // Create a hash that combines the assets and other data
+        bytes32 dataHash = keccak256(abi.encodePacked(assets, shares, unlockTime, block.chainid));
+        
+        // Get sequence number
+        uint32 sequence = uint32(_nextWithdrawalRequestId);
+        _nextWithdrawalRequestId++;
+        
+        // Create the full requestId
+        requestId = abi.encodePacked(requestType, timestamp, owner, dataHash, sequence);
+        
+        // Store the withdrawal request
         _withdrawalRequests[requestId] = WithdrawalRequest({
             assets: assets,
             shares: shares,
@@ -249,6 +247,8 @@ contract NativeStakingVault is
         });
         
         _userWithdrawalRequestIds[owner].push(requestId);
+        
+        // Update total pending withdrawals - use the actual asset amount, not the shares
         _totalPendingWithdrawals += assets;
         
         emit WithdrawalRequested(owner, receiver, requestId, assets, shares, unlockTime);
@@ -257,17 +257,125 @@ contract NativeStakingVault is
     }
     
     /**
+     * @dev Finds a withdrawal request by its ID or extracted sequence
+     * @param requestId The request ID to find
+     * @return The withdrawal request
+     */
+    function _findWithdrawalRequest(bytes calldata requestId) 
+        internal 
+        view 
+        returns (WithdrawalRequest storage) 
+    {
+        // Direct lookup first (most efficient path)
+        WithdrawalRequest storage request = _withdrawalRequests[requestId];
+        
+        // If found via direct lookup, return it
+        if (request.owner != address(0)) {
+            return request;
+        }
+        
+        // If not found and format seems structured (has minimum expected length)
+        if (requestId.length >= 62) {
+            address requestOwner;
+            uint256 sequence;
+            
+            // Extract owner from position 6 (after 2-byte type + 4-byte timestamp)
+            assembly {
+                let offset := add(requestId.offset, 6)
+                requestOwner := shr(96, calldataload(offset))
+            }
+            
+            // Extract sequence from last 4 bytes
+            assembly {
+                let len := requestId.length
+                let offset := add(requestId.offset, sub(len, 4))
+                sequence := and(calldataload(offset), 0xFFFFFFFF)
+            }
+            
+            // Look through this user's requests for matching sequence
+            bytes[] storage userRequests = _userWithdrawalRequestIds[requestOwner];
+            for (uint256 i = 0; i < userRequests.length; i++) {
+                bytes memory storedId = userRequests[i];
+                if (storedId.length >= 4) {
+                    // Extract sequence from stored ID
+                    uint256 storedSequence;
+                    assembly {
+                        let len := mload(storedId)
+                        let ptr := add(add(storedId, 0x20), sub(len, 4))
+                        storedSequence := and(mload(ptr), 0xFFFFFFFF)
+                    }
+                    
+                    if (storedSequence == sequence) {
+                        return _withdrawalRequests[storedId];
+                    }
+                }
+            }
+        }
+        
+        // If direct lookup and sequence extraction failed, try numeric ID extraction
+        if (requestId.length == 32) {
+            // Try to decode as uint256
+            uint256 numericId;
+            assembly {
+                numericId := calldataload(requestId.offset)
+            }
+            
+            // Only extract sequence if it's a structured ID
+            if (numericId >= 4294967296) { // 2^32
+                uint256 sequence = numericId & 0xFFFFFFFF; // Extract last 4 bytes
+                
+                // Try to find by sequence across all users (slower path)
+                address[] memory allUsers = _getAllUsers();
+                for (uint256 u = 0; u < allUsers.length; u++) {
+                    bytes[] storage userRequests = _userWithdrawalRequestIds[allUsers[u]];
+                    for (uint256 i = 0; i < userRequests.length; i++) {
+                        bytes memory storedId = userRequests[i];
+                        if (storedId.length >= 4) {
+                            uint256 storedSequence;
+                            assembly {
+                                let len := mload(storedId)
+                                let ptr := add(add(storedId, 0x20), sub(len, 4))
+                                storedSequence := and(mload(ptr), 0xFFFFFFFF)
+                            }
+                            
+                            if (storedSequence == sequence) {
+                                return _withdrawalRequests[storedId];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fall back to empty request if nothing found
+        return request;
+    }
+    
+    /**
+     * @dev Helper function to get all users with withdrawal requests
+     * @return Array of user addresses
+     * @dev This is a simplified implementation that would need optimization in production
+     */
+    function _getAllUsers() internal view returns (address[] memory) {
+        // This is a simplified implementation
+        // In production, maintain a mapping of all users with withdrawal requests
+        address[] memory users = new address[](1);
+        users[0] = msg.sender;
+        return users;
+    }
+    
+    /**
      * @dev Claims assets from a completed withdrawal request
      * @param requestId The ID of the withdrawal request
      * @return assets The amount of assets claimed
      */
-    function claimWithdrawal(uint256 requestId) 
+    function claimWithdrawal(bytes calldata requestId) 
         external 
         override 
         nonReentrant 
         returns (uint256 assets) 
     {
-        WithdrawalRequest storage request = _withdrawalRequests[requestId];
+        WithdrawalRequest storage request = _findWithdrawalRequest(requestId);
         require(request.owner != address(0), "Invalid request ID");
         require(!request.completed, "Already claimed");
         require(block.timestamp >= request.unlockTime, "Still in unbonding period");
@@ -277,7 +385,7 @@ contract NativeStakingVault is
         _totalPendingWithdrawals -= assets;
         
         // Transfer the assets to the user
-        IERC20(asset()).transfer(msg.sender, assets);
+        IERC20Upgradeable(asset()).transfer(msg.sender, assets);
         
         emit WithdrawalClaimed(msg.sender, requestId, assets);
         
@@ -295,7 +403,7 @@ contract NativeStakingVault is
         override 
         returns (WithdrawalRequest[] memory) 
     {
-        uint256[] storage requestIds = _userWithdrawalRequestIds[user];
+        bytes[] storage requestIds = _userWithdrawalRequestIds[user];
         uint256 validCount = 0;
         
         // Count valid requests
@@ -331,18 +439,23 @@ contract NativeStakingVault is
         nonReentrant 
         returns (bool success) 
     {
-        // In a real implementation, this would interact with the Cosmos staking
-        // and compound the rewards. For this implementation, we'll simulate it.
-        
         // Calculate rewards based on APY since last compound
-        uint256 calculatedTotalAssets = _calculateTotalAssetsWithCompounding();
+        uint256 timeElapsed = block.timestamp - _lastCompoundTimestamp;
         uint256 currentAssets = super.totalAssets();
         
-        if (calculatedTotalAssets > currentAssets) {
-            uint256 rewardsAmount = calculatedTotalAssets - currentAssets;
-            
+        // Calculate rewards using APY formula: rewards = principal * (APY/100) * (time/365 days)
+        uint256 apy = oracle.getCurrentAPY();
+        uint256 rewardsAmount = (currentAssets * apy * timeElapsed) / (365 days * 10000); // APY is in basis points
+        
+        if (rewardsAmount > 0) {
             // Update last compound timestamp
             _lastCompoundTimestamp = block.timestamp;
+            
+            // Transfer rewards to the vault
+            IERC20Upgradeable(asset()).transferFrom(msg.sender, address(this), rewardsAmount);
+            
+            // Rewards are automatically distributed by increasing the exchange rate between shares and assets
+            // No need to mint new shares since the value of existing shares increases
             
             emit CompoundExecuted(rewardsAmount, block.timestamp);
             
@@ -366,7 +479,10 @@ contract NativeStakingVault is
         returns (bool success) 
     {
         // Transfer the rewards to the vault
-        IERC20(asset()).transferFrom(msg.sender, address(this), rewardAmount);
+        IERC20Upgradeable(asset()).transferFrom(msg.sender, address(this), rewardAmount);
+        
+        // Rewards are automatically distributed by increasing the exchange rate between shares and assets
+        // No need to mint new shares since the value of existing shares increases
         
         // Update last compound timestamp
         _lastCompoundTimestamp = block.timestamp;
@@ -383,7 +499,7 @@ contract NativeStakingVault is
     function totalAssets() 
         public 
         view 
-        override(ERC4626Upgradeable, IERC4626) 
+        override(ERC4626Upgradeable, IERC4626Upgradeable) 
         returns (uint256) 
     {
         return _calculateTotalAssetsWithCompounding();
@@ -395,15 +511,26 @@ contract NativeStakingVault is
      */
     function _calculateTotalAssetsWithCompounding() internal view returns (uint256) {
         // Get the raw asset balance
-        uint256 rawAssets = IERC20(asset()).balanceOf(address(this));
+        uint256 rawAssets = IERC20Upgradeable(asset()).balanceOf(address(this));
         
-        // Add pending withdrawals (assets that are being withdrawn)
-        uint256 pendingWithdrawals = _totalPendingWithdrawals;
+        // Calculate rewards based on APY since last compound
+        uint256 timeElapsed = block.timestamp - _lastCompoundTimestamp;
+        
+        // If there are no assets or no time has elapsed, return raw assets
+        if (rawAssets == 0 || timeElapsed == 0) {
+            return rawAssets;
+        }
+        
+        // Calculate rewards using APY formula: rewards = principal * (APY/100) * (time/365 days)
+        uint256 apy = oracle.getCurrentAPY();
+        if (apy == 0) {
+            return rawAssets;
+        }
+        
+        uint256 rewardsAmount = (rawAssets * apy * timeElapsed) / (365 days * 10000); // APY is in basis points
         
         // Calculate total with compounding
-        uint256 calculatedTotalAssets = rawAssets + pendingWithdrawals;
-        
-        return calculatedTotalAssets;
+        return rawAssets + rewardsAmount;
     }
     
     /**
@@ -411,17 +538,19 @@ contract NativeStakingVault is
      * @return The maximum amount of assets available for immediate withdrawal
      */
     function _maxWithdrawalLiquidity() private view returns (uint256) {
-        uint256 totalVaultAssets = super.totalAssets();
+        // Get actual token balance in the vault
+        uint256 actualBalance = IERC20Upgradeable(asset()).balanceOf(address(this));
         
-        // Subtract pending withdrawals
-        if (totalVaultAssets <= _totalPendingWithdrawals) {
+        // Ensure we don't promise more than we have
+        if (actualBalance <= _totalPendingWithdrawals) {
             return 0;
         }
         
-        uint256 availableAssets = totalVaultAssets - _totalPendingWithdrawals;
+        // Available liquidity is the actual balance minus tokens reserved for pending withdrawals
+        uint256 availableLiquidity = actualBalance - _totalPendingWithdrawals;
         
         // Apply max liquidity percent
-        return availableAssets * maxLiquidityPercent / MAX_BPS;
+        return availableLiquidity * maxLiquidityPercent / MAX_BPS;
     }
     
     /**
@@ -509,4 +638,142 @@ contract NativeStakingVault is
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[50] private __gap;
+
+    // Override all required functions with proper inheritance
+    function name() public view override(ERC20Upgradeable, IERC20MetadataUpgradeable) returns (string memory) {
+        return super.name();
+    }
+
+    function symbol() public view override(ERC20Upgradeable, IERC20MetadataUpgradeable) returns (string memory) {
+        return super.symbol();
+    }
+
+    function totalSupply() public view override(ERC20Upgradeable, IERC20Upgradeable) returns (uint256) {
+        return super.totalSupply();
+    }
+
+    function balanceOf(address account) public view override(ERC20Upgradeable, IERC20Upgradeable, INativeStakingVault) returns (uint256) {
+        return super.balanceOf(account);
+    }
+
+    function transfer(address to, uint256 amount) public override(ERC20Upgradeable, IERC20Upgradeable) returns (bool) {
+        return super.transfer(to, amount);
+    }
+
+    function allowance(address owner, address spender) public view override(ERC20Upgradeable, IERC20Upgradeable) returns (uint256) {
+        return super.allowance(owner, spender);
+    }
+
+    function approve(address spender, uint256 amount) public override(ERC20Upgradeable, IERC20Upgradeable) returns (bool) {
+        return super.approve(spender, amount);
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public override(ERC20Upgradeable, IERC20Upgradeable) returns (bool) {
+        return super.transferFrom(from, to, amount);
+    }
+
+    function asset() public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (address) {
+        return ERC4626Upgradeable.asset();
+    }
+
+    function convertToShares(uint256 assets) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.convertToShares(assets);
+    }
+
+    function convertToAssets(uint256 shares) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.convertToAssets(shares);
+    }
+
+    function maxDeposit(address receiver) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxDeposit(receiver);
+    }
+
+    function maxMint(address receiver) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxMint(receiver);
+    }
+
+    function maxWithdraw(address owner) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxWithdraw(owner);
+    }
+
+    function maxRedeem(address owner) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.maxRedeem(owner);
+    }
+
+    function previewDeposit(uint256 assets) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewDeposit(assets);
+    }
+
+    function previewMint(uint256 shares) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewMint(shares);
+    }
+
+    function previewWithdraw(uint256 assets) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewWithdraw(assets);
+    }
+
+    function previewRedeem(uint256 shares) public view override(ERC4626Upgradeable, IERC4626Upgradeable) returns (uint256) {
+        return ERC4626Upgradeable.previewRedeem(shares);
+    }
+
+    /**
+     * @dev Gets the total amount of tokens that are pending withdrawal
+     * @return The total pending withdrawals
+     */
+    function getTotalPendingWithdrawals() external view returns (uint256) {
+        return _totalPendingWithdrawals;
+    }
+    
+    /**
+     * @dev Unstakes tokens for a user
+     * @param user The user to unstake for
+     * @param amount The amount to unstake
+     */
+    function unstake(address user, uint256 amount) external override onlyRole(STAKING_MANAGER_ROLE) {
+        // This is a simplified implementation
+        // In a real implementation, we would check if the user has enough balance
+        // and handle the unstaking process
+        _burn(user, amount);
+        IERC20Upgradeable(asset()).transfer(user, amount);
+    }
+    
+    /**
+     * @dev Claims rewards for a user
+     * @param user The user to claim rewards for
+     * @return The amount of rewards claimed
+     */
+    function claimRewards(address user) external override onlyRole(STAKING_MANAGER_ROLE) returns (uint256) {
+        uint256 rewardAmount = getPendingRewards(user);
+        if (rewardAmount > 0) {
+            // Transfer rewards to the user
+            IERC20Upgradeable(asset()).transfer(user, rewardAmount);
+        }
+        return rewardAmount;
+    }
+    
+    /**
+     * @dev Gets the pending rewards for a user
+     * @param user The user to get pending rewards for
+     * @return The amount of pending rewards
+     */
+    function getPendingRewards(address user) public view override returns (uint256) {
+        // In a real implementation, this would calculate the rewards based on the user's balance
+        // and the time since the last claim
+        // For simplicity, we'll return 0
+        return 0;
+    }
+
+    /**
+     * @dev Stakes amount on behalf of user, returns shares equivalent
+     * @param user The user to stake for
+     * @param amount The amount to stake
+     * @return The amount of shares minted
+     */
+    function stake(address user, uint256 amount) external override onlyRole(STAKING_MANAGER_ROLE) returns (uint256) {
+        require(!paused(), "Contract is paused");
+        
+        // Use the deposit function from ERC4626 to handle the logic
+        // This will mint shares to the user based on the amount
+        return deposit(amount, user);
+    }
 } 

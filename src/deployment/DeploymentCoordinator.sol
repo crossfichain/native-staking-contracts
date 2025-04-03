@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "../core/NativeStaking.sol";
 import "../core/NativeStakingVault.sol";
-import "../core/NativeStakingManager.sol";
+import "../core/ConcreteNativeStakingManager.sol";
 import "../periphery/UnifiedOracle.sol";
 import "../periphery/WXFI.sol";
 import "../interfaces/INativeStakingManager.sol";
@@ -43,7 +43,7 @@ contract DeploymentCoordinator {
         diaOracle = diaOracleAddress;
         
         // Step 1: Deploy ProxyAdmin
-        ProxyAdmin admin = new ProxyAdmin(adminAddress);
+        ProxyAdmin admin = new ProxyAdmin();
         proxyAdmin = address(admin);
         admin.transferOwnership(adminAddress);
         
@@ -98,7 +98,7 @@ contract DeploymentCoordinator {
         nativeStakingVaultProxy = address(nativeStakingVaultProxyContract);
         
         // Step 6: Deploy NativeStakingManager with proxy
-        NativeStakingManager nativeStakingManagerImpl = new NativeStakingManager();
+        ConcreteNativeStakingManager nativeStakingManagerImpl = new ConcreteNativeStakingManager();
         bytes memory nativeStakingManagerInitData = abi.encodeWithSelector(
             NativeStakingManager.initialize.selector,
             nativeStakingProxy,

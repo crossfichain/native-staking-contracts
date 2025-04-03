@@ -1,0 +1,540 @@
+No files changed, compilation skipped
+Traces:
+  [20611431] → new SimpleDeploy@0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519
+    └─ ← [Return] 102749 bytes of code
+
+  [21160505] SimpleDeploy::run()
+    ├─ [0] VM::envExists("DEV_PRIVATE_KEY") [staticcall]
+    │   └─ ← [Return] <env var value>
+    ├─ [0] VM::envUint("DEV_PRIVATE_KEY") [staticcall]
+    │   └─ ← [Return] <env var value>
+    ├─ [0] VM::addr(<pk>) [staticcall]
+    │   └─ ← [Return] 0xee2e617a42Aab5be36c290982493C6CC6C072982
+    ├─ [0] console::log("\n==== CrossFi Native Staking Development Deployment ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Deployer:  ", 0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Admin:     ", 0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Operator:  ", 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Treasury:  ", 0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Emergency: ", 0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("New Operator:", 0xc35e04979A78630F16e625902283720681f2932e) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::createDir("deployments", false)
+    │   └─ ← [Revert] vm.createDir: the path deployments is not allowed to be accessed for write operations
+    ├─ [0] VM::startBroadcast(<pk>)
+    │   └─ ← [Return] 
+    ├─ [0] console::log("\n==== Deploying Mock DIA Oracle ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [135390] → new MockDIAOracle@0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e
+    │   └─ ← [Return] 676 bytes of code
+    ├─ [47299] MockDIAOracle::setPrice("XFI/USD", 100000000 [1e8])
+    │   ├─ emit PriceSet(key: "XFI/USD", price: 100000000 [1e8])
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Mock DIA Oracle deployed at:", MockDIAOracle: [0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("\n==== Deploying WXFI ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [669560] → new WXFI@0x5761524160a2494D69F29bf879eac26109916B33
+    │   └─ ← [Return] 3009 bytes of code
+    ├─ [0] console::log("WXFI deployed at:", WXFI: [0x5761524160a2494D69F29bf879eac26109916B33]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("\n==== Deploying Main System Directly ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [334236] → new ProxyAdmin@0x6bA9cE369b3ac285794322Dd956283eccE176C93
+    │   ├─ emit OwnershipTransferred(previousOwner: 0x0000000000000000000000000000000000000000, newOwner: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   └─ ← [Return] 1551 bytes of code
+    ├─ [0] console::log("Proxy Admin deployed at:", ProxyAdmin: [0x6bA9cE369b3ac285794322Dd956283eccE176C93]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [2325358] → new UnifiedOracle@0x5e49c998dD110CA04b2F14290CF57C890Da0e715
+    │   └─ ← [Return] 11614 bytes of code
+    ├─ [752275] → new TransparentUpgradeableProxy@0xA0fC597d189697314843FA31fAde7814f0D47947
+    │   ├─ emit Upgraded(implementation: UnifiedOracle: [0x5e49c998dD110CA04b2F14290CF57C890Da0e715])
+    │   ├─ [279590] UnifiedOracle::initialize(MockDIAOracle: [0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e], 1814400 [1.814e6], WXFI: [0x5761524160a2494D69F29bf879eac26109916B33]) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit Initialized(version: 1)
+    │   │   └─ ← [Stop] 
+    │   ├─ emit AdminChanged(previousAdmin: 0x0000000000000000000000000000000000000000, newAdmin: ProxyAdmin: [0x6bA9cE369b3ac285794322Dd956283eccE176C93])
+    │   └─ ← [Return] 2118 bytes of code
+    ├─ [0] console::log("Oracle Proxy deployed at:", TransparentUpgradeableProxy: [0xA0fC597d189697314843FA31fAde7814f0D47947]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [3251078] → new NativeStaking@0x5e6DE3E04615cb19C457F3BE09e8c3ec5050d01b
+    │   └─ ← [Return] 16237 bytes of code
+    ├─ [729385] → new TransparentUpgradeableProxy@0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe
+    │   ├─ emit Upgraded(implementation: NativeStaking: [0x5e6DE3E04615cb19C457F3BE09e8c3ec5050d01b])
+    │   ├─ [256774] NativeStaking::initialize(WXFI: [0x5761524160a2494D69F29bf879eac26109916B33], TransparentUpgradeableProxy: [0xA0fC597d189697314843FA31fAde7814f0D47947]) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit Initialized(version: 1)
+    │   │   └─ ← [Stop] 
+    │   ├─ emit AdminChanged(previousAdmin: 0x0000000000000000000000000000000000000000, newAdmin: ProxyAdmin: [0x6bA9cE369b3ac285794322Dd956283eccE176C93])
+    │   └─ ← [Return] 2118 bytes of code
+    ├─ [0] console::log("APR Staking Proxy deployed at:", TransparentUpgradeableProxy: [0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [3674214] → new NativeStakingVault@0xC8C4036ff8114256798d121BC545004146beeaBF
+    │   └─ ← [Return] 18350 bytes of code
+    ├─ [824802] → new TransparentUpgradeableProxy@0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422
+    │   ├─ emit Upgraded(implementation: NativeStakingVault: [0xC8C4036ff8114256798d121BC545004146beeaBF])
+    │   ├─ [351743] NativeStakingVault::initialize(WXFI: [0x5761524160a2494D69F29bf879eac26109916B33], TransparentUpgradeableProxy: [0xA0fC597d189697314843FA31fAde7814f0D47947], "CrossFi Staking Share", "xXFI") [delegatecall]
+    │   │   ├─ [265] WXFI::decimals() [staticcall]
+    │   │   │   └─ ← [Return] 18
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit Initialized(version: 1)
+    │   │   └─ ← [Stop] 
+    │   ├─ emit AdminChanged(previousAdmin: 0x0000000000000000000000000000000000000000, newAdmin: ProxyAdmin: [0x6bA9cE369b3ac285794322Dd956283eccE176C93])
+    │   └─ ← [Return] 2118 bytes of code
+    ├─ [0] console::log("APY Staking Proxy deployed at:", TransparentUpgradeableProxy: [0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [5857326] → new ConcreteNativeStakingManager@0x4E98e4Dae5C5a4fCb67491a8ac3b740038e207C2
+    │   └─ ← [Return] 29140 bytes of code
+    ├─ [866984] → new TransparentUpgradeableProxy@0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9
+    │   ├─ emit Upgraded(implementation: ConcreteNativeStakingManager: [0x4E98e4Dae5C5a4fCb67491a8ac3b740038e207C2])
+    │   ├─ [393850] ConcreteNativeStakingManager::initialize(TransparentUpgradeableProxy: [0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe], TransparentUpgradeableProxy: [0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422], WXFI: [0x5761524160a2494D69F29bf879eac26109916B33], TransparentUpgradeableProxy: [0xA0fC597d189697314843FA31fAde7814f0D47947], true, 2592000 [2.592e6], 50000000000000000000 [5e19], 10000000000000000000 [1e19], 1000000000000000000 [1e18]) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit RoleGranted(role: 0xced6982f480260bdd8ad5cb18ff2854f0306d78d904ad6cc107e8f3a0f526c18, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   ├─ emit UnstakingFrozen(freezeDuration: 2592000 [2.592e6])
+    │   │   ├─ emit Initialized(version: 1)
+    │   │   └─ ← [Return] 
+    │   ├─ emit AdminChanged(previousAdmin: 0x0000000000000000000000000000000000000000, newAdmin: ProxyAdmin: [0x6bA9cE369b3ac285794322Dd956283eccE176C93])
+    │   └─ ← [Return] 2118 bytes of code
+    ├─ [0] console::log("Staking Manager Proxy deployed at:", TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Main system deployed successfully.") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("\n==== Configuring System ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Setting Oracle parameters...") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [2330] TransparentUpgradeableProxy::setCurrentAPR(10000000000000000000 [1e19])
+    │   ├─ [1750] UnifiedOracle::setCurrentAPR(10000000000000000000 [1e19]) [delegatecall]
+    │   │   ├─ emit CurrentAPRUpdated(apr: 100000000000000000000000000000000000 [1e35])
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [2616] TransparentUpgradeableProxy::setCurrentAPY(8000000000000000000 [8e18])
+    │   ├─ [2036] UnifiedOracle::setCurrentAPY(8000000000000000000 [8e18]) [delegatecall]
+    │   │   ├─ emit CurrentAPYUpdated(apy: 80000000000000000000000000000000000 [8e34])
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [2205] TransparentUpgradeableProxy::setUnbondingPeriod(1814400 [1.814e6])
+    │   ├─ [1625] UnifiedOracle::setUnbondingPeriod(1814400 [1.814e6]) [delegatecall]
+    │   │   ├─ emit UnbondingPeriodUpdated(period: 1814400 [1.814e6])
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [47296] TransparentUpgradeableProxy::setPrice("XFI", 1000000000000000000 [1e18])
+    │   ├─ [46701] UnifiedOracle::setPrice("XFI", 1000000000000000000 [1e18]) [delegatecall]
+    │   │   ├─ emit PriceUpdated(symbol: 0x7f23d72fd068ab2e3f0bf2dbdb2fc02651aeee5a8e5e58b1789c646dc67a2bc9, price: 1000000000000000000 [1e18])
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [5155] TransparentUpgradeableProxy::setTotalStakedXFI(0)
+    │   ├─ [4575] UnifiedOracle::setTotalStakedXFI(0) [delegatecall]
+    │   │   ├─ emit TotalStakedXFIUpdated(amount: 0)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [2161] TransparentUpgradeableProxy::setLaunchTimestamp(1743167880 [1.743e9])
+    │   ├─ [1581] UnifiedOracle::setLaunchTimestamp(1743167880 [1.743e9]) [delegatecall]
+    │   │   ├─ emit LaunchTimestampSet(timestamp: 1743167880 [1.743e9])
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [0] console::log("Setting up roles...") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [3804] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3221] UnifiedOracle::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [3664] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3081] NativeStaking::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [3886] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3303] NativeStakingVault::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [3939] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3356] ConcreteNativeStakingManager::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [26025] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25442] UnifiedOracle::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25302] NativeStaking::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25527] NativeStakingVault::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26165] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25582] ConcreteNativeStakingManager::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [26025] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25442] UnifiedOracle::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25302] NativeStaking::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25527] NativeStakingVault::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26165] TransparentUpgradeableProxy::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25582] ConcreteNativeStakingManager::grantRole(0x0000000000000000000000000000000000000000000000000000000000000000, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x0000000000000000000000000000000000000000000000000000000000000000, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [28025] TransparentUpgradeableProxy::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [27442] UnifiedOracle::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1804] TransparentUpgradeableProxy::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1221] UnifiedOracle::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26025] TransparentUpgradeableProxy::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25442] UnifiedOracle::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [28025] TransparentUpgradeableProxy::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [27442] UnifiedOracle::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1804] TransparentUpgradeableProxy::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1221] UnifiedOracle::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1804] TransparentUpgradeableProxy::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1221] UnifiedOracle::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26025] TransparentUpgradeableProxy::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25442] UnifiedOracle::grantRole(0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [27885] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [27302] NativeStaking::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1664] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1081] NativeStaking::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25302] NativeStaking::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25302] NativeStaking::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [28110] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [27527] NativeStakingVault::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, account: 0xee2e617a42Aab5be36c290982493C6CC6C072982, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1886] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1303] NativeStakingVault::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25527] NativeStakingVault::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25527] NativeStakingVault::grantRole(0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xbf233dd2aafeb4d50879c4aa5c81e96d92f6e6945c906a58f9f2d1c1631b4b26, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [27885] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9])
+    │   ├─ [27302] NativeStaking::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9]) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9], sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25302] NativeStaking::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1664] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1081] NativeStaking::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25302] NativeStaking::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [28110] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9])
+    │   ├─ [27527] NativeStakingVault::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9]) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9], sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25527] NativeStakingVault::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1886] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1303] NativeStakingVault::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25527] NativeStakingVault::grantRole(0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0xa6b5d83d32632203555cb9b2c2f68a8d94da48cadd9266ac0d17babedb52ea5b, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [28165] TransparentUpgradeableProxy::grantRole(0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [27582] ConcreteNativeStakingManager::grantRole(0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [1939] TransparentUpgradeableProxy::grantRole(0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1356] ConcreteNativeStakingManager::grantRole(0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [26165] TransparentUpgradeableProxy::grantRole(0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25582] ConcreteNativeStakingManager::grantRole(0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x5fd84582b30bace1cbb5cc91a75b8ee48a0e84da1e64c2d880c8c865c813444f, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [28110] TransparentUpgradeableProxy::grantRole(0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [27527] NativeStakingVault::grantRole(0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [1886] TransparentUpgradeableProxy::grantRole(0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [1303] NativeStakingVault::grantRole(0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25527] NativeStakingVault::grantRole(0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x29944e936a0f6e1cbaa227df218d7d6025c2a2785db840e42a3425f24e9e68ac, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26025] TransparentUpgradeableProxy::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9])
+    │   ├─ [25442] UnifiedOracle::grantRole(0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9]) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x9792fdc19ab98adfa72ab2fa98d342618c661e01c406979c105b31eda87f5e6f, account: TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9], sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [3664] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3081] NativeStaking::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25302] NativeStaking::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [25885] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25302] NativeStaking::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [3886] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3303] NativeStakingVault::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25527] NativeStakingVault::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26110] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25527] NativeStakingVault::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [3939] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3356] ConcreteNativeStakingManager::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [26165] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25582] ConcreteNativeStakingManager::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [26165] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25582] ConcreteNativeStakingManager::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Return] 
+    │   └─ ← [Return] 
+    ├─ [3804] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   ├─ [3221] UnifiedOracle::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xee2e617a42Aab5be36c290982493C6CC6C072982) [delegatecall]
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26025] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5)
+    │   ├─ [25442] UnifiedOracle::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [26025] TransparentUpgradeableProxy::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e)
+    │   ├─ [25442] UnifiedOracle::grantRole(0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, 0xc35e04979A78630F16e625902283720681f2932e) [delegatecall]
+    │   │   ├─ emit RoleGranted(role: 0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3, account: 0xc35e04979A78630F16e625902283720681f2932e, sender: 0xee2e617a42Aab5be36c290982493C6CC6C072982)
+    │   │   └─ ← [Stop] 
+    │   └─ ← [Return] 
+    ├─ [0] console::log("System configured successfully.") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::stopBroadcast()
+    │   └─ ← [Return] 
+    ├─ [0] console::log("\n==== Deployment Results ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Mock DIA Oracle:       ", MockDIAOracle: [0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("WXFI:                  ", WXFI: [0x5761524160a2494D69F29bf879eac26109916B33]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Oracle:                ", TransparentUpgradeableProxy: [0xA0fC597d189697314843FA31fAde7814f0D47947]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("APR Staking:           ", TransparentUpgradeableProxy: [0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("APY Staking:           ", TransparentUpgradeableProxy: [0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Staking Manager:       ", TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Proxy Admin:           ", ProxyAdmin: [0x6bA9cE369b3ac285794322Dd956283eccE176C93]) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("\n==== Test Account Addresses ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Admin:                 ", 0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Operator:              ", 0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Treasury:              ", 0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Emergency:             ", 0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("New Operator:          ", 0xc35e04979A78630F16e625902283720681f2932e) [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("\n==== Fund test accounts ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("Run these commands to fund your test accounts:") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::toString(0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Return] "0xee2e617a42Aab5be36c290982493C6CC6C072982"
+    ├─ [0] console::log("cast send --value 1ether 0xee2e617a42Aab5be36c290982493C6CC6C072982 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::toString(0x79F9860d48ef9dDFaF3571281c033664de05E6f5) [staticcall]
+    │   └─ ← [Return] "0x79F9860d48ef9dDFaF3571281c033664de05E6f5"
+    ├─ [0] console::log("cast send --value 1ether 0x79F9860d48ef9dDFaF3571281c033664de05E6f5 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::toString(0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Return] "0xee2e617a42Aab5be36c290982493C6CC6C072982"
+    ├─ [0] console::log("cast send --value 1ether 0xee2e617a42Aab5be36c290982493C6CC6C072982 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::toString(0xee2e617a42Aab5be36c290982493C6CC6C072982) [staticcall]
+    │   └─ ← [Return] "0xee2e617a42Aab5be36c290982493C6CC6C072982"
+    ├─ [0] console::log("cast send --value 1ether 0xee2e617a42Aab5be36c290982493C6CC6C072982 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::toString(0xc35e04979A78630F16e625902283720681f2932e) [staticcall]
+    │   └─ ← [Return] "0xc35e04979A78630F16e625902283720681f2932e"
+    ├─ [0] console::log("cast send --value 1ether 0xc35e04979A78630F16e625902283720681f2932e --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] console::log("\n==== Saving Addresses ====") [staticcall]
+    │   └─ ← [Stop] 
+    ├─ [0] VM::toString(WXFI: [0x5761524160a2494D69F29bf879eac26109916B33]) [staticcall]
+    │   └─ ← [Return] "0x5761524160a2494D69F29bf879eac26109916B33"
+    ├─ [0] VM::toString(MockDIAOracle: [0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e]) [staticcall]
+    │   └─ ← [Return] "0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e"
+    ├─ [0] VM::toString(TransparentUpgradeableProxy: [0xA0fC597d189697314843FA31fAde7814f0D47947]) [staticcall]
+    │   └─ ← [Return] "0xA0fC597d189697314843FA31fAde7814f0D47947"
+    ├─ [0] VM::toString(TransparentUpgradeableProxy: [0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe]) [staticcall]
+    │   └─ ← [Return] "0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe"
+    ├─ [0] VM::toString(TransparentUpgradeableProxy: [0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422]) [staticcall]
+    │   └─ ← [Return] "0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422"
+    ├─ [0] VM::toString(TransparentUpgradeableProxy: [0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9]) [staticcall]
+    │   └─ ← [Return] "0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9"
+    ├─ [0] VM::toString(ProxyAdmin: [0x6bA9cE369b3ac285794322Dd956283eccE176C93]) [staticcall]
+    │   └─ ← [Return] "0x6bA9cE369b3ac285794322Dd956283eccE176C93"
+    ├─ [0] VM::writeFile("deployments/dev-contracts.csv", "contract,0x5761524160a2494D69F29bf879eac26109916B33,0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e,0xA0fC597d189697314843FA31fAde7814f0D47947,0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe,0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422,0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9,0x6bA9cE369b3ac285794322Dd956283eccE176C93")
+    │   └─ ← [Revert] vm.writeFile: the path deployments/dev-contracts.csv is not allowed to be accessed for write operations
+    └─ ← [Revert] vm.writeFile: the path deployments/dev-contracts.csv is not allowed to be accessed for write operations
+
+
+
+== Logs ==
+  
+==== CrossFi Native Staking Development Deployment ====
+  Deployer:   0xee2e617a42Aab5be36c290982493C6CC6C072982
+  Admin:      0xee2e617a42Aab5be36c290982493C6CC6C072982
+  Operator:   0x79F9860d48ef9dDFaF3571281c033664de05E6f5
+  Treasury:   0xee2e617a42Aab5be36c290982493C6CC6C072982
+  Emergency:  0xee2e617a42Aab5be36c290982493C6CC6C072982
+  New Operator: 0xc35e04979A78630F16e625902283720681f2932e
+  
+==== Deploying Mock DIA Oracle ====
+  Mock DIA Oracle deployed at: 0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e
+  
+==== Deploying WXFI ====
+  WXFI deployed at: 0x5761524160a2494D69F29bf879eac26109916B33
+  
+==== Deploying Main System Directly ====
+  Proxy Admin deployed at: 0x6bA9cE369b3ac285794322Dd956283eccE176C93
+  Oracle Proxy deployed at: 0xA0fC597d189697314843FA31fAde7814f0D47947
+  APR Staking Proxy deployed at: 0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe
+  APY Staking Proxy deployed at: 0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422
+  Staking Manager Proxy deployed at: 0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9
+  Main system deployed successfully.
+  
+==== Configuring System ====
+  Setting Oracle parameters...
+  Setting up roles...
+  System configured successfully.
+  
+==== Deployment Results ====
+  Mock DIA Oracle:        0x6db5458D5FEe2ff5f809833FB2F337AB5eDCf13e
+  WXFI:                   0x5761524160a2494D69F29bf879eac26109916B33
+  Oracle:                 0xA0fC597d189697314843FA31fAde7814f0D47947
+  APR Staking:            0xc8006f0a87dAafbdB01b88B2Db4f43D53c84fDAe
+  APY Staking:            0x73b12fD8a775Ddf14e5FE5bc4f75fd69A1e2d422
+  Staking Manager:        0x99242AA24DeAfd07d5d56183be5Fe092e914bEb9
+  Proxy Admin:            0x6bA9cE369b3ac285794322Dd956283eccE176C93
+  
+==== Test Account Addresses ====
+  Admin:                  0xee2e617a42Aab5be36c290982493C6CC6C072982
+  Operator:               0x79F9860d48ef9dDFaF3571281c033664de05E6f5
+  Treasury:               0xee2e617a42Aab5be36c290982493C6CC6C072982
+  Emergency:              0xee2e617a42Aab5be36c290982493C6CC6C072982
+  New Operator:           0xc35e04979A78630F16e625902283720681f2932e
+  
+==== Fund test accounts ====
+  Run these commands to fund your test accounts:
+  cast send --value 1ether 0xee2e617a42Aab5be36c290982493C6CC6C072982 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+  cast send --value 1ether 0x79F9860d48ef9dDFaF3571281c033664de05E6f5 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+  cast send --value 1ether 0xee2e617a42Aab5be36c290982493C6CC6C072982 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+  cast send --value 1ether 0xee2e617a42Aab5be36c290982493C6CC6C072982 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+  cast send --value 1ether 0xc35e04979A78630F16e625902283720681f2932e --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+  
+==== Saving Addresses ====

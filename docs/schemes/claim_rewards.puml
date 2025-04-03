@@ -11,13 +11,10 @@ participant "WXFI Token" as WXFI
 User -> FE: 1. Request to view\nclaimable rewards
 activate FE
 
-FE -> NS: 2. getUnclaimedRewards(user)
-activate NS
-NS -> UO: 2.1 Get current APR
+FE -> UO: 2. getUserClaimableRewards(user)
 UO -> DIA: Query latest data
-NS <-- UO: Return APR
-FE <-- NS: Return rewards amount
-deactivate NS
+UO <-- DIA: Return price data
+FE <-- UO: Return rewards amount
 
 FE -> User: 3. Display claimable rewards
 
@@ -26,15 +23,32 @@ FE -> NSM: 5. claimRewardsAPR()
 activate NSM
 
 NSM -> UO: 5.1 Check oracle freshness
-NSM -> NS: 5.2 Calculate rewards
-activate NS
-NS -> NS: 5.3 Update last claim time
-NS -> WXFI: 5.4 Transfer rewards
-NS -> NS: 5.5 Emit RewardsClaimed
-NSM <-- NS: Return claimed amount
-deactivate NS
+UO -> DIA: Query XFI price
+UO <-- DIA: Return price data
 
-FE <-- NSM: Return transaction result
+NSM -> UO: 5.2 Get user claimable rewards
+UO <-- NSM: Return claimable amount
+
+NSM -> NS: 5.3 Get total staked amount
+NS <-- NSM: Return total stake
+
+NSM -> UO: 5.4 clearUserClaimableRewards(user)
+UO <-- NSM: Return cleared amount
+
+NSM -> WXFI: 5.5 Transfer rewards to user
+WXFI -->> User: Transfer WXFI tokens
+
+alt Native Token Flow (Optional)
+  NSM -> WXFI: 5.6 withdraw(amount)
+  NSM -> User: 5.7 Transfer native XFI\nwith error handling
+end
+
+NSM -> UO: 5.8 convertXFItoMPX(amount)
+UO <-- NSM: Return MPX amount
+
+NSM -> NSM: 5.9 Emit RewardsClaimedAPR
+
+FE <-- NSM: Return claimed amount
 deactivate NSM
 
 FE -> BE: 6. Notify about claim

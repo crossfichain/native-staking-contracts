@@ -29,36 +29,70 @@ interface INativeStakingManager {
      * @param validator The validator address/ID (only for events, not stored on-chain)
      * @return requestId The ID of the unstake request
      */
-    function unstakeAPR(uint256 amount, string calldata validator) external returns (uint256 requestId);
+    function unstakeAPR(uint256 amount, string calldata validator) external returns (bytes memory requestId);
     
     /**
      * @dev Claims XFI from a completed APR unstake request
      * @param requestId The ID of the unstake request to claim
      * @return amount The amount of XFI claimed
      */
-    function claimUnstakeAPR(uint256 requestId) external returns (uint256 amount);
+    function claimUnstakeAPR(bytes calldata requestId) external returns (uint256 amount);
     
     /**
      * @dev Withdraws XFI from the APY model by burning vault shares
      * If there are sufficient liquid assets, withdrawal is immediate
      * Otherwise, it will be queued for the unbonding period
      * @param shares The amount of vault shares to burn
-     * @return assets The amount of XFI withdrawn or 0 if request is queued
+     * @return requestId The withdrawal request ID
      */
-    function withdrawAPY(uint256 shares) external returns (uint256 assets);
+    function withdrawAPY(uint256 shares) external returns (bytes memory requestId);
     
     /**
      * @dev Claims XFI from a completed APY withdrawal request
      * @param requestId The ID of the withdrawal request to claim
      * @return assets The amount of XFI claimed
      */
-    function claimWithdrawalAPY(uint256 requestId) external returns (uint256 assets);
+    function claimWithdrawalAPY(bytes calldata requestId) external returns (uint256 assets);
     
     /**
      * @dev Claims rewards from the APR model
      * @return amount The amount of rewards claimed
      */
     function claimRewardsAPR() external returns (uint256 amount);
+    
+    /**
+     * @dev Claims rewards from a specific validator in the APR model
+     * @param validator The validator address/ID
+     * @param amount The amount of rewards to claim
+     * @return requestId The ID of the request
+     */
+    function claimRewardsAPRForValidator(string calldata validator, uint256 amount) external returns (bytes memory requestId);
+    
+    /**
+     * @dev Claims rewards and converts them to native XFI
+     * @return amount The amount of rewards claimed
+     */
+    function claimRewardsAPRNative() external returns (uint256 amount);
+    
+    /**
+     * @dev Claims unstaked tokens as native XFI
+     * @param requestId The ID of the unstake request to claim
+     * @return amount The amount of native XFI claimed
+     */
+    function claimUnstakeAPRNative(bytes calldata requestId) external returns (uint256 amount);
+    
+    /**
+     * @dev Adds rewards to the contract for distribution
+     * @return success Boolean indicating if the operation was successful
+     */
+    function paybackRewards() external payable returns (bool success);
+    
+    /**
+     * @dev Checks if the contract has enough balance to pay rewards
+     * @param amount The amount of rewards to check
+     * @return hasEnoughBalance Boolean indicating if the contract has enough balance
+     */
+    function hasEnoughRewardBalance(uint256 amount) external view returns (bool);
     
     /**
      * @dev Gets the address of the APR staking contract

@@ -1,68 +1,63 @@
-# CrossFi Native Staking Contracts
+# Native Staking Contracts
 
-This repository contains the smart contracts for CrossFi's Native Staking system, which allows users to stake XFI tokens through two different models:
-
-1. **APR Model (Direct Staking)** - Users stake XFI, specify validators, and earn rewards based on a simple interest model
-2. **APY Model (Compounding Vault)** - Users stake XFI in a vault (ERC-4626 compliant) and earn compounding rewards
+This repository contains the smart contracts for CrossFi's Native Staking system.
 
 ## Architecture
 
-The system is built with a modular architecture that consists of:
+The Native Staking system consists of the following components:
 
 ### Core Contracts
 
-- **NativeStakingManager**: Central router for all staking operations, handling both native XFI and wrapped XFI (WXFI)
-- **NativeStaking**: Implements the APR staking model with direct validator delegation
-- **NativeStakingVault**: Implements the APY staking model following the ERC-4626 standard
+- **NativeStakingManager** - Split into multiple contracts for size optimization:
+  - `BaseNativeStakingManager`: Base functionality for stake requests and common operations
+  - `SplitNativeStakingManager`: Implementation with fulfillment and interface functions
+  - `NativeStakingManagerLib`: Library with utility functions and calculations
+- **NativeStaking** - APR-based staking contract
+- **NativeStakingVault** - APY-based staking contract with compounding
+- **UnifiedOracle** - Oracle for price and rewards data
 
-### Periphery Contracts
+### Libraries and Utilities
 
-- **CrossFiOracle**: Provides price data and validator information from the Cosmos chain
-- **WXFI**: Wrapped XFI implementation that allows native XFI to be used as an ERC20 token
+- **NativeStakingManagerLib** - Utility library with common functions and calculations
 
-### Deployment
+### Contract Split Architecture
 
-- **DeploymentCoordinator**: Helper contract for deploying the entire system with proper proxy setup
+To avoid contract size limitations (24KB max), the `NativeStakingManager` is split into multiple contracts:
 
-## Technical Features
+1. **BaseNativeStakingManager**: 
+   - Contains core functionality and request handling
+   - Inherits from OpenZeppelin's AccessControl, Pausable, etc.
+   - Implements the request creation methods
 
-- **Upgradeable Contracts**: All core contracts use the TransparentUpgradeableProxy pattern
-- **Role-Based Access Control**: Granular permissions system using OpenZeppelin's AccessControl
-- **Security Measures**: Reentrancy protection, pause functionality, and other security best practices
-- **ERC-4626 Compliance**: The vault follows the standard for tokenized vaults
+2. **SplitNativeStakingManager**:
+   - Inherits from BaseNativeStakingManager
+   - Implements fulfillment functions 
+   - Implements all interface functions
 
-## Contract Interactions
-
-![System Architecture](https://crossfi.org/docs/native-staking-architecture.png)
-
-- Users interact primarily with the NativeStakingManager contract
-- The manager routes staking operations to the appropriate staking contract
-- The oracle provides price and validator data from the Cosmos chain
-- WXFI allows for wrapping/unwrapping of native XFI
+3. **NativeStakingManagerLib**:
+   - Contains the StakingMode enum (APR/APY)
+   - Contains validation functions
+   - Contains gas calculation utilities
 
 ## Development
 
 ### Prerequisites
 
-- [Foundry](https://getfoundry.sh/)
-- Node.js and npm
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
 
-### Installation
+### Install dependencies
 
 ```bash
-git clone https://github.com/crossfi/native-staking-contracts.git
-cd native-staking-contracts
 forge install
-npm install
 ```
 
-### Compile Contracts
+### Build
 
 ```bash
 forge build
 ```
 
-### Run Tests
+### Test
 
 ```bash
 forge test
@@ -70,40 +65,28 @@ forge test
 
 ### Deploy
 
-For local deployment:
+Set the environment variables in a `.env` file:
 
-```bash
-npm run deploy:anvil
+```
+DEPLOYER_PRIVATE_KEY=your_private_key
+RPC_URL=your_rpc_url
 ```
 
-For testnet deployment:
+Run the deployment script:
 
 ```bash
-export RPC_URL=<your-rpc-url>
-export ETHERSCAN_API_KEY=<your-etherscan-key>
-export PRIVATE_KEY=<your-private-key>
-export ADMIN_ADDRESS=<admin-address>
-npm run deploy:testnet
+source .env
+forge script script/dev/SimpleDeploy.s.sol:SimpleDeploy --rpc-url $RPC_URL --broadcast -vvv
 ```
 
-## Security
+### Verification
 
-The contracts implement various security measures:
+To verify the deployment:
 
-- Reentrancy guards on all sensitive functions
-- Pausable functionality for emergency situations
-- Role-based access control for administrative functions
-- Input validation with proper error messages
-- Events for all important state changes
+```bash
+forge script script/deployment/VerifyDeployment.s.sol:VerifyDeployment --rpc-url $RPC_URL -vvv
+```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Contact
-
-For any questions or feedback, please contact the CrossFi team at dev@crossfi.org.
+MIT

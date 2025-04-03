@@ -88,4 +88,74 @@ interface IOracle {
      * @return newAmount The new reward amount after decrease
      */
     function decreaseUserClaimableRewards(address user, uint256 amount) external returns (uint256 newAmount);
+
+    /**
+     * @dev Gets the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of claimable rewards
+     */
+    function getUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256);
+
+    /**
+     * @dev Clears the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of rewards that were cleared
+     */
+    function clearUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        returns (uint256);
+
+    /**
+     * @dev Clears a specific amount of claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @param amount The amount to clear
+     * @return The amount of rewards that were cleared
+     */
+    function clearUserClaimableRewardsForValidator(address user, string calldata validator, uint256 amount) 
+        external 
+        returns (uint256);
+
+    /**
+     * @dev Gets the stake amount for a user with a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of stake
+     */
+    function getValidatorStake(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256);
+
+    /**
+     * @dev Gets total claimable rewards for all users
+     * @return totalRewards The total of all claimable rewards
+     */
+    function getTotalClaimableRewards() external view returns (uint256);
+
+    /**
+     * @dev Gets the validator's unbonding period
+     * @param validator The validator to check
+     * @return The unbonding period in seconds
+     */
+    function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256);
+
+    /**
+     * @dev Sets the validator stake for a user
+     * @param user The user whose stake is being updated
+     * @param validator The validator ID 
+     * @param amount The new stake amount
+     */
+    function setValidatorStake(address user, string calldata validator, uint256 amount) external;
+
+    /**
+     * @dev Gets the launch timestamp of the protocol
+     * @return The launch timestamp in seconds since epoch
+     */
+    function getLaunchTimestamp() external view returns (uint256);
 } 

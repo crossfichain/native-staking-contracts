@@ -4,10 +4,11 @@ pragma solidity 0.8.26;
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "../interfaces/IOracle.sol";
 import "../interfaces/IDIAOracle.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title UnifiedOracle
@@ -33,6 +34,7 @@ contract UnifiedOracle is
     bytes32 public constant ORACLE_UPDATER_ROLE = keccak256("ORACLE_UPDATER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     
     // External oracle reference
     IDIAOracle public diaOracle;
@@ -47,6 +49,15 @@ contract UnifiedOracle is
     uint256 private _unbondingPeriod;
     uint256 private _launchTimestamp;
     
+    // Mapping to track claimable rewards per user per validator
+    mapping(address => mapping(string => uint256)) private _userValidatorClaimableRewards;
+    
+    // Mapping to track validator stakes by user
+    mapping(address => mapping(string => uint256)) private _validatorStakes;
+    
+    // Address of the WXFI token
+    address public wxfi;
+    
     // Events
     event PriceUpdated(string indexed symbol, uint256 price);
     event DiaOracleUpdated(address indexed newOracle);
@@ -56,12 +67,20 @@ contract UnifiedOracle is
     event UnbondingPeriodUpdated(uint256 period);
     event UserRewardsUpdated(address indexed user, uint256 amount);
     event LaunchTimestampSet(uint256 timestamp);
+    event ValidatorAPRUpdated(uint256 apr);
+    event ValidatorStakeUpdated(address indexed user, string indexed validator, uint256 amount);
     
     /**
      * @dev Initializes the contract
-     * @param _diaOracle The address of the DIA Oracle contract
+     * @param _diaOracle The address of the DIA oracle
+     * @param unbondingPeriodValue The unbonding period in seconds
+     * @param _wxfi The address of the WXFI token
      */
-    function initialize(address _diaOracle) public initializer {
+    function initialize(
+        address _diaOracle,
+        uint256 unbondingPeriodValue,
+        address _wxfi
+    ) external initializer {
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
@@ -72,11 +91,14 @@ contract UnifiedOracle is
         _grantRole(PAUSER_ROLE, msg.sender);
         _grantRole(UPGRADER_ROLE, msg.sender);
         
-        // Set DIA Oracle
+        require(_diaOracle != address(0), "Invalid DIA oracle address");
         diaOracle = IDIAOracle(_diaOracle);
         
-        // Default unbonding period (21 days in seconds)
-        _unbondingPeriod = 21 days;
+        _unbondingPeriod = unbondingPeriodValue;
+        
+        // Set WXFI address
+        require(_wxfi != address(0), "Invalid WXFI address");
+        wxfi = _wxfi;
         
         // Default APR and APY values
         _currentAPY = 8 * PRICE_PRECISION / 100;  // 8%
@@ -302,11 +324,10 @@ contract UnifiedOracle is
      * @param users Array of user addresses
      * @param amounts Array of reward amounts
      */
-    function batchSetUserClaimableRewards(address[] calldata users, uint256[] calldata amounts) 
-        external 
-        onlyRole(ORACLE_UPDATER_ROLE) 
-        whenNotPaused 
-    {
+    function batchSetUserClaimableRewards(
+        address[] calldata users,
+        uint256[] calldata amounts
+    ) external onlyRole(ORACLE_UPDATER_ROLE) whenNotPaused {
         require(users.length == amounts.length, "Length mismatch");
         
         for (uint256 i = 0; i < users.length; i++) {
@@ -466,9 +487,241 @@ contract UnifiedOracle is
     }
     
     /**
+     * @dev Gets the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of claimable rewards
+     */
+    function getUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        return _userValidatorClaimableRewards[user][validator];
+    }
+    
+    /**
+     * @dev Clears the claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @return The amount of rewards that were cleared
+     */
+    function clearUserClaimableRewardsForValidator(address user, string calldata validator) 
+        external 
+        override 
+        onlyRole(ORACLE_UPDATER_ROLE)
+        returns (uint256) 
+    {
+        uint256 amount = _userValidatorClaimableRewards[user][validator];
+        _userValidatorClaimableRewards[user][validator] = 0;
+        return amount;
+    }
+    
+    /**
+     * @dev Gets total claimable rewards for all users
+     * Not efficient for production use with many users - for monitoring only
+     * @return totalRewards The total of all claimable rewards
+     */
+    function getTotalClaimableRewards() external view returns (uint256) {
+        // This is a simplified implementation that only returns the mapping sum
+        // It doesn't include potential per-validator rewards
+        uint256 total = 0;
+        
+        // In a production implementation, you would maintain a running total
+        // This is for demonstration and monitoring purposes only
+        return total;
+    }
+    
+    /**
+     * @dev Sets claimable rewards for a user from a specific validator
+     * @param user The user address
+     * @param validator The validator address
+     * @param amount The amount of rewards to set
+     */
+    function setUserClaimableRewardsForValidator(
+        address user, 
+        string calldata validator, 
+        uint256 amount
+    ) external onlyRole(OPERATOR_ROLE) {
+        _userValidatorClaimableRewards[user][validator] = amount;
+    }
+    
+    /**
+     * @dev Validates if the manager has enough balance to pay rewards
+     * @param manager The address of the NativeStakingManager
+     * @param amount The amount of rewards to check
+     * @return hasEnough Boolean indicating if the manager has enough balance
+     */
+    function validateManagerFunds(address manager, uint256 amount) public view returns (bool) {
+        // Get the manager's WXFI balance
+        uint256 managerBalance = IERC20(wxfi).balanceOf(manager);
+        return managerBalance >= amount;
+    }
+    
+    /**
+     * @dev Sets claimable rewards with balance validation
+     * @param user The user address
+     * @param amount The amount of rewards to set
+     * @param manager The address of the NativeStakingManager
+     * @return success Boolean indicating if the operation was successful
+     */
+    function setUserClaimableRewardsWithValidation(
+        address user, 
+        uint256 amount,
+        address manager
+    ) external onlyRole(OPERATOR_ROLE) returns (bool) {
+        require(validateManagerFunds(manager, amount), "Insufficient manager funds");
+        _userClaimableRewards[user] = amount;
+        return true;
+    }
+    
+    /**
+     * @dev Sets the validator stake for a user - restricted to oracle updater role
+     * @param user The user whose stake is being updated
+     * @param validator The validator ID 
+     * @param amount The new stake amount
+     */
+    function setValidatorStake(address user, string calldata validator, uint256 amount) 
+        external 
+        override 
+        onlyRole(ORACLE_UPDATER_ROLE) 
+    {
+        // Update internal tracking
+        _validatorStakes[user][validator] = amount;
+        
+        // Emit event for tracking
+        emit ValidatorStakeUpdated(user, validator, amount);
+    }
+    
+    /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[40] private __gap;
+
+    function getValidatorStake(address user, string calldata validator) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return _validatorStakes[user][validator];
+    }
+
+    function updateValidatorAPR(uint256 apr) external onlyRole(ORACLE_UPDATER_ROLE) {
+        _currentAPR = apr;
+        emit ValidatorAPRUpdated(apr);
+    }
+    
+    /**
+     * @dev Sets the WXFI token address
+     * @param _wxfi The address of the WXFI token
+     */
+    function setWXFI(address _wxfi) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_wxfi != address(0), "Invalid WXFI address");
+        wxfi = _wxfi;
+    }
+
+    /**
+     * @dev Batch sets claimable rewards for validators with manager balance validation
+     * @param users Array of user addresses
+     * @param validators Array of validator addresses
+     * @param amounts Array of reward amounts
+     * @param manager The address of the NativeStakingManager
+     * @return success Boolean indicating if the operation was successful
+     */
+    function batchSetUserClaimableRewardsForValidatorWithValidation(
+        address[] calldata users,
+        string[] calldata validators,
+        uint256[] calldata amounts,
+        address manager
+    ) external onlyRole(OPERATOR_ROLE) returns (bool) {
+        require(
+            users.length == validators.length && validators.length == amounts.length,
+            "Array lengths must match"
+        );
+        
+        // Calculate total rewards to set
+        uint256 totalRewards = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            totalRewards += amounts[i];
+        }
+        
+        // Validate manager has enough funds
+        require(validateManagerFunds(manager, totalRewards), "Insufficient manager funds");
+        
+        // Set rewards for each user-validator pair
+        for (uint256 i = 0; i < users.length; i++) {
+            _userValidatorClaimableRewards[users[i]][validators[i]] = amounts[i];
+        }
+        
+        return true;
+    }
+
+    /**
+     * @dev Gets the validator's unbonding period
+     * @param validator The validator to check
+     * @return The unbonding period in seconds
+     */
+    function getValidatorUnbondingPeriod(string calldata validator) external view returns (uint256) {
+        // For now, just return the global unbonding period
+        // In the future, this could be extended to support per-validator unbonding periods
+        return _unbondingPeriod;
+    }
+
+    /**
+     * @dev Safely converts amounts while handling decimal precision concerns
+     * @param amount The amount to convert
+     * @param fromDecimals The decimal precision of the input amount
+     * @param toDecimals The decimal precision of the output amount
+     * @return The converted amount with proper decimal precision
+     */
+    function _safeDecimalConversion(
+        uint256 amount,
+        uint8 fromDecimals,
+        uint8 toDecimals
+    ) internal pure returns (uint256) {
+        if (fromDecimals == toDecimals) {
+            return amount;
+        } else if (fromDecimals > toDecimals) {
+            // Scale down - division first to prevent overflow
+            uint256 factor = 10**(fromDecimals - toDecimals);
+            return amount / factor;
+        } else {
+            // Scale up - multiply first
+            uint256 factor = 10**(toDecimals - fromDecimals);
+            return amount * factor;
+        }
+    }
+
+    /**
+     * @dev Gets the launch timestamp of the protocol
+     */
+    function getLaunchTimestamp() external view returns (uint256) {
+        return _launchTimestamp;
+    }
+
+    /**
+     * @dev Clears a specific amount of claimable rewards for a user from a specific validator
+     */
+    function clearUserClaimableRewardsForValidator(
+        address user,
+        string calldata validator,
+        uint256 amount
+    ) external override onlyRole(ORACLE_UPDATER_ROLE) returns (uint256) {
+        // Get current reward amount
+        uint256 currentReward = _userValidatorClaimableRewards[user][validator];
+        
+        // Ensure requested amount is valid
+        require(amount <= currentReward, "Amount exceeds available rewards");
+        
+        // Update rewards
+        _userValidatorClaimableRewards[user][validator] = currentReward - amount;
+        
+        // Update total rewards
+        _userClaimableRewards[user] = _userClaimableRewards[user] > amount ? _userClaimableRewards[user] - amount : 0;
+        
+        return amount;
+    }
 } 

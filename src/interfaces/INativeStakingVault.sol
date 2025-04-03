@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import "@openzeppelin/contracts-upgradeable/interfaces/IERC4626Upgradeable.sol";
 
 /**
  * @title INativeStakingVault
  * @dev Interface for the Native Staking Vault contract that handles compounding staking (APY model)
  * Extends the ERC-4626 standard for tokenized vaults
  */
-interface INativeStakingVault is IERC4626 {
+interface INativeStakingVault is IERC4626Upgradeable {
     /**
      * @dev Struct to track a withdrawal request in progress
      * @param assets The amount of assets requested to withdraw
@@ -37,14 +37,14 @@ interface INativeStakingVault is IERC4626 {
         uint256 assets,
         address receiver,
         address owner
-    ) external returns (uint256 requestId);
+    ) external returns (bytes memory requestId);
     
     /**
      * @dev Claims assets from a completed withdrawal request
      * @param requestId The ID of the withdrawal request
      * @return assets The amount of assets claimed
      */
-    function claimWithdrawal(uint256 requestId) external returns (uint256 assets);
+    function claimWithdrawal(bytes calldata requestId) external returns (uint256 assets);
     
     /**
      * @dev Gets all pending withdrawal requests for a user
@@ -72,4 +72,16 @@ interface INativeStakingVault is IERC4626 {
      * @return The total staked amount with 18 decimals
      */
     function getTotalStaked() external view returns (uint256);
+    
+    /**
+     * @dev Gets the total amount of tokens that are pending withdrawal
+     * @return The total pending withdrawals
+     */
+    function getTotalPendingWithdrawals() external view returns (uint256);
+
+    function unstake(address user, uint256 amount) external;
+    function claimRewards(address user) external returns (uint256);
+    function balanceOf(address user) external view returns (uint256);
+    function getPendingRewards(address user) external view returns (uint256);
+    function stake(address user, uint256 amount) external returns (uint256);
 } 

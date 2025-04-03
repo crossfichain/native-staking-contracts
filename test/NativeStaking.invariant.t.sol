@@ -1,5 +1,5 @@
-// // SPDX-License-Identifier: MIT
-// pragma solidity ^0.8.20;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
 
 // import "./NativeStaking.base.t.sol";
 // import "./handlers/StakingHandler.t.sol";

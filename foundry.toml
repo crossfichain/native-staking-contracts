@@ -6,10 +6,7 @@ solc = "0.8.26"
 viaIR = true
 optimizer = true
 optimizer_runs = 200
-remappings = [
-    "@openzeppelin/contracts=lib/openzeppelin-contracts/contracts",
-    "@openzeppelin/contracts-upgradeable=lib/openzeppelin-contracts-upgradeable/contracts"
-]
+gas_reports = ["*"]
 
 [profile.coverage]
 src = "src"
@@ -40,3 +37,6 @@ crossfi_test = { key = "ABCDEFG", url = "${CROSSFI_TEST_VERIFIER_URL}", chain = 
 line_length = 120
 tab_width = 4
 bracket_spacing = true
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"

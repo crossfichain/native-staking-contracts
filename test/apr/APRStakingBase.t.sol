@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../../src/core/NativeStaking.sol";
-import "../../src/core/NativeStakingManager.sol";
+import "../../src/core/ConcreteNativeStakingManager.sol";
 import "../../src/periphery/UnifiedOracle.sol"; 
 import "../../src/periphery/WXFI.sol";
 import "../utils/MockDIAOracle.sol";
@@ -28,7 +28,7 @@ contract APRStakingBase is Test {
     MockDIAOracle public diaOracle;
     UnifiedOracle public oracle;
     NativeStaking public staking;
-    NativeStakingManager public manager;
+    ConcreteNativeStakingManager public manager;
     ProxyAdmin public proxyAdmin;
 
     /**
@@ -47,7 +47,7 @@ contract APRStakingBase is Test {
 
         // Deploy Oracle with DIA Oracle
         UnifiedOracle oracleImpl = new UnifiedOracle();
-        proxyAdmin = new ProxyAdmin(ADMIN);
+        proxyAdmin = new ProxyAdmin();
         
         bytes memory oracleData = abi.encodeWithSelector(
             UnifiedOracle.initialize.selector,
@@ -80,14 +80,18 @@ contract APRStakingBase is Test {
         staking = NativeStaking(address(stakingProxy));
         
         // Deploy NativeStakingManager
-        NativeStakingManager managerImpl = new NativeStakingManager();
+        ConcreteNativeStakingManager managerImpl = new ConcreteNativeStakingManager();
         bytes memory managerData = abi.encodeWithSelector(
             NativeStakingManager.initialize.selector,
             address(staking),
             address(0), // No APY contract for this test
             address(wxfi),
             address(oracle),
-            false // Do not enforce minimum amounts for tests
+            false, // Do not enforce minimum amounts for tests
+            30 days, // Initial freeze time (30 days)
+            50 ether, // Minimum stake amount
+            10 ether, // Minimum unstake amount
+            1 ether   // Minimum reward claim amount
         );
         
         TransparentUpgradeableProxy managerProxy = new TransparentUpgradeableProxy(
@@ -96,7 +100,7 @@ contract APRStakingBase is Test {
             managerData
         );
         
-        manager = NativeStakingManager(payable(address(managerProxy)));
+        manager = ConcreteNativeStakingManager(payable(address(managerProxy)));
         
         // Grant roles
         staking.grantRole(staking.STAKING_MANAGER_ROLE(), address(manager));
@@ -113,6 +117,10 @@ contract APRStakingBase is Test {
         oracle.setLaunchTimestamp(block.timestamp - 31 days);
         
         vm.stopPrank();
+
+        // Mint initial WXFI for tests
+        mintWXFI(USER, 1000 ether);
+        mintWXFI(SECOND_USER, 1000 ether);
     }
     
     /**
@@ -166,7 +174,7 @@ contract APRStakingBase is Test {
      * @param from User address
      * @param requestId Request ID to fulfill
      */
-    function fulfillUnstakeRequest(address from, uint256 requestId) internal {
+    function fulfillUnstakeRequest(address from, bytes memory requestId) internal {
         vm.startPrank(from);
         manager.claimUnstakeAPR(requestId);
         vm.stopPrank();
