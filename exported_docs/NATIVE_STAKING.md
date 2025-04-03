@@ -31,7 +31,7 @@ The CrossFi Native Staking system allows users to stake their XFI tokens with va
 
 APR staking allows users to stake directly with validators and earn rewards based on the validator's performance. The system now uses a split architecture to manage contract size.
 
-![Stake APR Flow](/Users/valery/Projects/CrossFi/Native-staking/native-staking-contracts/docs/schemes/Stake%20APR%20Flow.png)
+![Stake APR Flow](./schemes/Stake%20APR%20Flow.png)
 
 #### Steps to Stake APR
 
@@ -47,7 +47,7 @@ APR staking allows users to stake directly with validators and earn rewards base
 
 APY staking provides automatic compounding of rewards through a vault system.
 
-![Multiple Validator Stakes Flow](/Users/valery/Projects/CrossFi/Native-staking/native-staking-contracts/docs/schemes/Multiple%20Validator%20Stakes%20Flow.png)
+![Multiple Validator Stakes Flow](./schemes/Multiple%20Validator%20Stakes%20Flow.png)
 
 #### Steps to Stake APY
 
@@ -65,7 +65,7 @@ APY staking provides automatic compounding of rewards through a vault system.
 
 The reward claiming process has been enhanced with additional error handling:
 
-![Claim Rewards Flow](/Users/valery/Projects/CrossFi/Native-staking/native-staking-contracts/docs/schemes/Claim%20Rewards%20Flow.png)
+![Claim Rewards Flow](./schemes/Claim%20Rewards%20Flow.png)
 
 The updated flow:
 1. Frontend queries the UnifiedOracle for claimable rewards
@@ -88,7 +88,7 @@ APY rewards are automatically compounded into the vault. Users can:
 
 The unstaking process now includes enhanced error handling and fallback mechanisms:
 
-![Unstake and Claim Flow](/Users/valery/Projects/CrossFi/Native-staking/native-staking-contracts/docs/schemes/Unstake%20and%20Claim%20Flow.png)
+![Unstake and Claim Flow](./schemes/Unstake%20and%20Claim%20Flow.png)
 
 Updated flow:
 1. User requests unstaking from a specific validator

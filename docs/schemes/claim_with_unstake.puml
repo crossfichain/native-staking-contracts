@@ -55,8 +55,25 @@ NS -> NS: 9.5 Emit UnstakeClaimed
 NSM <-- NS: Return claimed amount
 deactivate NS
 
-NSM -> WXFI: 9.6 withdraw(amount)
-NSM -> User: 9.7 Transfer native XFI
+alt Request Info Retrieval
+  NSM -> NS: 9.6 Try to get request details
+  alt Success
+    NSM <-- NS: Return request info
+  else Error
+    NSM -> NSM: 9.6.1 Use fallback\nvalidator="unknown"
+  end
+end
+
+NSM -> NSM: 9.7 Check WXFI balance
+
+NSM -> WXFI: 9.8 Transfer tokens to user
+WXFI -->> User: Transfer WXFI tokens
+
+alt Native Token Flow (Optional)
+  NSM -> WXFI: 9.9 withdraw(amount)
+  NSM -> User: 9.10 Transfer native XFI
+end
+
 FE <-- NSM: Return result
 deactivate NSM
 
