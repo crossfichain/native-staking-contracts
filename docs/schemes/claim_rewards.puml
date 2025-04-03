@@ -1,0 +1,63 @@
+@startuml Claim Rewards Flow
+actor User
+participant "Frontend\n(Web App)" as FE
+participant "Backend\n(API Server)" as BE
+participant "DIA Oracle" as DIA
+participant "UnifiedOracle" as UO
+participant "NativeStakingManager" as NSM
+participant "NativeStaking\n(APR Contract)" as NS
+participant "WXFI Token" as WXFI
+
+User -> FE: 1. Request to view\nclaimable rewards
+activate FE
+
+FE -> UO: 2. getUserClaimableRewards(user)
+UO -> DIA: Query latest data
+UO <-- DIA: Return price data
+FE <-- UO: Return rewards amount
+
+FE -> User: 3. Display claimable rewards
+
+User -> FE: 4. Initiate claim
+FE -> NSM: 5. claimRewardsAPR()
+activate NSM
+
+NSM -> UO: 5.1 Check oracle freshness
+UO -> DIA: Query XFI price
+UO <-- DIA: Return price data
+
+NSM -> UO: 5.2 Get user claimable rewards
+UO <-- NSM: Return claimable amount
+
+NSM -> NS: 5.3 Get total staked amount
+NS <-- NSM: Return total stake
+
+NSM -> UO: 5.4 clearUserClaimableRewards(user)
+UO <-- NSM: Return cleared amount
+
+NSM -> WXFI: 5.5 Transfer rewards to user
+WXFI -->> User: Transfer WXFI tokens
+
+alt Native Token Flow (Optional)
+  NSM -> WXFI: 5.6 withdraw(amount)
+  NSM -> User: 5.7 Transfer native XFI\nwith error handling
+end
+
+NSM -> UO: 5.8 convertXFItoMPX(amount)
+UO <-- NSM: Return MPX amount
+
+NSM -> NSM: 5.9 Emit RewardsClaimedAPR
+
+FE <-- NSM: Return claimed amount
+deactivate NSM
+
+FE -> BE: 6. Notify about claim
+activate BE
+BE -> BE: 6.1 Update reward records
+FE <-- BE: Confirm receipt
+deactivate BE
+
+User <-- FE: 7. Show confirmation
+deactivate FE
+
+@enduml 

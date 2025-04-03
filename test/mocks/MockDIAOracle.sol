@@ -1,35 +1,35 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.26;
 
 import {IDIAOracle} from "../../src/interfaces/IDIAOracle.sol";
 
 contract MockDIAOracle is IDIAOracle {
-    mapping(string => uint256) private prices;
+    mapping(string => uint128) private prices;
     uint256 private rewards;
-    uint256 private lastUpdateTimestamp;
+    uint128 private lastUpdateTimestamp;
     bool private shouldRevert;
 
-    event PriceSet(string key, uint256 price);
+    event PriceSet(string key, uint128 price);
     event RewardsSet(uint256 rewards);
 
-    function setPrice(string memory key, uint256 price) external {
+    function setPrice(string memory key, uint128 value) external override {
         // Price should already be in 8 decimals
-        prices[key] = price;
-        lastUpdateTimestamp = block.timestamp;
+        prices[key] = value;
+        lastUpdateTimestamp = uint128(block.timestamp);
         emit PriceSet(key, prices[key]);
     }
 
     function getValue(string memory key) public view returns (uint128 price, uint128 timestamp) {
         require(!shouldRevert, "MockDIAOracle: Forced revert");
-        return (uint128(prices[key]), uint128(lastUpdateTimestamp));
+        return (prices[key], lastUpdateTimestamp);
     }
 
     function getXFIPrice() external view returns (uint256, uint256) {
         require(!shouldRevert, "MockDIAOracle: Forced revert");
-        (uint256 price, uint256 timestamp) = getValue("XFI/USD");
+        (uint128 price, uint128 timestamp) = getValue("XFI/USD");
         if (price == 0) {
             price = 1e8; // 1 USD in 8 decimals
-            timestamp = block.timestamp;
+            timestamp = uint128(block.timestamp);
         }
         return (price, timestamp);
     }
@@ -37,7 +37,7 @@ contract MockDIAOracle is IDIAOracle {
     function setRewards(uint256 _rewards) external {
         // Convert from 18 decimals to 8 decimals
         rewards = _rewards / 1e10;
-        lastUpdateTimestamp = block.timestamp;
+        lastUpdateTimestamp = uint128(block.timestamp);
         emit RewardsSet(rewards);
     }
 

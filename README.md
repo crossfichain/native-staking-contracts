@@ -1,66 +1,92 @@
-## Foundry
+# Native Staking Contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+This repository contains the smart contracts for CrossFi's Native Staking system.
 
-Foundry consists of:
+## Architecture
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The Native Staking system consists of the following components:
 
-## Documentation
+### Core Contracts
 
-https://book.getfoundry.sh/
+- **NativeStakingManager** - Split into multiple contracts for size optimization:
+  - `BaseNativeStakingManager`: Base functionality for stake requests and common operations
+  - `SplitNativeStakingManager`: Implementation with fulfillment and interface functions
+  - `NativeStakingManagerLib`: Library with utility functions and calculations
+- **NativeStaking** - APR-based staking contract
+- **NativeStakingVault** - APY-based staking contract with compounding
+- **UnifiedOracle** - Oracle for price and rewards data
 
-## Usage
+### Libraries and Utilities
+
+- **NativeStakingManagerLib** - Utility library with common functions and calculations
+
+### Contract Split Architecture
+
+To avoid contract size limitations (24KB max), the `NativeStakingManager` is split into multiple contracts:
+
+1. **BaseNativeStakingManager**: 
+   - Contains core functionality and request handling
+   - Inherits from OpenZeppelin's AccessControl, Pausable, etc.
+   - Implements the request creation methods
+
+2. **SplitNativeStakingManager**:
+   - Inherits from BaseNativeStakingManager
+   - Implements fulfillment functions 
+   - Implements all interface functions
+
+3. **NativeStakingManagerLib**:
+   - Contains the StakingMode enum (APR/APY)
+   - Contains validation functions
+   - Contains gas calculation utilities
+
+## Development
+
+### Prerequisites
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+
+### Install dependencies
+
+```bash
+forge install
+```
 
 ### Build
 
-```shell
-$ forge build
+```bash
+forge build
 ```
 
 ### Test
 
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
+```bash
+forge test
 ```
 
 ### Deploy
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+Set the environment variables in a `.env` file:
+
+```
+DEPLOYER_PRIVATE_KEY=your_private_key
+RPC_URL=your_rpc_url
 ```
 
-### Cast
+Run the deployment script:
 
-```shell
-$ cast <subcommand>
+```bash
+source .env
+forge script script/dev/SimpleDeploy.s.sol:SimpleDeploy --rpc-url $RPC_URL --broadcast -vvv
 ```
 
-### Help
+### Verification
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+To verify the deployment:
+
+```bash
+forge script script/deployment/VerifyDeployment.s.sol:VerifyDeployment --rpc-url $RPC_URL -vvv
 ```
+
+## License
+
+MIT

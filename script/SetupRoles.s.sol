@@ -1,56 +1,70 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.26;
 
-import {Script} from "forge-std/Script.sol";
-import {NativeStaking} from "../src/NativeStaking.sol";
-import {UnifiedOracle} from "../src/UnifiedOracle.sol";
-import {console} from "forge-std/console.sol";
+// import {Script} from "forge-std/Script.sol";
+// import {NativeStaking} from "../src/core/NativeStaking.sol";
+// import {CrossFiOracle} from "../src/periphery/CrossFiOracle.sol";
+// import {console} from "forge-std/console.sol";
 
-contract SetupRolesScript is Script {
-    // Deployed contract addresses (from previous deployment)
-    address constant STAKING_CONTRACT = 0xDbe735426C7DC01F0F153F9C769582a3b48784EC;
-    address constant UNIFIED_ORACLE = 0x619Fa7497172Fb48E77B845577c4e83FDFE15490;
-    
-    // Tester account that needs permissions
-    address constant TESTER_ACCOUNT = 0x79F9860d48ef9dDFaF3571281c033664de05E6f5;
+// contract SetupRolesScript is Script {
+//     function run() external {
+//         // Addresses from the deployment (replace with your actual deployed addresses)
+//         address oracle = 0x619Fa7497172Fb48E77B845577c4e83FDFE15490;
+//         address staking = 0xDbe735426C7DC01F0F153F9C769582a3b48784EC;
 
-    function run() external {
-        uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
-
-        // Setup NativeStaking roles
-        NativeStaking staking = NativeStaking(payable(STAKING_CONTRACT));
+//         // Get private key from environment variables
+//         uint256 privateKey = vm.envUint("DEV_PRIVATE_KEY");
+//         address deployer = vm.addr(privateKey);
         
-        // Grant operator role
-        bytes32 operatorRole = staking.OPERATOR_ROLE();
-        if (!staking.hasRole(operatorRole, TESTER_ACCOUNT)) {
-            staking.grantRole(operatorRole, TESTER_ACCOUNT);
-            console.log("Granted OPERATOR_ROLE to:", TESTER_ACCOUNT);
-        }
-
-        // Grant emergency role
-        bytes32 emergencyRole = staking.EMERGENCY_ROLE();
-        if (!staking.hasRole(emergencyRole, TESTER_ACCOUNT)) {
-            staking.grantRole(emergencyRole, TESTER_ACCOUNT);
-            console.log("Granted EMERGENCY_ROLE to:", TESTER_ACCOUNT);
-        }
-
-        // Setup UnifiedOracle roles
-        UnifiedOracle oracle = UnifiedOracle(UNIFIED_ORACLE);
+//         // Additional addresses for roles
+//         address operator = vm.envAddress("OPERATOR_ADDRESS");
+//         address emergency = vm.envAddress("EMERGENCY_ADDRESS");
+//         address treasury = vm.envAddress("TREASURY_ADDRESS");
         
-        // Grant oracle admin role
-        bytes32 oracleAdminRole = oracle.ORACLE_ADMIN();
-        if (!oracle.hasRole(oracleAdminRole, TESTER_ACCOUNT)) {
-            oracle.grantRole(oracleAdminRole, TESTER_ACCOUNT);
-            console.log("Granted ORACLE_ADMIN role to:", TESTER_ACCOUNT);
-        }
-
-        vm.stopBroadcast();
+//         // Report addresses we're setting up
+//         console.log("Deployer:", deployer);
+//         console.log("Operator:", operator);
+//         console.log("Emergency:", emergency);
+//         console.log("Treasury:", treasury);
         
-        console.log("\nRole setup completed!");
-        console.log("Tester account", TESTER_ACCOUNT, "now has all necessary permissions:");
-        console.log("- NativeStaking OPERATOR_ROLE");
-        console.log("- NativeStaking EMERGENCY_ROLE");
-        console.log("- UnifiedOracle ORACLE_ADMIN role");
-    }
-} 
+//         // Start broadcasting transactions
+//         vm.startBroadcast(privateKey);
+        
+//         // Setup roles for Oracle
+//         CrossFiOracle oracleContract = CrossFiOracle(oracle);
+        
+//         // Grant ORACLE_UPDATER_ROLE to operator
+//         bytes32 ORACLE_UPDATER_ROLE = oracleContract.ORACLE_UPDATER_ROLE();
+//         if (!oracleContract.hasRole(ORACLE_UPDATER_ROLE, operator)) {
+//             oracleContract.grantRole(ORACLE_UPDATER_ROLE, operator);
+//             console.log("Granted ORACLE_UPDATER_ROLE to operator");
+//         }
+        
+//         // Setup roles for Staking
+//         NativeStaking stakingContract = NativeStaking(staking);
+        
+//         // Grant OPERATOR_ROLE to operator
+//         bytes32 OPERATOR_ROLE = stakingContract.OPERATOR_ROLE();
+//         if (!stakingContract.hasRole(OPERATOR_ROLE, operator)) {
+//             stakingContract.grantRole(OPERATOR_ROLE, operator);
+//             console.log("Granted OPERATOR_ROLE to operator");
+//         }
+        
+//         // Grant EMERGENCY_ROLE to emergency address
+//         bytes32 EMERGENCY_ROLE = stakingContract.EMERGENCY_ROLE();
+//         if (!stakingContract.hasRole(EMERGENCY_ROLE, emergency)) {
+//             stakingContract.grantRole(EMERGENCY_ROLE, emergency);
+//             console.log("Granted EMERGENCY_ROLE to emergency address");
+//         }
+        
+//         // Set treasury address if needed
+//         if (stakingContract.treasury() != treasury) {
+//             stakingContract.setTreasury(treasury);
+//             console.log("Set treasury address");
+//         }
+        
+//         vm.stopBroadcast();
+        
+//         console.log("Role setup complete");
+//     }
+// } 

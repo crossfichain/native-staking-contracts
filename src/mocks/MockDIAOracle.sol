@@ -1,52 +1,64 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.26;
 
-import {IDIAOracle} from "../../src/interfaces/IDIAOracle.sol";
-
-contract MockDIAOracle is IDIAOracle {
-    mapping(string => uint256) private prices;
-    uint256 private rewards;
-    uint256 private lastUpdateTimestamp;
-    bool private shouldRevert;
-
-    event PriceSet(string key, uint256 price);
-    event RewardsSet(uint256 rewards);
-
-    function setPrice(string memory key, uint256 price) external {
-        // Price should already be in 8 decimals
+/**
+ * @title MockDIAOracle
+ * @dev Mock DIA Oracle for testing
+ */
+contract MockDIAOracle {
+    // Key-value mappings for price and APR data
+    mapping(string => uint256) public prices;
+    mapping(string => uint256) public timestamps;
+    uint256 public apr;
+    uint256 public aprUpdatedAt;
+    
+    /**
+     * @dev Constructor
+     */
+    constructor() {
+        // Initialize with some default values
+        prices["XFI"] = 1e18; // 1 USD
+        timestamps["XFI"] = block.timestamp;
+        apr = 5 * 1e16; // 5% APR
+        aprUpdatedAt = block.timestamp;
+    }
+    
+    /**
+     * @dev Set the price and timestamp for a token
+     * @param key The token key (e.g., "XFI")
+     * @param price The price in USD (18 decimals)
+     * @param timestamp The timestamp of the price update
+     */
+    function setPrice(string memory key, uint256 price, uint256 timestamp) external {
         prices[key] = price;
-        lastUpdateTimestamp = block.timestamp;
-        emit PriceSet(key, prices[key]);
+        timestamps[key] = timestamp;
     }
-
-    function getValue(string memory key) public view returns (uint128 price, uint128 timestamp) {
-        require(!shouldRevert, "MockDIAOracle: Forced revert");
-        return (uint128(prices[key]), uint128(lastUpdateTimestamp));
+    
+    /**
+     * @dev Set the APR value
+     * @param _apr The APR value (18 decimals, e.g., 5e16 for 5%)
+     */
+    function setAPR(uint256 _apr) external {
+        apr = _apr;
+        aprUpdatedAt = block.timestamp;
     }
-
-    function getXFIPrice() external view returns (uint256, uint256) {
-        require(!shouldRevert, "MockDIAOracle: Forced revert");
-        (uint256 price, uint256 timestamp) = getValue("XFI/USD");
-        if (price == 0) {
-            price = 1e8; // 1 USD in 8 decimals
-            timestamp = block.timestamp;
-        }
-        return (price, timestamp);
+    
+    /**
+     * @dev Get the price and timestamp for a token
+     * @param key The token key (e.g., "XFI")
+     * @return The price in USD (18 decimals)
+     * @return The timestamp of the price update
+     */
+    function getValue(string memory key) external view returns (uint256, uint256) {
+        return (prices[key], timestamps[key]);
     }
-
-    function setRewards(uint256 _rewards) external {
-        // Convert from 18 decimals to 8 decimals
-        rewards = _rewards / 1e10;
-        lastUpdateTimestamp = block.timestamp;
-        emit RewardsSet(rewards);
-    }
-
-    function getCurrentRewards() external view returns (uint256, uint256) {
-        require(!shouldRevert, "MockDIAOracle: Forced revert");
-        return (rewards, lastUpdateTimestamp);
-    }
-
-    function setShouldRevert(bool _shouldRevert) external {
-        shouldRevert = _shouldRevert;
+    
+    /**
+     * @dev Get the APR value and timestamp
+     * @return The APR value (18 decimals)
+     * @return The timestamp of the APR update
+     */
+    function getAPR() external view returns (uint256, uint256) {
+        return (apr, aprUpdatedAt);
     }
 } 
