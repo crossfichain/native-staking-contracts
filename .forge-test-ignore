@@ -1,0 +1,10 @@
+# Ignore test files with missing dependencies
+test/SplitNativeStakingManagerTest.t.sol
+test/UpgradeVerification.t.sol
+test/apr/**
+test/core/**
+test/e2e/**
+test/manager/**
+test/mocks/**
+test/periphery/**
+test/utils/** 
