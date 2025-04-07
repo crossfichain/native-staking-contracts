@@ -1,128 +1,76 @@
-// // SPDX-License-Identifier: MIT
-// pragma solidity 0.8.26;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
 
-// import "lib/forge-std/src/Test.sol";
-// import "../../src/libraries/ValidatorAddressUtils.sol";
+import "lib/forge-std/src/Test.sol";
+import "../../src/libraries/ValidatorAddressUtils.sol";
+import "../../src/libraries/StakingUtils.sol";
 
-// contract ValidatorAddressTest is Test {
-//     // Sample validator address from CrossFi
-//     string constant SAMPLE_VALIDATOR = "mxvaloper1gza5y94kal25eawsenl56th8kdyujszmcsxcgs";
-//     string constant SAMPLE_WALLET = "mx1gza5y94kal25eawsenl56th8kdyujszmvmlxf0";
-//     address constant SAMPLE_EVM = 0x40bB4216B6efD54cF5d0ccFf4D2ee7B349c9405b;
+contract ValidatorAddressTest is Test {
+    string constant VALIDATOR_ADDR = "mxvaloper1gza5y94kal25eawsenl56th8kdyujszmcsxcgs";
     
-//     // Additional test addresses
-//     string constant TEST_VALIDATOR = "mxvaloper1jp0m7ynwtvrknzlmdzargmd59mh8n9gkh9yfwm";
-//     string constant TEST_WALLET = "mx1jp0m7ynwtvrknzlmdzargmd59mh8n9gkhqqp5j";
+    function testValidatorAddressFormat() public {
+        // Validate format
+        bool isValid = ValidatorAddressUtils.isValidValidatorAddress(VALIDATOR_ADDR);
+        assertTrue(isValid, "Should validate validator address format");
+        
+        // Invalid format
+        isValid = ValidatorAddressUtils.isValidValidatorAddress("invalid");
+        assertFalse(isValid, "Should reject invalid format");
+        
+        // Empty string
+        isValid = ValidatorAddressUtils.isValidValidatorAddress("");
+        assertFalse(isValid, "Should reject empty string");
+    }
     
-//     function setUp() public {}
+    function testBech32Extraction() public {
+        // Extract Bech32 part
+        string memory bech32Part = ValidatorAddressUtils.extractBech32Part(VALIDATOR_ADDR);
+        
+        console.log("Original validator address:");
+        console.log(VALIDATOR_ADDR);
+        console.log("Extracted bech32 part:");
+        console.log(bech32Part);
+        
+        // Validate not empty
+        assertTrue(bytes(bech32Part).length > 0, "Extracted part should not be empty");
+        
+        // Invalid address should return empty string
+        string memory invalidPart = ValidatorAddressUtils.extractBech32Part("invalid");
+        assertEq(invalidPart, "", "Invalid address should return empty string");
+    }
     
-//     function testValidatorAddressFormat() public {
-//         // Valid validator address
-//         bool isValid = ValidatorAddressUtils.isValidValidatorAddress(SAMPLE_VALIDATOR);
-//         assertTrue(isValid, "Should recognize valid validator address");
+    function testAddressConversions() public {
+        // Test validators from the examples
+        string[5] memory validators = [
+            "mxvaloper1gza5y94kal25eawsenl56th8kdyujszmcsxcgs",
+            "mxvaloper15vaxer4jfr2mhg6qaqspr0z44aj3jvfepw9kf4",
+            "mxvaloper1pfyz7tyk297p3cfl78fgt9esud4eclceu0smj7",
+            "mxvaloper1jp0m7ynwtvrknzlmdzargmd59mh8n9gkh9yfwm",
+            "mxvaloper1qr26qzu8qxcksk452ymr0720ntd7lwlzh7n4m5"
+        ];
         
-//         // Invalid prefix
-//         string memory invalidPrefix = "invalid1gza5y94kal25eawsenl56th8kdyujszmcsxcgs";
-//         isValid = ValidatorAddressUtils.isValidValidatorAddress(invalidPrefix);
-//         assertFalse(isValid, "Should reject invalid prefix");
-        
-//         // Empty address
-//         isValid = ValidatorAddressUtils.isValidValidatorAddress("");
-//         assertFalse(isValid, "Should reject empty address");
-//     }
-    
-//     function testBech32Extraction() public {
-//         // Extract validator parts
-//         string memory bech32Part = ValidatorAddressUtils.extractBech32Part(SAMPLE_VALIDATOR);
-        
-//         // Log for demonstration
-//         emit log_string("Original validator address:");
-//         emit log_string(SAMPLE_VALIDATOR);
-//         emit log_string("Extracted bech32 part:");
-//         emit log_string(bech32Part);
-        
-//         // Verify not empty
-//         assertTrue(bytes(bech32Part).length > 0, "Extracted part should not be empty");
-//     }
-    
-//     function testWalletAddressGeneration() public {
-//         // Test with the sample validator address
-//         string memory accountAddr1 = ValidatorAddressUtils.validatorToAccountAddress(SAMPLE_VALIDATOR);
-        
-//         emit log_string("Original validator address:");
-//         emit log_string(SAMPLE_VALIDATOR);
-//         emit log_string("Generated account address:");
-//         emit log_string(accountAddr1);
-        
-//         bytes memory addr1Bytes = bytes(accountAddr1);
-//         assertTrue(addr1Bytes.length > 0, "Generated address should not be empty");
-//         assertTrue(addr1Bytes[0] == bytes1('m') && addr1Bytes[1] == bytes1('x'), "Should start with mx prefix");
-        
-//         // Test with another validator address
-//         string memory accountAddr2 = ValidatorAddressUtils.validatorToAccountAddress(TEST_VALIDATOR);
-        
-//         emit log_string("Original validator address:");
-//         emit log_string(TEST_VALIDATOR);
-//         emit log_string("Generated account address:");
-//         emit log_string(accountAddr2);
-        
-//         bytes memory addr2Bytes = bytes(accountAddr2);
-//         assertTrue(addr2Bytes.length > 0, "Generated address should not be empty");
-//         assertTrue(addr2Bytes[0] == bytes1('m') && addr2Bytes[1] == bytes1('x'), "Should start with mx prefix");
-//     }
-    
-//     function testEVMAddressGeneration() public {
-//         // Generate EVM address from validator address
-//         address evmAddr = ValidatorAddressUtils.validatorToEVMAddress(SAMPLE_VALIDATOR);
-        
-//         emit log_string("Original validator address:");
-//         emit log_string(SAMPLE_VALIDATOR);
-//         emit log_string("Generated EVM address:");
-//         emit log_address(evmAddr);
-        
-//         // Note: In production we would verify this against the known EVM address
-//         assertTrue(evmAddr != address(0), "EVM address should not be zero");
-        
-//         // Check the accurate derivation flag
-//         bool isAccurate = ValidatorAddressUtils.isAccurateEVMDerivation();
-//         console.log("Is using accurate EVM derivation:", isAccurate);
-//     }
-    
-//     function testAddressConversions() public {
-//         // Convert EVM address to hex string
-//         string memory hexAddr = ValidatorAddressUtils.addressToHex(SAMPLE_EVM);
-        
-//         // Convert hex string back to address
-//         address recovered = ValidatorAddressUtils.hexToAddress(hexAddr);
-        
-//         // Log for demonstration
-//         emit log_string("Original EVM address:");
-//         emit log_address(SAMPLE_EVM);
-//         emit log_string("As hex string (without 0x):");
-//         emit log_string(hexAddr);
-//         emit log_string("Recovered address:");
-//         emit log_address(recovered);
-        
-//         // Verify conversion correctness
-//         assertEq(SAMPLE_EVM, recovered, "Address conversion should be reversible");
-//     }
-    
-//     function testLegacyFunctionSupport() public {
-//         // Use the legacy function name (now redirected to validatorToEVMAddress)
-//         address evmAddr = ValidatorAddressUtils.mockValidatorToEVMAddress(SAMPLE_VALIDATOR);
-        
-//         string memory test = "mxvaloper1jp0m7ynwtvrknzlmdzargmd59mh8n9gkh9yfwm";
-//         // Get address via the direct method
-//         address directAddr = ValidatorAddressUtils.validatorToEVMAddress(test);
-        
-//         emit log_string("Validator address:");
-//         emit log_string(SAMPLE_VALIDATOR);
-//         emit log_string("Address from legacy function:");
-//         emit log_address(evmAddr);
-//         emit log_string("Address from direct function:");
-//         emit log_address(directAddr);
-        
-//         // Should match the direct function call
-//         assertEq(evmAddr, directAddr, "Legacy function should match direct function");
-//     }
-// } 
+        for (uint i = 0; i < validators.length; i++) {
+            // Validate format
+            bool isValid = ValidatorAddressUtils.isValidValidatorAddress(validators[i]);
+            assertTrue(isValid, "Should validate validator address format");
+            
+            // Extract Bech32 part
+            string memory bech32Part = ValidatorAddressUtils.extractBech32Part(validators[i]);
+            assertTrue(bytes(bech32Part).length > 0, "Extracted part should not be empty");
+            
+            // Test normalization
+            string memory normalized = ValidatorAddressUtils.normalizeValidatorAddress(validators[i]);
+            assertTrue(
+                ValidatorAddressUtils.compareValidatorAddresses(normalized, validators[i]), 
+                "Normalized address should be equal"
+            );
+            
+            // Test case-insensitive comparison
+            string memory upperCase = string(abi.encodePacked("MXVALOPER", bech32Part));
+            assertTrue(
+                ValidatorAddressUtils.compareValidatorAddresses(upperCase, validators[i]), 
+                "Case-insensitive comparison should match"
+            );
+        }
+    }
+} 

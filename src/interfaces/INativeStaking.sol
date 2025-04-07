@@ -11,7 +11,8 @@ interface INativeStaking {
      */
     enum ValidatorStatus {
         Disabled,
-        Enabled
+        Enabled,
+        Deprecated   // For validators that are being phased out
     }
 
     /**
@@ -31,10 +32,11 @@ interface INativeStaking {
         uint256 amount;
         uint256 stakedAt;
         bool inUnstakeProcess;
+        uint256 unstakeInitiatedAt; // Timestamp when unstake was initiated
     }
 
     // Events
-    event ValidatorAdded(string indexed validatorId, ValidatorStatus status);
+    event ValidatorAdded(string indexed validatorId, bool isEnabled);
     event ValidatorUpdated(string indexed validatorId, ValidatorStatus status);
     
     event Staked(address indexed staker, string indexed validatorId, uint256 amount);
@@ -46,9 +48,11 @@ interface INativeStaking {
     
     event EmergencyWithdrawalInitiated(address indexed staker);
     event EmergencyWithdrawalCompleted(address indexed staker, uint256 amount);
+    
+    event StakeMigrated(address indexed staker, string indexed fromValidatorId, string indexed toValidatorId, uint256 amount);
 
     // Validator management functions
-    function addValidator(string calldata validatorId, ValidatorStatus status) external;
+    function addValidator(string calldata validatorId, bool isEnabled) external;
     function updateValidatorStatus(string calldata validatorId, ValidatorStatus status) external;
     function getValidator(string calldata validatorId) external view returns (Validator memory);
     function getValidatorStatus(string calldata validatorId) external view returns (ValidatorStatus);
@@ -62,7 +66,10 @@ interface INativeStaking {
     
     // Reward claiming functions
     function initiateRewardClaim(string calldata validatorId) external;
-    function completeRewardClaim(address staker, string calldata validatorId, uint256 amount) external;
+    function completeRewardClaim(address staker, string calldata validatorId, uint256 amount, bool isInitiatedDueUnstake) external payable;
+    
+    // Combined processing function
+    function processRewardAndUnstake(address staker, string calldata validatorId, uint256 unstakeAmount, uint256 rewardAmount) external;
     
     // Emergency functions
     function initiateEmergencyWithdrawal() external;
@@ -79,4 +86,16 @@ interface INativeStaking {
     function setMinimumStakeAmount(uint256 amount) external;
     function pauseStaking() external;
     function unpauseStaking() external;
+
+    // Time interval management functions
+    function setMinStakeInterval(uint256 interval) external;
+    function getMinStakeInterval() external view returns (uint256);
+    function setMinUnstakeInterval(uint256 interval) external;
+    function getMinUnstakeInterval() external view returns (uint256);
+    function setMinClaimInterval(uint256 interval) external;
+    function getMinClaimInterval() external view returns (uint256);
+
+    // Validator migration functions
+    function setupValidatorMigration(string calldata oldValidatorId, string calldata newValidatorId) external;
+    function migrateStake(string calldata fromValidatorId, string calldata toValidatorId) external;
 } 

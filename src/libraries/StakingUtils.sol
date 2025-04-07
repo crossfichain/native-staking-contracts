@@ -10,6 +10,11 @@ library StakingUtils {
     string private constant VALIDATOR_PREFIX = "mxvaloper";
     string private constant WALLET_PREFIX = "mx";
     
+    // Staking settings
+    uint256 private constant MIN_STAKE_COOLDOWN = 1 hours;
+    uint256 private constant MIN_VALIDATOR_ID_LENGTH = 45;
+    uint256 private constant MAX_VALIDATOR_ID_LENGTH = 60;
+    
     /**
      * @dev Validates if a validator ID has the correct format
      * @param validatorId The validator ID to validate
@@ -19,19 +24,33 @@ library StakingUtils {
         // Check that the validator ID is not empty
         if (bytes(validatorId).length == 0) return false;
         
-        // Check maximum length (should be reasonable for a validator address)
-        if (bytes(validatorId).length > 100) return false;
-        
-        // Check that the validator ID starts with the required prefix
+        // Check length constraints
         bytes memory validatorBytes = bytes(validatorId);
+        if (validatorBytes.length < MIN_VALIDATOR_ID_LENGTH || validatorBytes.length > MAX_VALIDATOR_ID_LENGTH) {
+            return false;
+        }
+        
+        // Check that the validator ID starts with the required prefix (case insensitive)
         bytes memory prefixBytes = bytes(VALIDATOR_PREFIX);
         
         // Must be at least as long as the prefix
         if (validatorBytes.length < prefixBytes.length) return false;
         
-        // Check prefix match
+        // Check prefix match (case insensitive)
         for (uint i = 0; i < prefixBytes.length; i++) {
-            if (validatorBytes[i] != prefixBytes[i]) return false;
+            // Convert both to lowercase for comparison
+            bytes1 validatorChar = validatorBytes[i];
+            bytes1 prefixChar = prefixBytes[i];
+            
+            // Convert uppercase to lowercase if needed
+            if (validatorChar >= 0x41 && validatorChar <= 0x5A) {
+                validatorChar = bytes1(uint8(validatorChar) + 32);
+            }
+            if (prefixChar >= 0x41 && prefixChar <= 0x5A) {
+                prefixChar = bytes1(uint8(prefixChar) + 32);
+            }
+            
+            if (validatorChar != prefixChar) return false;
         }
         
         // Additional validation for validator address format
@@ -57,9 +76,21 @@ library StakingUtils {
         // Must be at least as long as the prefix
         if (walletBytes.length < prefixBytes.length) return false;
         
-        // Check prefix match
+        // Check prefix match (case insensitive)
         for (uint i = 0; i < prefixBytes.length; i++) {
-            if (walletBytes[i] != prefixBytes[i]) return false;
+            // Convert both to lowercase for comparison
+            bytes1 walletChar = walletBytes[i];
+            bytes1 prefixChar = prefixBytes[i];
+            
+            // Convert uppercase to lowercase if needed
+            if (walletChar >= 0x41 && walletChar <= 0x5A) {
+                walletChar = bytes1(uint8(walletChar) + 32);
+            }
+            if (prefixChar >= 0x41 && prefixChar <= 0x5A) {
+                prefixChar = bytes1(uint8(prefixChar) + 32);
+            }
+            
+            if (walletChar != prefixChar) return false;
         }
         
         // Additional validation for wallet address format
@@ -116,131 +147,85 @@ library StakingUtils {
     }
     
     /**
-     * @dev Check if a validator address and a wallet address could correspond
-     * @param validatorId The validator address
-     * @param walletAddress The wallet address
-     * @return matches Whether the addresses potentially match
+     * @dev Normalizes a validator ID to lowercase
+     * @param validatorId The validator ID to normalize
+     * @return normalized The normalized validator ID
      */
-    function checkAddressCorrespondence(string memory validatorId, string memory walletAddress) internal pure returns (bool matches) {
-        // Basic validation
-        if (!validateValidatorId(validatorId) || !validateWalletAddress(walletAddress)) return false;
+    function normalizeValidatorId(string memory validatorId) internal pure returns (string memory normalized) {
+        bytes memory validatorBytes = bytes(validatorId);
+        bytes memory result = new bytes(validatorBytes.length);
         
-        // Extract operator parts
-        string memory validatorOperator = extractOperatorPart(validatorId);
-        
-        // For wallet, skip the "mx" prefix
-        bytes memory walletBytes = bytes(walletAddress);
-        bytes memory walletPrefixBytes = bytes(WALLET_PREFIX);
-        
-        // Wallet must be at least as long as its prefix
-        if (walletBytes.length <= walletPrefixBytes.length) return false;
-        
-        bytes memory walletOperatorBytes = new bytes(walletBytes.length - walletPrefixBytes.length);
-        for (uint i = 0; i < walletOperatorBytes.length; i++) {
-            walletOperatorBytes[i] = walletBytes[i + walletPrefixBytes.length];
-        }
-        
-        // In CrossFi, we would need to decode both addresses and check if they share
-        // the same underlying public key hash. Since we can't do a full Bech32 decode in Solidity,
-        // we'll perform a simple string comparison of parts after the prefix
-        
-        // If the wallet address starts with "mx1" and the validator with "mxvaloper1",
-        // they might correspond even with different checksum parts
-        
-        // Check if the first part matches (the "1" separator character)
-        bytes memory validatorOpBytes = bytes(validatorOperator);
-        if (validatorOpBytes.length > 0 && validatorOpBytes[0] == bytes1('1') &&
-            walletOperatorBytes.length > 0 && walletOperatorBytes[0] == bytes1('1')) {
+        for (uint i = 0; i < validatorBytes.length; i++) {
+            bytes1 char = validatorBytes[i];
             
-            // Start checking from the second character (after "1")
-            uint256 minLength = validatorOpBytes.length < walletOperatorBytes.length ? 
-                validatorOpBytes.length : walletOperatorBytes.length;
-            
-            // Compare a reasonable number of characters (the pubkey portion)
-            uint256 checkLength = minLength > 20 ? 20 : minLength;
-            
-            // Skip the first character ("1") in the comparison
-            uint256 matchCount = 0;
-            for (uint i = 1; i < checkLength; i++) {
-                if (validatorOpBytes[i] == walletOperatorBytes[i]) {
-                    matchCount++;
-                }
+            // Convert uppercase to lowercase
+            if (char >= 0x41 && char <= 0x5A) {
+                result[i] = bytes1(uint8(char) + 32);
+            } else {
+                result[i] = char;
             }
-            
-            // Allow for a partial match (80% similarity)
-            return matchCount >= (checkLength - 1) * 8 / 10;
         }
         
-        return false;
+        return string(result);
     }
     
     /**
-     * @dev Generates a request ID for unstake requests
-     * @param staker The address of the staker
-     * @param validatorId The validator ID
-     * @param amount The unstake amount
-     * @param timestamp The request timestamp
-     * @return requestId The generated request ID
+     * @dev Checks if enough time has passed since the last stake
+     * @param lastStakeTime The timestamp of the last stake
+     * @return canStake Whether enough time has passed for a new stake
      */
-    function generateRequestId(
-        address staker,
-        string memory validatorId,
-        uint256 amount,
-        uint256 timestamp
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(staker, validatorId, amount, timestamp);
+    function canStakeAgain(uint256 lastStakeTime) internal view returns (bool) {
+        // Add explicit checks to debug the function
+        // Staking is allowed if current block timestamp is greater than or equal to 
+        // the last stake time plus the minimum cooldown period
+        if (lastStakeTime == 0) {
+            // If there's no previous stake, always allow
+            return true;
+        }
+        
+        if (lastStakeTime > block.timestamp) {
+            // If last stake is in the future (should never happen, but just in case)
+            return false;
+        }
+        
+        uint256 cooldownEndTime = lastStakeTime + MIN_STAKE_COOLDOWN;
+        
+        // Check if current time has passed the cooldown period
+        if (block.timestamp > cooldownEndTime) {
+            return true;
+        }
+        
+        // At exactly cooldown end time
+        if (block.timestamp == cooldownEndTime) {
+            // We consider the cooldown complete at exactly the end time
+            return true;
+        }
+        
+        // Still in cooldown period
+        return false;
     }
     
     /**
      * @dev Validates the staking parameters
      * @param amount The amount to stake
      * @param minAmount The minimum staking amount
-     * @param enforceMinimums Whether to enforce minimum amounts
      * @return isValid Whether the parameters are valid
      * @return errorMessage The error message if not valid
      */
     function validateStakingParams(
         uint256 amount,
-        uint256 minAmount,
-        bool enforceMinimums
+        uint256 minAmount
     ) internal pure returns (bool isValid, string memory errorMessage) {
         // Check for zero amount
         if (amount == 0) {
             return (false, "Amount must be greater than 0");
         }
         
-        // Check for minimum amount if enforced
-        if (enforceMinimums && amount < minAmount) {
+        // Check for minimum amount
+        if (amount < minAmount) {
             return (false, "Amount below minimum");
         }
         
         return (true, "");
-    }
-    
-    /**
-     * @dev Calculates the APR reward for a staking amount over a period
-     * @param amount The staked amount
-     * @param apr The annual percentage rate (18 decimals)
-     * @param timeInSeconds Time in seconds
-     * @return The reward amount
-     */
-    function calculateAPRReward(
-        uint256 amount,
-        uint256 apr,
-        uint256 timeInSeconds
-    ) internal pure returns (uint256) {
-        uint256 secondsInYear = 365 days;
-        
-        // Calculate: amount * apr * (timeInSeconds / secondsInYear)
-        return (amount * apr * timeInSeconds) / (secondsInYear * 1e18);
-    }
-    
-    /**
-     * @dev Checks if a request ID is valid (non-empty)
-     * @param requestId The request ID to validate
-     * @return isValid Whether the request ID is valid
-     */
-    function isValidRequestId(bytes memory requestId) internal pure returns (bool isValid) {
-        return requestId.length > 0;
     }
 } 

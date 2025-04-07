@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../interfaces/INativeStaking.sol";
 import "../libraries/StakingUtils.sol";
+import "../libraries/ValidatorAddressUtils.sol";
 
 /**
  * @title NativeStaking
@@ -33,6 +34,11 @@ contract NativeStaking is
     mapping(address user => uint256 totalStaked) private _userTotalStaked;
     mapping(address user => bool emergencyWithdrawalRequested) private _emergencyWithdrawalRequested;
     
+    // Time-based restrictions
+    uint256 private _minStakeInterval;
+    uint256 private _minUnstakeInterval;
+    uint256 private _minClaimInterval;
+    
     // Contract settings
     uint256 private _minimumStakeAmount;
     
@@ -53,13 +59,28 @@ contract NativeStaking is
         _grantRole(MANAGER_ROLE, admin);
         
         _minimumStakeAmount = minimumStakeAmount;
+        
+        // Set default time intervals (1 day as default)
+        _minStakeInterval = 1 days;
+        _minUnstakeInterval = 1 days;
+        _minClaimInterval = 1 days;
+    }
+    
+    /**
+     * @dev Modifier to check if validator ID is valid
+     */
+    modifier validValidatorId(string calldata validatorId) {
+        require(StakingUtils.validateValidatorId(validatorId), "Invalid validator ID");
+        _;
     }
     
     /**
      * @dev Modifier to check if validator exists and is enabled
      */
     modifier validatorEnabled(string calldata validatorId) {
-        require(_validators[validatorId].status == ValidatorStatus.Enabled, "Validator is not enabled");
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        require(bytes(_validators[normalizedId].id).length > 0, "Validator does not exist");
+        require(_validators[normalizedId].status == ValidatorStatus.Enabled, "Validator is not enabled");
         _;
     }
     
@@ -67,36 +88,89 @@ contract NativeStaking is
      * @dev Modifier to check if validator exists
      */
     modifier validatorExists(string calldata validatorId) {
-        require(bytes(_validators[validatorId].id).length > 0, "Validator does not exist");
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        require(bytes(_validators[normalizedId].id).length > 0, "Validator does not exist");
+        _;
+    }
+    
+    /**
+     * @dev Modifier to check if enough time has passed since last stake
+     */
+    modifier stakeTimeRestriction(string calldata validatorId) {
+        UserStake storage userStake = _userStakes[msg.sender][validatorId];
+        if (userStake.stakedAt > 0) {
+            require(
+                block.timestamp >= userStake.stakedAt + _minStakeInterval,
+                "Time between stakes too short"
+            );
+        }
+        _;
+    }
+    
+    /**
+     * @dev Modifier to check if enough time has passed since last stake to allow unstake
+     */
+    modifier unstakeTimeRestriction(string calldata validatorId) {
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[msg.sender][normalizedId];
+        require(userStake.amount > 0, "No stake found");
+        require(
+            block.timestamp >= userStake.stakedAt + _minUnstakeInterval,
+            "Time since staking too short for unstake"
+        );
+        _;
+    }
+    
+    /**
+     * @dev Modifier to check if enough time has passed since last stake to allow reward claim
+     */
+    modifier claimTimeRestriction(string calldata validatorId) {
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[msg.sender][normalizedId];
+        require(userStake.amount > 0, "No stake found");
+        require(
+            block.timestamp >= userStake.stakedAt + _minClaimInterval,
+            "Time since staking too short for claim"
+        );
+        _;
+    }
+    
+    /**
+     * @dev Modifier to prevent actions on stake with active unstake process
+     */
+    modifier notInUnstakeProcess(string calldata validatorId) {
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[msg.sender][normalizedId];
+        require(!userStake.inUnstakeProcess, "Unstake already in process");
         _;
     }
 
     /**
      * @dev Adds a new validator
      * @param validatorId The validator identifier
-     * @param status The initial validator status
+     * @param isEnabled The initial validator status Enable or Disable
      */
-    function addValidator(string calldata validatorId, ValidatorStatus status) 
+    function addValidator(string calldata validatorId, bool isEnabled) 
         external 
         override 
         onlyRole(MANAGER_ROLE) 
+        validValidatorId(validatorId)
     {
-        //todo: need to check if validator starts with "mxvaloper" and len and case 
-        //! some more checks if this is ral validatroe 
-        //! extract al the validator chacks into separate modidier 
-        require(StakingUtils.validateValidatorId(validatorId), "Invalid validator ID format");
         require(bytes(_validators[validatorId].id).length == 0, "Validator already exists");
         
-        _validators[validatorId] = Validator({
-            id: validatorId,
-            status: status,
+        // Store normalized validator ID
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        
+        _validators[normalizedId] = Validator({
+            id: normalizedId,
+            status: isEnabled ? ValidatorStatus.Enabled : ValidatorStatus.Disabled,
             totalStaked: 0,
             uniqueStakers: 0
         });
         
-        _validatorIds.push(validatorId);
+        _validatorIds.push(normalizedId);
         
-        emit ValidatorAdded(validatorId, status);
+        emit ValidatorAdded(normalizedId, isEnabled);
     }
     
     /**
@@ -104,6 +178,8 @@ contract NativeStaking is
      * @param validatorId The validator identifier
      * @param status The new validator status
      */
+    //todo: need to remove all the custom types from all the func params 
+    //! for this func: ValidatorStatus status should be bool isEnabled, and need to add func - depricate Validator
     function updateValidatorStatus(string calldata validatorId, ValidatorStatus status) 
         external 
         override 
@@ -125,15 +201,20 @@ contract NativeStaking is
         override 
         whenNotPaused 
         nonReentrant 
-        validatorEnabled(validatorId) 
+        validValidatorId(validatorId)
+        validatorEnabled(validatorId)
+        stakeTimeRestriction(validatorId) 
     {
-        //todo: check ifthere any delays between stakes etc. 
-
-
-        require(msg.value >= _minimumStakeAmount, "Stake amount below minimum");
+        (bool isValid, string memory errorMessage) = StakingUtils.validateStakingParams(
+            msg.value,
+            _minimumStakeAmount
+        );
+        require(isValid, errorMessage);
+        
         require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
         
-        UserStake storage userStake = _userStakes[msg.sender][validatorId];
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[msg.sender][normalizedId];
         
         // Check if this is a new stake to this validator
         bool isNewStake = userStake.amount == 0;
@@ -143,16 +224,16 @@ contract NativeStaking is
         userStake.stakedAt = block.timestamp;
         
         // Update validator data
-        _validators[validatorId].totalStaked += msg.value;
+        _validators[normalizedId].totalStaked += msg.value;
         if (isNewStake) {
-            _validators[validatorId].uniqueStakers++;
-            _userValidators[msg.sender].push(validatorId);
+            _validators[normalizedId].uniqueStakers++;
+            _userValidators[msg.sender].push(normalizedId);
         }
         
         // Update user total
         _userTotalStaked[msg.sender] += msg.value;
         
-        emit Staked(msg.sender, validatorId, msg.value);
+        emit Staked(msg.sender, normalizedId, msg.value);
     }
     
     /**
@@ -164,19 +245,26 @@ contract NativeStaking is
         external 
         override 
         nonReentrant 
+        validValidatorId(validatorId) 
         validatorExists(validatorId)
+        unstakeTimeRestriction(validatorId)
+        notInUnstakeProcess(validatorId)
     {
-        UserStake storage userStake = _userStakes[msg.sender][validatorId];
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[msg.sender][normalizedId];
         
         require(userStake.amount >= amount, "Insufficient staked amount");
         require(amount > 0, "Amount must be greater than zero");
-        require(!userStake.inUnstakeProcess, "Unstake already in process");
         require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
         
-        // Mark as in unstake process
+        // Mark as in unstake process and record timestamp
         userStake.inUnstakeProcess = true;
+        userStake.unstakeInitiatedAt = block.timestamp;
         
-        emit UnstakeInitiated(msg.sender, validatorId, amount);
+        // Automatically initiate reward claim for better UX
+        emit RewardClaimInitiated(msg.sender, normalizedId);
+        
+        emit UnstakeInitiated(msg.sender, normalizedId, amount);
     }
     
     /**
@@ -190,18 +278,11 @@ contract NativeStaking is
         override 
         onlyRole(OPERATOR_ROLE) 
         nonReentrant 
+        validValidatorId(validatorId)
         validatorExists(validatorId)
     {
-        //! if claim happens if user unstakes? 
-        //! Do we consider flow: User Unstakes -> Unstake inits -> Backend finishes unstake 
-        //!                                    -> Claim inits ->  Backend finishes claim
-        //!                                       
-        //!   so if user call initClaim happens only claim                                  
-        //!                              initClaim -> Backend Fulfils Calim       
-
-        //todo: this flow may require additional flag in completeClaim function "isInintedDueUnstake"
-
-        UserStake storage userStake = _userStakes[staker][validatorId];
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[staker][normalizedId];
         
         require(userStake.inUnstakeProcess, "No unstake in process");
         require(userStake.amount >= amount, "Insufficient staked amount");
@@ -211,11 +292,11 @@ contract NativeStaking is
         userStake.inUnstakeProcess = false;
         
         // Update validator data
-        _validators[validatorId].totalStaked -= amount;
+        _validators[normalizedId].totalStaked -= amount;
         if (userStake.amount == 0) {
-            _validators[validatorId].uniqueStakers--;
+            _validators[normalizedId].uniqueStakers--;
             // Remove validator from user's list if no more stake
-            _removeValidatorFromUserList(staker, validatorId);
+            _removeValidatorFromUserList(staker, normalizedId);
         }
         
         // Update user total
@@ -225,7 +306,7 @@ contract NativeStaking is
         (bool success, ) = staker.call{value: amount}("");
         require(success, "Transfer failed");
         
-        emit UnstakeCompleted(staker, validatorId, amount);
+        emit UnstakeCompleted(staker, normalizedId, amount);
     }
     
     /**
@@ -236,15 +317,17 @@ contract NativeStaking is
         external 
         override 
         nonReentrant 
+        validValidatorId(validatorId)
         validatorExists(validatorId)
+        claimTimeRestriction(validatorId)
+        notInUnstakeProcess(validatorId)
     {
-        UserStake storage userStake = _userStakes[msg.sender][validatorId];
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[msg.sender][normalizedId];
         
-        require(userStake.amount > 0, "No stake for this validator");
-        require(!userStake.inUnstakeProcess, "Unstake in process");
         require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
         
-        emit RewardClaimInitiated(msg.sender, validatorId);
+        emit RewardClaimInitiated(msg.sender, normalizedId);
     }
     
     /**
@@ -252,25 +335,39 @@ contract NativeStaking is
      * @param staker The address of the staker
      * @param validatorId The validator identifier
      * @param amount The amount of rewards to claim
+     * @param isInitiatedDueUnstake Whether the claim was initiated due to unstake
      */
-    function completeRewardClaim(address staker, string calldata validatorId, uint256 amount) 
+    function completeRewardClaim(
+        address staker, 
+        string calldata validatorId, 
+        uint256 amount,
+        bool isInitiatedDueUnstake
+    ) 
         external 
+        payable
         override 
         onlyRole(OPERATOR_ROLE) 
         nonReentrant 
+        validValidatorId(validatorId)
         validatorExists(validatorId)
     {
         require(amount > 0, "Amount must be greater than zero");
+        require(msg.value >= amount, "Insufficient rewards");
         
-        UserStake storage userStake = _userStakes[staker][validatorId];
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[staker][normalizedId];
         require(userStake.amount > 0, "No stake for this validator");
-        require(!userStake.inUnstakeProcess, "Unstake in process");
+        
+        // Allow claim during unstake process only if initiated due to unstake
+        if (userStake.inUnstakeProcess) {
+            require(isInitiatedDueUnstake, "Unstake in process");
+        }
         
         // Transfer rewards to user
         (bool success, ) = staker.call{value: amount}("");
         require(success, "Transfer failed");
         
-        emit RewardClaimed(staker, validatorId, amount);
+        emit RewardClaimed(staker, normalizedId, amount);
     }
     
     /**
@@ -325,7 +422,8 @@ contract NativeStaking is
         override 
         returns (Validator memory) 
     {
-        return _validators[validatorId];
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        return _validators[normalizedId];
     }
     
     /**
@@ -339,7 +437,8 @@ contract NativeStaking is
         override 
         returns (ValidatorStatus) 
     {
-        return _validators[validatorId].status;
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        return _validators[normalizedId].status;
     }
     
     /**
@@ -386,7 +485,8 @@ contract NativeStaking is
         override 
         returns (UserStake memory) 
     {
-        return _userStakes[staker][validatorId];
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        return _userStakes[staker][normalizedId];
     }
     
     /**
@@ -429,7 +529,8 @@ contract NativeStaking is
         override 
         returns (bool) 
     {
-        return _userStakes[staker][validatorId].inUnstakeProcess;
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        return _userStakes[staker][normalizedId].inUnstakeProcess;
     }
     
     /**
@@ -495,6 +596,251 @@ contract NativeStaking is
                 break;
             }
         }
+    }
+    
+    /**
+     * @dev Sets the minimum stake interval
+     * @param interval The new minimum stake interval in seconds
+     */
+    function setMinStakeInterval(uint256 interval) 
+        external 
+        override 
+        onlyRole(MANAGER_ROLE) 
+    {
+        _minStakeInterval = interval;
+    }
+    
+    /**
+     * @dev Gets the minimum stake interval
+     * @return uint256 The minimum stake interval in seconds
+     */
+    function getMinStakeInterval() 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        return _minStakeInterval;
+    }
+    
+    /**
+     * @dev Sets the minimum unstake interval
+     * @param interval The new minimum unstake interval in seconds
+     */
+    function setMinUnstakeInterval(uint256 interval) 
+        external 
+        override 
+        onlyRole(MANAGER_ROLE) 
+    {
+        _minUnstakeInterval = interval;
+    }
+    
+    /**
+     * @dev Gets the minimum unstake interval
+     * @return uint256 The minimum unstake interval in seconds
+     */
+    function getMinUnstakeInterval() 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        return _minUnstakeInterval;
+    }
+    
+    /**
+     * @dev Sets the minimum claim interval
+     * @param interval The new minimum claim interval in seconds
+     */
+    function setMinClaimInterval(uint256 interval) 
+        external 
+        override 
+        onlyRole(MANAGER_ROLE) 
+    {
+        _minClaimInterval = interval;
+    }
+    
+    /**
+     * @dev Gets the minimum claim interval
+     * @return uint256 The minimum claim interval in seconds
+     */
+    function getMinClaimInterval() 
+        external 
+        view 
+        override 
+        returns (uint256) 
+    {
+        return _minClaimInterval;
+    }
+    
+    /**
+     * @dev Processes both reward claim and unstake in a single transaction
+     * @param staker The address of the staker
+     * @param validatorId The validator identifier
+     * @param unstakeAmount The amount to unstake
+     * @param rewardAmount The amount of rewards to claim
+     */
+    function processRewardAndUnstake(
+        address staker, 
+        string calldata validatorId, 
+        uint256 unstakeAmount,
+        uint256 rewardAmount
+    ) 
+        external 
+        override 
+        onlyRole(OPERATOR_ROLE) 
+        nonReentrant 
+        validValidatorId(validatorId)
+        validatorExists(validatorId)
+    {
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[staker][normalizedId];
+        
+        // Check if unstake is in process
+        require(userStake.inUnstakeProcess, "No unstake in process");
+        require(userStake.amount >= unstakeAmount, "Insufficient staked amount");
+        
+        // Process rewards first if any
+        if (rewardAmount > 0) {
+            // Transfer rewards to user
+            (bool rewardSuccess, ) = staker.call{value: rewardAmount}("");
+            require(rewardSuccess, "Reward transfer failed");
+            
+            emit RewardClaimed(staker, normalizedId, rewardAmount);
+        }
+        
+        // Process unstake
+        // Update user stake
+        userStake.amount -= unstakeAmount;
+        userStake.inUnstakeProcess = false;
+        userStake.unstakeInitiatedAt = 0; // Reset timestamp
+        
+        // Update validator data
+        _validators[normalizedId].totalStaked -= unstakeAmount;
+        if (userStake.amount == 0) {
+            _validators[normalizedId].uniqueStakers--;
+            // Remove validator from user's list if no more stake
+            _removeValidatorFromUserList(staker, normalizedId);
+        }
+        
+        // Update user total
+        _userTotalStaked[staker] -= unstakeAmount;
+        
+        // Transfer XFI back to user
+        (bool unstakeSuccess, ) = staker.call{value: unstakeAmount}("");
+        require(unstakeSuccess, "Unstake transfer failed");
+        
+        emit UnstakeCompleted(staker, normalizedId, unstakeAmount);
+    }
+    
+    /**
+     * @dev Sets up validator migration from old to new
+     * @param oldValidatorId The identifier of the deprecated validator
+     * @param newValidatorId The identifier of the new validator
+     */
+    function setupValidatorMigration(string calldata oldValidatorId, string calldata newValidatorId) 
+        external 
+        override 
+        onlyRole(MANAGER_ROLE) 
+        validValidatorId(oldValidatorId)
+        validValidatorId(newValidatorId)
+        validatorExists(oldValidatorId)
+        validatorExists(newValidatorId)
+    {
+        string memory normalizedOldId = StakingUtils.normalizeValidatorId(oldValidatorId);
+        string memory normalizedNewId = StakingUtils.normalizeValidatorId(newValidatorId);
+        
+        // Check that validators are different
+        require(
+            keccak256(bytes(normalizedOldId)) != keccak256(bytes(normalizedNewId)), 
+            "Cannot migrate to the same validator"
+        );
+        
+        // Check that new validator is enabled
+        require(
+            _validators[normalizedNewId].status == ValidatorStatus.Enabled,
+            "Target validator must be enabled"
+        );
+        
+        // Set old validator to deprecated status
+        _validators[normalizedOldId].status = ValidatorStatus.Deprecated;
+        
+        emit ValidatorUpdated(normalizedOldId, ValidatorStatus.Deprecated);
+    }
+    
+    /**
+     * @dev Migrates a user's stake from a deprecated validator to a new one
+     * @param fromValidatorId The identifier of the deprecated validator
+     * @param toValidatorId The identifier of the new validator
+     */
+    function migrateStake(string calldata fromValidatorId, string calldata toValidatorId) 
+        external 
+        override 
+        nonReentrant 
+        validValidatorId(fromValidatorId)
+        validValidatorId(toValidatorId)
+        validatorExists(fromValidatorId)
+        validatorExists(toValidatorId)
+    {
+        string memory normalizedFromId = StakingUtils.normalizeValidatorId(fromValidatorId);
+        string memory normalizedToId = StakingUtils.normalizeValidatorId(toValidatorId);
+        
+        // Check that from validator is deprecated
+        require(
+            _validators[normalizedFromId].status == ValidatorStatus.Deprecated,
+            "Source validator must be deprecated"
+        );
+        
+        // Check that target validator is enabled
+        require(
+            _validators[normalizedToId].status == ValidatorStatus.Enabled,
+            "Target validator must be enabled"
+        );
+        
+        // Get user's stake in the old validator
+        UserStake storage oldStake = _userStakes[msg.sender][normalizedFromId];
+        require(oldStake.amount > 0, "No stake to migrate");
+        require(!oldStake.inUnstakeProcess, "Unstake in process");
+        
+        // Check time restriction - if we are migrating from deprecated, no time restriction
+        // But let's apply a small safety check to prevent same-block attacks
+        require(
+            block.timestamp > oldStake.stakedAt,
+            "Cannot migrate in the same block as staking"
+        );
+        
+        // Get or initialize stake in the new validator
+        UserStake storage newStake = _userStakes[msg.sender][normalizedToId];
+        bool isNewStake = newStake.amount == 0;
+        
+        // Keep track of migrated amount
+        uint256 migrationAmount = oldStake.amount;
+        
+        // Update stakes
+        newStake.amount += migrationAmount;
+        newStake.stakedAt = block.timestamp; // Reset staking time
+        
+        // Update validator stats
+        _validators[normalizedToId].totalStaked += migrationAmount;
+        if (isNewStake) {
+            _validators[normalizedToId].uniqueStakers++;
+            _userValidators[msg.sender].push(normalizedToId);
+        }
+        
+        // Update old validator stats
+        _validators[normalizedFromId].totalStaked -= migrationAmount;
+        _validators[normalizedFromId].uniqueStakers--;
+        
+        // Remove old validator from user list as stake is now zero
+        _removeValidatorFromUserList(msg.sender, normalizedFromId);
+        
+        // Reset old stake
+        oldStake.amount = 0;
+        oldStake.stakedAt = 0;
+        oldStake.inUnstakeProcess = false;
+        oldStake.unstakeInitiatedAt = 0;
+        
+        emit StakeMigrated(msg.sender, normalizedFromId, normalizedToId, migrationAmount);
     }
     
     /**
