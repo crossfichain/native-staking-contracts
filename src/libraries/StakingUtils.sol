@@ -175,34 +175,21 @@ library StakingUtils {
      * @return canStake Whether enough time has passed for a new stake
      */
     function canStakeAgain(uint256 lastStakeTime) internal view returns (bool) {
-        // Add explicit checks to debug the function
-        // Staking is allowed if current block timestamp is greater than or equal to 
-        // the last stake time plus the minimum cooldown period
+        // If there's no previous stake, always allow
         if (lastStakeTime == 0) {
-            // If there's no previous stake, always allow
             return true;
         }
         
+        // If last stake is in the future (should never happen, but just in case)
         if (lastStakeTime > block.timestamp) {
-            // If last stake is in the future (should never happen, but just in case)
             return false;
         }
         
+        // Calculate cooldown end time
         uint256 cooldownEndTime = lastStakeTime + MIN_STAKE_COOLDOWN;
         
         // Check if current time has passed the cooldown period
-        if (block.timestamp > cooldownEndTime) {
-            return true;
-        }
-        
-        // At exactly cooldown end time
-        if (block.timestamp == cooldownEndTime) {
-            // We consider the cooldown complete at exactly the end time
-            return true;
-        }
-        
-        // Still in cooldown period
-        return false;
+        return block.timestamp >= cooldownEndTime;
     }
     
     /**

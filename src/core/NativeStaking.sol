@@ -6,8 +6,10 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../interfaces/INativeStaking.sol";
+import "../interfaces/IOracle.sol";
 import "../libraries/StakingUtils.sol";
 import "../libraries/ValidatorAddressUtils.sol";
+import "../libraries/PriceConverter.sol";
 
 /**
  * @title NativeStaking
@@ -23,6 +25,9 @@ contract NativeStaking is
     // Role definitions
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    
+    // Oracle contract for price conversion
+    IOracle private _oracle;
     
     // Validator mappings
     mapping(string => Validator) private _validators;
@@ -46,10 +51,12 @@ contract NativeStaking is
      * @dev Initializes the contract
      * @param admin Address of the admin who will have DEFAULT_ADMIN_ROLE
      * @param minimumStakeAmount The minimum amount required for staking
+     * @param oracle Address of the oracle for price conversions
      */
     function initialize(
         address admin,
-        uint256 minimumStakeAmount
+        uint256 minimumStakeAmount,
+        address oracle
     ) external initializer {
         __AccessControl_init();
         __Pausable_init();
@@ -59,6 +66,7 @@ contract NativeStaking is
         _grantRole(MANAGER_ROLE, admin);
         
         _minimumStakeAmount = minimumStakeAmount;
+        _oracle = IOracle(oracle);
         
         // Set default time intervals (1 day as default)
         _minStakeInterval = 1 days;
@@ -178,8 +186,7 @@ contract NativeStaking is
      * @param validatorId The validator identifier
      * @param status The new validator status
      */
-    //todo: need to remove all the custom types from all the func params 
-    //! for this func: ValidatorStatus status should be bool isEnabled, and need to add func - depricate Validator
+    //todo: need to minimize all the custom types from all the func params 
     function updateValidatorStatus(string calldata validatorId, ValidatorStatus status) 
         external 
         override 
@@ -233,7 +240,10 @@ contract NativeStaking is
         // Update user total
         _userTotalStaked[msg.sender] += msg.value;
         
-        emit Staked(msg.sender, normalizedId, msg.value);
+        // Convert XFI to MPX for event
+        uint256 mpxAmount = PriceConverter.toMPX(_oracle, msg.value);
+        
+        emit Staked(msg.sender, normalizedId, msg.value, mpxAmount);
     }
     
     /**
@@ -264,7 +274,10 @@ contract NativeStaking is
         // Automatically initiate reward claim for better UX
         emit RewardClaimInitiated(msg.sender, normalizedId);
         
-        emit UnstakeInitiated(msg.sender, normalizedId, amount);
+        // Convert XFI to MPX for event
+        uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
+        
+        emit UnstakeInitiated(msg.sender, normalizedId, amount, mpxAmount);
     }
     
     /**
@@ -306,7 +319,10 @@ contract NativeStaking is
         (bool success, ) = staker.call{value: amount}("");
         require(success, "Transfer failed");
         
-        emit UnstakeCompleted(staker, normalizedId, amount);
+        // Convert XFI to MPX for event
+        uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
+        
+        emit UnstakeCompleted(staker, normalizedId, amount, mpxAmount);
     }
     
     /**
@@ -404,11 +420,39 @@ contract NativeStaking is
         // Reset emergency withdrawal flag
         _emergencyWithdrawalRequested[staker] = false;
         
+        // Get list of user validators
+        string[] memory userValidators = _userValidators[staker];
+        
+        // Update validator stats and clear all user stakes
+        for (uint256 i = 0; i < userValidators.length; i++) {
+            string memory validatorId = userValidators[i];
+            UserStake storage userStake = _userStakes[staker][validatorId];
+            
+            if (userStake.amount > 0) {
+                // Update validator stats
+                _validators[validatorId].totalStaked -= userStake.amount;
+                _validators[validatorId].uniqueStakers--;
+                
+                // Clear user stake
+                userStake.amount = 0;
+                userStake.stakedAt = 0;
+                userStake.inUnstakeProcess = false;
+                userStake.unstakeInitiatedAt = 0;
+            }
+        }
+        
+        // Clear user validators and total staked
+        delete _userValidators[staker];
+        _userTotalStaked[staker] = 0;
+        
         // Transfer XFI back to user
         (bool success, ) = staker.call{value: amount}("");
         require(success, "Transfer failed");
         
-        emit EmergencyWithdrawalCompleted(staker, amount);
+        // Convert XFI to MPX for event
+        uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
+        
+        emit EmergencyWithdrawalCompleted(staker, amount, mpxAmount);
     }
     
     /**
@@ -730,18 +774,21 @@ contract NativeStaking is
         (bool unstakeSuccess, ) = staker.call{value: unstakeAmount}("");
         require(unstakeSuccess, "Unstake transfer failed");
         
-        emit UnstakeCompleted(staker, normalizedId, unstakeAmount);
+        // Convert XFI to MPX for event
+        uint256 mpxAmount = PriceConverter.toMPX(_oracle, unstakeAmount);
+        
+        emit UnstakeCompleted(staker, normalizedId, unstakeAmount, mpxAmount);
     }
     
     /**
-     * @dev Sets up validator migration from old to new
-     * @param oldValidatorId The identifier of the deprecated validator
-     * @param newValidatorId The identifier of the new validator
+     * @dev Sets up a validator migration
+     * @param oldValidatorId The source validator identifier
+     * @param newValidatorId The destination validator identifier
      */
     function setupValidatorMigration(string calldata oldValidatorId, string calldata newValidatorId) 
         external 
         override 
-        onlyRole(MANAGER_ROLE) 
+        onlyRole(MANAGER_ROLE)
         validValidatorId(oldValidatorId)
         validValidatorId(newValidatorId)
         validatorExists(oldValidatorId)
@@ -750,19 +797,11 @@ contract NativeStaking is
         string memory normalizedOldId = StakingUtils.normalizeValidatorId(oldValidatorId);
         string memory normalizedNewId = StakingUtils.normalizeValidatorId(newValidatorId);
         
-        // Check that validators are different
-        require(
-            keccak256(bytes(normalizedOldId)) != keccak256(bytes(normalizedNewId)), 
-            "Cannot migrate to the same validator"
-        );
+        // Ensure validators are different
+        require(keccak256(bytes(normalizedOldId)) != keccak256(bytes(normalizedNewId)), 
+            "Cannot migrate to same validator");
         
-        // Check that new validator is enabled
-        require(
-            _validators[normalizedNewId].status == ValidatorStatus.Enabled,
-            "Target validator must be enabled"
-        );
-        
-        // Set old validator to deprecated status
+        // Update old validator status to deprecated
         _validators[normalizedOldId].status = ValidatorStatus.Deprecated;
         
         emit ValidatorUpdated(normalizedOldId, ValidatorStatus.Deprecated);
@@ -780,7 +819,8 @@ contract NativeStaking is
         validValidatorId(fromValidatorId)
         validValidatorId(toValidatorId)
         validatorExists(fromValidatorId)
-        validatorExists(toValidatorId)
+        validatorEnabled(toValidatorId)
+        notInUnstakeProcess(fromValidatorId)
     {
         string memory normalizedFromId = StakingUtils.normalizeValidatorId(fromValidatorId);
         string memory normalizedToId = StakingUtils.normalizeValidatorId(toValidatorId);
@@ -840,7 +880,49 @@ contract NativeStaking is
         oldStake.inUnstakeProcess = false;
         oldStake.unstakeInitiatedAt = 0;
         
-        emit StakeMigrated(msg.sender, normalizedFromId, normalizedToId, migrationAmount);
+        // Convert XFI to MPX for event
+        uint256 mpxAmount = PriceConverter.toMPX(_oracle, migrationAmount);
+        
+        emit StakeMigrated(msg.sender, normalizedFromId, normalizedToId, migrationAmount, mpxAmount);
+    }
+    
+    /**
+     * @dev Sets the Oracle address
+     * @param oracleAddress Address of the oracle contract
+     */
+    function setOracle(address oracleAddress) 
+        external 
+        override 
+        onlyRole(MANAGER_ROLE) 
+    {
+        require(oracleAddress != address(0), "Invalid oracle address");
+        _oracle = IOracle(oracleAddress);
+    }
+    
+    /**
+     * @dev Gets the oracle address
+     * @return Address of the oracle contract
+     */
+    function getOracle() 
+        external 
+        view 
+        override
+        returns (address) 
+    {
+        return address(_oracle);
+    }
+    
+    /**
+     * @dev Checks if emergency withdrawal was requested
+     * @param staker The address of the staker
+     * @return bool Whether emergency withdrawal was requested
+     */
+    function isEmergencyWithdrawalRequested(address staker)
+        external
+        view
+        returns (bool)
+    {
+        return _emergencyWithdrawalRequested[staker];
     }
     
     /**

@@ -102,19 +102,27 @@ contract StakingUtilsTest is Test {
     }
     
     function testCanStakeAgain() public {
-        // Set a reference time
-        uint256 lastStakeTime = 1000;
+        // Force the block.timestamp to a known value
+        vm.warp(10000);
+        uint256 currentTime = block.timestamp;
+        
+        // Test with zero last stake time
+        assertTrue(StakingUtils.canStakeAgain(0), "Should allow stake when no previous stake");
+        
+        // Test with future stake time (edge case)
+        uint256 futureStakeTime = currentTime + 1 hours;
+        assertFalse(StakingUtils.canStakeAgain(futureStakeTime), "Should not allow stake when stake time is in future");
         
         // Test during cooldown
-        vm.warp(lastStakeTime + 30 minutes);
-        emit log_named_uint("Time during cooldown", block.timestamp);
-        emit log_named_uint("Cooldown end time", lastStakeTime + 1 hours);
-        assertFalse(StakingUtils.canStakeAgain(lastStakeTime), "Should not allow stake during cooldown");
+        uint256 duringCooldown = currentTime - 30 minutes;
+        assertFalse(StakingUtils.canStakeAgain(duringCooldown), "Should not allow stake during cooldown");
         
-        // Test after cooldown
-        vm.warp(lastStakeTime + 1 hours + 1 seconds);
-        emit log_named_uint("Time after cooldown", block.timestamp);
-        emit log_named_uint("Cooldown end time", lastStakeTime + 1 hours);
-        assertTrue(StakingUtils.canStakeAgain(lastStakeTime), "Should allow stake after cooldown");
+        // Test at exactly the end of cooldown
+        uint256 atCooldownEnd = currentTime - 1 hours;
+        assertTrue(StakingUtils.canStakeAgain(atCooldownEnd), "Should allow stake at cooldown end");
+        
+        // Test well after cooldown
+        uint256 afterCooldown = currentTime - 2 hours;
+        assertTrue(StakingUtils.canStakeAgain(afterCooldown), "Should allow stake after cooldown period");
     }
 } 

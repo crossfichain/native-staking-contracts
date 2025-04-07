@@ -39,17 +39,17 @@ interface INativeStaking {
     event ValidatorAdded(string indexed validatorId, bool isEnabled);
     event ValidatorUpdated(string indexed validatorId, ValidatorStatus status);
     
-    event Staked(address indexed staker, string indexed validatorId, uint256 amount);
-    event UnstakeInitiated(address indexed staker, string indexed validatorId, uint256 amount);
-    event UnstakeCompleted(address indexed staker, string indexed validatorId, uint256 amount);
+    event Staked(address indexed staker, string indexed validatorId, uint256 amount, uint256 mpxAmount);
+    event UnstakeInitiated(address indexed staker, string indexed validatorId, uint256 amount, uint256 mpxAmount);
+    event UnstakeCompleted(address indexed staker, string indexed validatorId, uint256 amount, uint256 mpxAmount);
     
     event RewardClaimInitiated(address indexed staker, string indexed validatorId);
     event RewardClaimed(address indexed staker, string indexed validatorId, uint256 amount);
     
     event EmergencyWithdrawalInitiated(address indexed staker);
-    event EmergencyWithdrawalCompleted(address indexed staker, uint256 amount);
+    event EmergencyWithdrawalCompleted(address indexed staker, uint256 amount, uint256 mpxAmount);
     
-    event StakeMigrated(address indexed staker, string indexed fromValidatorId, string indexed toValidatorId, uint256 amount);
+    event StakeMigrated(address indexed staker, string indexed fromValidatorId, string indexed toValidatorId, uint256 amount, uint256 mpxAmount);
 
     // Validator management functions
     function addValidator(string calldata validatorId, bool isEnabled) external;
@@ -74,6 +74,7 @@ interface INativeStaking {
     // Emergency functions
     function initiateEmergencyWithdrawal() external;
     function completeEmergencyWithdrawal(address staker, uint256 amount) external;
+    function isEmergencyWithdrawalRequested(address staker) external view returns (bool);
     
     // View functions
     function getUserStake(address staker, string calldata validatorId) external view returns (UserStake memory);
@@ -98,4 +99,8 @@ interface INativeStaking {
     // Validator migration functions
     function setupValidatorMigration(string calldata oldValidatorId, string calldata newValidatorId) external;
     function migrateStake(string calldata fromValidatorId, string calldata toValidatorId) external;
+    
+    // Oracle functions
+    function setOracle(address oracleAddress) external;
+    function getOracle() external view returns (address);
 } 

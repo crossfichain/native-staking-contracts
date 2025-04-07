@@ -5,46 +5,34 @@ import "lib/forge-std/src/Test.sol";
 import "../../src/libraries/StakingUtils.sol";
 
 contract StakingUtilsCanStakeTest is Test {
-    function testCanStakeAgain() public {
-        // Get current timestamp
+    function testCanStakeAgainFixedTimeline() public {
+        // Force the block.timestamp to a known value
+        vm.warp(10000);
         uint256 currentTime = block.timestamp;
-        emit log_named_uint("Initial timestamp", currentTime);
         
-        // Set a specific last stake time
-        uint256 lastStakeTime = 1000;
-        emit log_named_uint("Last stake time", lastStakeTime);
+        // Test with no previous stake (lastStakeTime = 0)
+        assertTrue(StakingUtils.canStakeAgain(0), "Should allow stake when no previous stake");
         
-        // Calculate cooldown end time
-        uint256 cooldownEnd = lastStakeTime + 1 hours;
-        emit log_named_uint("Cooldown end time", cooldownEnd);
+        // Test during cooldown period (30 minutes after staking)
+        uint256 duringCooldown = currentTime - 30 minutes;
+        assertFalse(StakingUtils.canStakeAgain(duringCooldown), 
+            "Should not allow stake during cooldown period");
         
-        // First test - during cooldown
-        vm.warp(lastStakeTime + 30 minutes);
-        bool canStake = StakingUtils.canStakeAgain(lastStakeTime);
-        emit log_named_uint("Current time (during cooldown)", block.timestamp);
-        emit log_string(canStake ? "Can stake during cooldown: true" : "Can stake during cooldown: false");
-        assertFalse(canStake, "Should not allow stake during cooldown");
+        // Test at exactly the end of cooldown (1 hour after staking)
+        uint256 atCooldownEnd = currentTime - 1 hours;
+        assertTrue(StakingUtils.canStakeAgain(atCooldownEnd), 
+            "Should allow stake exactly at cooldown end");
         
-        // Test at exactly cooldown end - This should be true, but is currently false
-        vm.warp(cooldownEnd);
-        canStake = StakingUtils.canStakeAgain(lastStakeTime);
-        emit log_named_uint("Current time (at cooldown end)", block.timestamp);
-        emit log_string(canStake ? "Can stake at cooldown end: true" : "Can stake at cooldown end: false");
-        // According to implementation, this returns false (requires strictly greater than cooldown)
-        assertFalse(canStake, "Should not allow stake exactly at cooldown end");
-        
-        // Test just after cooldown ends
-        vm.warp(cooldownEnd + 1);
-        canStake = StakingUtils.canStakeAgain(lastStakeTime);
-        emit log_named_uint("Current time (just after cooldown)", block.timestamp);
-        emit log_string(canStake ? "Can stake just after cooldown: true" : "Can stake just after cooldown: false");
-        assertTrue(canStake, "Should allow stake just after cooldown");
-        
-        // Test well after cooldown
-        vm.warp(cooldownEnd + 1 hours);
-        canStake = StakingUtils.canStakeAgain(lastStakeTime);
-        emit log_named_uint("Current time (well after cooldown)", block.timestamp);
-        emit log_string(canStake ? "Can stake well after cooldown: true" : "Can stake well after cooldown: false");
-        assertTrue(canStake, "Should allow stake well after cooldown");
+        // Test well after cooldown (2 hours after staking)
+        uint256 afterCooldown = currentTime - 2 hours;
+        assertTrue(StakingUtils.canStakeAgain(afterCooldown), 
+            "Should allow stake after cooldown period");
+    }
+    
+    function testCanStakeAgainFutureStake() public {
+        // Test when the last stake time is in the future (unusual case)
+        uint256 futureLastStakeTime = block.timestamp + 1 days;
+        assertFalse(StakingUtils.canStakeAgain(futureLastStakeTime), 
+            "Should not allow stake when last stake time is in the future");
     }
 } 
