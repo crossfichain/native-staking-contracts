@@ -7,6 +7,8 @@ import "../src/core/NativeStaking.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "../src/interfaces/IOracle.sol";
+import "../src/interfaces/IDIAOracle.sol";
+import "../src/periphery/UnifiedOracle.sol";
 
 /**
  * @title DeployNativeStaking
@@ -42,8 +44,23 @@ contract DeployNativeStaking is Script {
         // Start broadcasting transactions with the deployer's private key
         vm.startBroadcast(deployerKey);
         
-        // Deploy mock Oracle (required for deployment)
-        MockOracle oracle = new MockOracle();
+        // Deploy MockDIAOracle first
+        MockDIAOracle mockDiaOracle = new MockDIAOracle();
+        
+        // Set initial XFI price in DIA Oracle (0.09 USD with 8 decimals)
+        mockDiaOracle.setPrice("XFI/USD", 9_000_000); // $0.09 with 8 decimals
+        
+        // Deploy UnifiedOracle implementation
+        UnifiedOracle unifiedOracle = new UnifiedOracle();
+        
+        // Initialize the UnifiedOracle with the MockDIAOracle address
+        unifiedOracle.initialize(address(mockDiaOracle));
+        
+        // Set default MPX price in UnifiedOracle to $0.04 with 18 decimals
+        unifiedOracle.setMPXPrice(4 * 10**16); // $0.04 with 18 decimals
+        
+        // Set fallback price for XFI as well
+        unifiedOracle.setPrice("XFI", 9 * 10**16); // $0.09 with 18 decimals
         
         // Deploy NativeStaking implementation
         NativeStaking stakingImplementation = new NativeStaking();
@@ -56,7 +73,7 @@ contract DeployNativeStaking is Script {
             NativeStaking.initialize.selector,
             deployer,  // Deployer is the initial admin
             MINIMUM_STAKE_AMOUNT,
-            address(oracle)
+            address(unifiedOracle)
         );
         
         // Deploy TransparentUpgradeableProxy with the implementation and initialization data
@@ -85,11 +102,9 @@ contract DeployNativeStaking is Script {
         stakingContract.grantRole(operatorRole, ADMIN_ADDRESS);
         
         // Grant admin role to the specified admin address if different from deployer
-        // if (ADMIN_ADDRESS != deployer) {
         stakingContract.grantRole(DEFAULT_ADMIN_ROLE, ADMIN_ADDRESS);
         stakingContract.grantRole(DEFAULT_ADMIN_ROLE, MANAGER_ADDRESS);
         stakingContract.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR_ADDRESS);
-        // }
         
         // Configure delay settings
         stakingContract.setMinStakeInterval(minStakeInterval);
@@ -102,7 +117,8 @@ contract DeployNativeStaking is Script {
         console.log("NativeStaking Proxy:", address(stakingContract));
         console.log("NativeStaking Implementation:", address(stakingImplementation));
         console.log("ProxyAdmin:", address(proxyAdmin));
-        console.log("Oracle:", address(oracle));
+        console.log("UnifiedOracle:", address(unifiedOracle));
+        console.log("MockDIAOracle:", address(mockDiaOracle));
         console.log("");
         
         console.log("Role Assignments:");
@@ -118,6 +134,12 @@ contract DeployNativeStaking is Script {
         console.log("MIN_CLAIM_INTERVAL:", minClaimInterval, "seconds");
         console.log("");
         
+        console.log("Price Information:");
+        console.log("XFI Price (DIA): 0.09 USD (8 decimals)");
+        console.log("MPX Price: 0.04 USD (18 decimals)");
+        console.log("XFI Fallback Price: 0.09 USD (18 decimals)");
+        console.log("");
+        
         console.log("Other Parameters:");
         console.log("MINIMUM_STAKE_AMOUNT:", MINIMUM_STAKE_AMOUNT, "wei");
         console.log("");
@@ -128,69 +150,31 @@ contract DeployNativeStaking is Script {
 }
 
 /**
- * @title MockOracle
- * @dev Simple mock oracle for deployment testing
+ * @title MockDIAOracle
+ * @dev Mock DIA Oracle implementation for testing and development
  */
-contract MockOracle is IOracle {
-    // Mock conversion rates and prices
-    uint256 private constant XFI_TO_MPX_RATE = 1000;
-    uint256 private _mpxPrice = 1 ether; // 1 USD per MPX with 18 decimals
-    uint256 private _xfiPrice = 1000 ether; // 1000 USD per XFI with 18 decimals
+contract MockDIAOracle is IDIAOracle {
+    // Storage for prices and timestamps
+    mapping(string => uint128) private _prices;
+    mapping(string => uint128) private _timestamps;
     
     /**
-     * @dev Returns the current price for the given asset
-     * @param symbol The symbol to get the price for (e.g., "XFI")
-     * @return The price with 18 decimals of precision
-     */
-    function getPrice(string calldata symbol) external view override returns (uint256) {
-        if (keccak256(bytes(symbol)) == keccak256(bytes("XFI"))) {
-            return _xfiPrice;
-        } else if (keccak256(bytes(symbol)) == keccak256(bytes("MPX"))) {
-            return _mpxPrice;
-        }
-        revert("Unsupported symbol");
-    }
-    
-    /**
-     * @dev Returns the current XFI price with timestamp
-     * @return price The XFI price with 18 decimals
+     * @dev Returns the current price and timestamp for the given key
+     * @param key The symbol to get the price for (e.g., "XFI/USD")
+     * @return price The price with 8 decimals of precision
      * @return timestamp The timestamp when the price was updated
      */
-    function getXFIPrice() external view override returns (uint256 price, uint256 timestamp) {
-        return (_xfiPrice, block.timestamp);
+    function getValue(string memory key) external view override returns (uint128 price, uint128 timestamp) {
+        return (_prices[key], _timestamps[key]);
     }
     
     /**
-     * @dev Converts XFI to MPX based on current prices
-     * @param xfiAmount The amount of XFI to convert
-     * @return The equivalent amount of MPX
+     * @dev Sets the price for the given key
+     * @param key The symbol to update the price for
+     * @param value The price with 8 decimals of precision
      */
-    function convertXFItoMPX(uint256 xfiAmount) external pure override returns (uint256) {
-        return xfiAmount * XFI_TO_MPX_RATE;
-    }
-    
-    /**
-     * @dev Sets the MPX/USD price
-     * @param price The MPX/USD price with 18 decimals
-     */
-    function setMPXPrice(uint256 price) external override {
-        _mpxPrice = price;
-    }
-    
-    /**
-     * @dev Returns the current MPX/USD price
-     * @return The MPX/USD price with 18 decimals
-     */
-    function getMPXPrice() external view override returns (uint256) {
-        return _mpxPrice;
-    }
-    
-    /**
-     * @dev Mock conversion from MPX to XFI
-     * @param mpxAmount Amount of MPX to convert
-     * @return xfiAmount Equivalent amount in XFI
-     */
-    function convertMPXtoXFI(uint256 mpxAmount) external pure returns (uint256) {
-        return mpxAmount / XFI_TO_MPX_RATE;
+    function setPrice(string memory key, uint128 value) external override {
+        _prices[key] = value;
+        _timestamps[key] = uint128(block.timestamp);
     }
 } 
