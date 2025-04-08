@@ -43,9 +43,11 @@ contract NativeStaking is
     uint256 private _minStakeInterval;
     uint256 private _minUnstakeInterval;
     uint256 private _minClaimInterval;
+    bool private _isUnstakePaused;
     
     // Contract settings
     uint256 private _minimumStakeAmount;
+    uint256 private _minClaimAmount;
     
     /**
      * @dev Initializes the contract
@@ -186,7 +188,6 @@ contract NativeStaking is
      * @param validatorId The validator identifier
      * @param status The new validator status
      */
-    //todo: need to minimize all the custom types from all the func params 
     function updateValidatorStatus(string calldata validatorId, ValidatorStatus status) 
         external 
         override 
@@ -260,6 +261,8 @@ contract NativeStaking is
         unstakeTimeRestriction(validatorId)
         notInUnstakeProcess(validatorId)
     {
+        require(!_isUnstakePaused, "Unstake is paused");
+
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         UserStake storage userStake = _userStakes[msg.sender][normalizedId];
         
@@ -884,6 +887,20 @@ contract NativeStaking is
         uint256 mpxAmount = PriceConverter.toMPX(_oracle, migrationAmount);
         
         emit StakeMigrated(msg.sender, normalizedFromId, normalizedToId, migrationAmount, mpxAmount);
+    }
+
+    function pauseUnstake()
+        external
+        onlyRole(MANAGER_ROLE)
+    {
+        _isUnstakePaused = true;
+    }
+
+    function unpauseUnstake()
+        external
+        onlyRole(MANAGER_ROLE)
+    {
+        _isUnstakePaused = false;
     }
     
     /**
