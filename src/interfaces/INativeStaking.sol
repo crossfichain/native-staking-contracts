@@ -36,20 +36,20 @@ interface INativeStaking {
     }
 
     // Events
-    event ValidatorAdded(string indexed validatorId, bool isEnabled);
-    event ValidatorUpdated(string indexed validatorId, ValidatorStatus status);
+    event ValidatorAdded(string validatorId, bool isEnabled);
+    event ValidatorUpdated(string validatorId, ValidatorStatus status);
     
-    event Staked(address indexed staker, string indexed validatorId, uint256 amount, uint256 mpxAmount);
-    event UnstakeInitiated(address indexed staker, string indexed validatorId, uint256 amount, uint256 mpxAmount);
-    event UnstakeCompleted(address indexed staker, string indexed validatorId, uint256 amount, uint256 mpxAmount);
+    event Staked(address indexed staker, string validatorId, uint256 amount, uint256 mpxAmount);
+    event UnstakeInitiated(address indexed staker, string validatorId, uint256 amount, uint256 mpxAmount);
+    event UnstakeCompleted(address indexed staker, string validatorId, uint256 amount, uint256 mpxAmount);
     
-    event RewardClaimInitiated(address indexed staker, string indexed validatorId);
-    event RewardClaimed(address indexed staker, string indexed validatorId, uint256 amount);
+    event RewardClaimInitiated(address indexed staker, string validatorId);
+    event RewardClaimed(address indexed staker, string validatorId, uint256 amount);
     
     event EmergencyWithdrawalInitiated(address indexed staker);
     event EmergencyWithdrawalCompleted(address indexed staker, uint256 amount, uint256 mpxAmount);
     
-    event StakeMigrated(address indexed staker, string indexed fromValidatorId, string indexed toValidatorId, uint256 amount, uint256 mpxAmount);
+    event StakeMigrated(address indexed staker, string fromValidatorId, string toValidatorId, uint256 amount, uint256 mpxAmount);
 
     // Validator management functions
     function addValidator(string calldata validatorId, bool isEnabled) external;
