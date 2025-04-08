@@ -76,14 +76,20 @@ contract DeployNativeStaking is Script {
         
         // Grant manager role to intended addresses
         stakingContract.grantRole(managerRole, MANAGER_ADDRESS);
+        stakingContract.grantRole(managerRole, OPERATOR_ADDRESS);
+        stakingContract.grantRole(managerRole, ADMIN_ADDRESS);
         
         // Grant operator role to intended address
         stakingContract.grantRole(operatorRole, OPERATOR_ADDRESS);
+        stakingContract.grantRole(operatorRole, MANAGER_ADDRESS);
+        stakingContract.grantRole(operatorRole, ADMIN_ADDRESS);
         
         // Grant admin role to the specified admin address if different from deployer
-        if (ADMIN_ADDRESS != deployer) {
-            stakingContract.grantRole(DEFAULT_ADMIN_ROLE, ADMIN_ADDRESS);
-        }
+        // if (ADMIN_ADDRESS != deployer) {
+        stakingContract.grantRole(DEFAULT_ADMIN_ROLE, ADMIN_ADDRESS);
+        stakingContract.grantRole(DEFAULT_ADMIN_ROLE, MANAGER_ADDRESS);
+        stakingContract.grantRole(DEFAULT_ADMIN_ROLE, OPERATOR_ADDRESS);
+        // }
         
         // Configure delay settings
         stakingContract.setMinStakeInterval(minStakeInterval);
