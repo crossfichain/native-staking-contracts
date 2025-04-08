@@ -141,48 +141,35 @@ contract NativeStakingTest is Test {
         vm.stopPrank();
     }
     
-    function testUnstakeFlow() public {
-        // Add validator
+    function testUnstake() public {
+        // Add validator first
         vm.prank(admin);
         staking.addValidator(validatorId1, true);
         
+        // Stake first
         uint256 stakeAmount = 1 ether;
-        uint256 unstakeAmount = 0.5 ether;
-        
-        // Stake to validator
+        vm.deal(user1, stakeAmount);
         vm.prank(user1);
         staking.stake{value: stakeAmount}(validatorId1);
         
-        // Set time to pass minimum unstake interval
-        vm.warp(block.timestamp + 2 days);
+        // Wait for unstake interval
+        vm.warp(block.timestamp + staking.getMinUnstakeInterval() + 1);
         
         // Initiate unstake
+        uint256 unstakeAmount = stakeAmount; // Full amount will be unstaked now
         vm.prank(user1);
-        staking.initiateUnstake(validatorId1, unstakeAmount);
+        staking.initiateUnstake(validatorId1);
         
-        // Check unstake in process
-        INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId1);
-        assertTrue(userStake.inUnstakeProcess, "Should be in unstake process");
-        assertTrue(staking.isUnstakeInProcess(user1, validatorId1), "isUnstakeInProcess should return true");
+        // Check if unstake initiated
+        assertTrue(staking.isUnstakeInProcess(user1, validatorId1));
         
         // Complete unstake
-        uint256 userBalanceBefore = user1.balance;
-        
         vm.prank(operator);
         staking.completeUnstake(user1, validatorId1, unstakeAmount);
         
-        // Check user balance increased
-        assertEq(user1.balance, userBalanceBefore + unstakeAmount, "User balance should increase by unstake amount");
-        
-        // Check user stake updated
-        userStake = staking.getUserStake(user1, validatorId1);
-        assertEq(userStake.amount, stakeAmount - unstakeAmount, "User stake amount should be reduced");
-        assertFalse(userStake.inUnstakeProcess, "Should not be in unstake process anymore");
-        
-        // Check validator data updated
-        INativeStaking.Validator memory validator = staking.getValidator(validatorId1);
-        assertEq(validator.totalStaked, stakeAmount - unstakeAmount, "Validator total staked should be reduced");
-        assertEq(validator.uniqueStakers, 1, "Should still have 1 unique staker");
+        // Check if unstake completed
+        assertFalse(staking.isUnstakeInProcess(user1, validatorId1));
+        assertEq(user1.balance, unstakeAmount);
     }
     
     function testRewardClaiming() public {

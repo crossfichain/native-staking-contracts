@@ -152,7 +152,7 @@ contract NativeStakingE2ETest is Test {
         
         // Try to unstake immediately (should fail due to time restriction)
         vm.expectRevert("Time since staking too short for unstake");
-        staking.initiateUnstake(validatorId, 0.5 ether);
+        staking.initiateUnstake(validatorId);
         vm.stopPrank();
         
         // Warp time forward past the unstake restriction
@@ -160,7 +160,7 @@ contract NativeStakingE2ETest is Test {
         
         // Now unstake should work
         vm.prank(user7);
-        staking.initiateUnstake(validatorId, 0.5 ether);
+        staking.initiateUnstake(validatorId);
     }
     
     function testEdgeCases() public {
@@ -175,7 +175,7 @@ contract NativeStakingE2ETest is Test {
         vm.expectRevert("Invalid validator ID");
         staking.stake{value: 1 ether}("nonexistentvalidator123");
         
-        // Test 2: Unstaking more than staked amount
+        // Test 2: Double unstake attempt
         // User 6 has staked to validatorIds[0] in _testMultipleUserStaking
         string memory validatorId = validatorIds[0];
         
@@ -183,20 +183,19 @@ contract NativeStakingE2ETest is Test {
         INativeStaking.UserStake memory user6Stake = staking.getUserStake(user6, validatorId);
         assertEq(user6Stake.amount, testStakeAmount, "User6 should have stake to validator0");
         
-        // Try to unstake more than staked
-        vm.prank(user6);
-        vm.expectRevert("Insufficient staked amount");
-        staking.initiateUnstake(validatorId, testStakeAmount * 2);
-        
-        // Test 3: Double unstake attempt (already in process)
         // Initiate first unstake
         vm.prank(user6);
-        staking.initiateUnstake(validatorId, testStakeAmount / 2);
+        staking.initiateUnstake(validatorId);
+        
+        // Verify unstake was initiated correctly and the full amount is marked for unstaking
+        (bool inProcess, uint256 unstakeAmount) = staking.getUnstakeStatus(user6, validatorId);
+        assertTrue(inProcess, "Unstake should be in process");
+        assertEq(unstakeAmount, testStakeAmount, "Full amount should be marked for unstaking");
         
         // Try a second unstake while first is in process
         vm.prank(user6);
         vm.expectRevert("Unstake already in process");
-        staking.initiateUnstake(validatorId, testStakeAmount / 4);
+        staking.initiateUnstake(validatorId);
     }
     
     function _testMultipleUserStaking() private {
@@ -281,26 +280,31 @@ contract NativeStakingE2ETest is Test {
         
         // Initiate unstake
         vm.prank(user1);
-        staking.initiateUnstake(validatorId, testUnstakeAmount);
+        staking.initiateUnstake(validatorId);
         
         // Verify unstake initiated
         INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId);
         assertTrue(userStake.inUnstakeProcess, "Should be in unstake process");
         assertGt(userStake.unstakeInitiatedAt, 0, "Unstake initiated timestamp should be set");
         
+        // Verify the full amount is set for unstaking
+        (bool inProcess, uint256 unstakeAmount) = staking.getUnstakeStatus(user1, validatorId);
+        assertTrue(inProcess, "Should be in unstake process");
+        assertEq(unstakeAmount, testStakeAmount, "Full stake amount should be marked for unstaking");
+        
         // Complete unstake
         uint256 user1BalanceBefore = user1.balance;
         
         vm.prank(operator);
-        staking.completeUnstake(user1, validatorId, testUnstakeAmount);
+        staking.completeUnstake(user1, validatorId, testStakeAmount);
         
         // Verify unstake completed
         userStake = staking.getUserStake(user1, validatorId);
         assertFalse(userStake.inUnstakeProcess, "Should not be in unstake process");
-        assertEq(userStake.amount, testStakeAmount - testUnstakeAmount, "Remaining stake amount incorrect");
+        assertEq(userStake.amount, 0, "Remaining stake amount should be zero");
         
         // Verify user received funds
-        assertEq(user1.balance, user1BalanceBefore + testUnstakeAmount, "User balance not increased correctly");
+        assertEq(user1.balance, user1BalanceBefore + testStakeAmount, "User balance not increased correctly");
     }
     
     function _testRewardClaiming() private {

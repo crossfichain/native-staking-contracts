@@ -62,7 +62,16 @@ interface INativeStaking {
 
     // User staking functions
     function stake(string calldata validatorId) external payable;
-    function initiateUnstake(string calldata validatorId, uint256 amount) external;
+    
+    /**
+     * @dev Initiates unstaking of the full amount from a validator
+     * @param validatorId The validator identifier
+     */
+    function initiateUnstake(string calldata validatorId) external;
+    
+    // Previous version with partial unstaking
+    // function initiateUnstake(string calldata validatorId, uint256 amount) external;
+    
     function completeUnstake(address staker, string calldata validatorId, uint256 amount) external;
     
     // Reward claiming functions

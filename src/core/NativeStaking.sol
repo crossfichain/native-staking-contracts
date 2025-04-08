@@ -247,12 +247,43 @@ contract NativeStaking is
         emit Staked(msg.sender, normalizedId, msg.value, mpxAmount);
     }
     
+    //     function initiateUnstake(string calldata validatorId, uint256 amount) 
+    //     external 
+    //     override 
+    //     nonReentrant 
+    //     validValidatorId(validatorId) 
+    //     validatorExists(validatorId)
+    //     unstakeTimeRestriction(validatorId)
+    //     notInUnstakeProcess(validatorId)
+    // {
+    //     require(!_isUnstakePaused, "Unstake is paused");
+
+    //     string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+    //     UserStake storage userStake = _userStakes[msg.sender][normalizedId];
+        
+    //     require(userStake.amount >= amount, "Insufficient staked amount");
+    //     require(amount > 0, "Amount must be greater than zero");
+    //     require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
+        
+    //     // Mark as in unstake process and record timestamp
+    //     userStake.inUnstakeProcess = true;
+    //     userStake.unstakeInitiatedAt = block.timestamp;
+    //     userStake.unstakeAmount = amount; // Store the requested unstake amount
+        
+    //     // Automatically initiate reward claim for better UX
+    //     emit RewardClaimInitiated(msg.sender, normalizedId);
+        
+    //     // Convert XFI to MPX for event
+    //     uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
+        
+    //     emit UnstakeInitiated(msg.sender, normalizedId, amount, mpxAmount);
+    // }
+
     /**
-     * @dev Initiates unstaking from a validator
+     * @dev Initiates unstaking of the full amount from a validator
      * @param validatorId The validator identifier
-     * @param amount The amount to unstake
      */
-    function initiateUnstake(string calldata validatorId, uint256 amount) 
+    function initiateUnstake(string calldata validatorId) 
         external 
         override 
         nonReentrant 
@@ -266,14 +297,15 @@ contract NativeStaking is
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         UserStake storage userStake = _userStakes[msg.sender][normalizedId];
         
-        require(userStake.amount >= amount, "Insufficient staked amount");
-        require(amount > 0, "Amount must be greater than zero");
+        // Unstake the full amount
+        uint256 amount = userStake.amount;
+        require(amount > 0, "No stake found");
         require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
         
         // Mark as in unstake process and record timestamp
         userStake.inUnstakeProcess = true;
         userStake.unstakeInitiatedAt = block.timestamp;
-        userStake.unstakeAmount = amount; // Store the requested unstake amount
+        userStake.unstakeAmount = amount; // Store the full amount for unstake
         
         // Automatically initiate reward claim for better UX
         emit RewardClaimInitiated(msg.sender, normalizedId);
