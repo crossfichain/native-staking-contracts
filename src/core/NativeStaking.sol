@@ -948,4 +948,34 @@ contract NativeStaking is
     receive() external payable {
         // Only accept ETH from transactions
     }
+
+    function getUserStatus(address user, string calldata validatorId) 
+        external 
+        view 
+        returns (
+            bool canUnstake,
+            bool canClaim,
+            uint256 unstakeUnlockTime,
+            uint256 claimUnlockTime
+        ) 
+    {
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[user][normalizedId];
+        
+        // Calculate unlock times
+        unstakeUnlockTime = userStake.stakedAt + _minUnstakeInterval;
+        claimUnlockTime = userStake.stakedAt + _minClaimInterval;
+        
+        // Determine if operations are possible
+        canUnstake = userStake.amount > 0 && 
+                         !userStake.inUnstakeProcess && 
+                          block.timestamp >= unstakeUnlockTime &&
+                         !_isUnstakePaused;
+                         
+        canClaim = userStake.amount > 0 && 
+                       !userStake.inUnstakeProcess &&
+                        block.timestamp >= claimUnlockTime;
+        
+        return (canUnstake, canClaim, unstakeUnlockTime, claimUnlockTime);
+    }
 } 
