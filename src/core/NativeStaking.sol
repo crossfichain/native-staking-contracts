@@ -273,6 +273,7 @@ contract NativeStaking is
         // Mark as in unstake process and record timestamp
         userStake.inUnstakeProcess = true;
         userStake.unstakeInitiatedAt = block.timestamp;
+        userStake.unstakeAmount = amount; // Store the requested unstake amount
         
         // Automatically initiate reward claim for better UX
         emit RewardClaimInitiated(msg.sender, normalizedId);
@@ -306,6 +307,7 @@ contract NativeStaking is
         // Update user stake
         userStake.amount -= amount;
         userStake.inUnstakeProcess = false;
+        userStake.unstakeAmount = 0; // Reset the unstake amount
         
         // Update validator data
         _validators[normalizedId].totalStaked -= amount;
@@ -565,7 +567,7 @@ contract NativeStaking is
     }
     
     /**
-     * @dev Checks if an unstake is in process for a validator
+     * @dev Checks if unstake is in process for a validator
      * @param staker The address of the staker
      * @param validatorId The validator identifier
      * @return bool Whether unstake is in process
@@ -760,7 +762,8 @@ contract NativeStaking is
         // Update user stake
         userStake.amount -= unstakeAmount;
         userStake.inUnstakeProcess = false;
-        userStake.unstakeInitiatedAt = 0; // Reset timestamp
+        userStake.unstakeInitiatedAt = 0;
+        userStake.unstakeAmount = 0;
         
         // Update validator data
         _validators[normalizedId].totalStaked -= unstakeAmount;
@@ -977,5 +980,23 @@ contract NativeStaking is
                         block.timestamp >= claimUnlockTime;
         
         return (canUnstake, canClaim, unstakeUnlockTime, claimUnlockTime);
+    }
+
+    /**
+     * @dev Gets the unstake status and amount for a given validator
+     * @param staker The address of the staker
+     * @param validatorId The validator identifier
+     * @return inProcess Whether unstake is in process
+     * @return amount The amount requested for unstake
+     */
+    function getUnstakeStatus(address staker, string calldata validatorId) 
+        external 
+        view 
+        override 
+        returns (bool inProcess, uint256 amount) 
+    {
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
+        UserStake storage userStake = _userStakes[staker][normalizedId];
+        return (userStake.inUnstakeProcess, userStake.unstakeAmount);
     }
 } 

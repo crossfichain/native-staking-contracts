@@ -33,6 +33,7 @@ interface INativeStaking {
         uint256 stakedAt;
         bool inUnstakeProcess;
         uint256 unstakeInitiatedAt; // Timestamp when unstake was initiated
+        uint256 unstakeAmount;      // Amount requested for unstake
     }
 
     // Events
@@ -81,6 +82,15 @@ interface INativeStaking {
     function getUserTotalStaked(address staker) external view returns (uint256);
     function getUserValidators(address staker) external view returns (string[] memory);
     function isUnstakeInProcess(address staker, string calldata validatorId) external view returns (bool);
+    
+    /**
+     * @dev Gets the unstake status and amount for a given validator
+     * @param staker The address of the staker
+     * @param validatorId The validator identifier
+     * @return inProcess Whether unstake is in process
+     * @return amount The amount requested for unstake
+     */
+    function getUnstakeStatus(address staker, string calldata validatorId) external view returns (bool inProcess, uint256 amount);
     
     // Protocol settings
     function getMinimumStakeAmount() external view returns (uint256);
