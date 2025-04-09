@@ -156,49 +156,37 @@ contract NativeStaking is
     }
 
     /**
-     * @dev Adds a new validator
+     * @dev Adds a new validator or updates existing validator's status
      * @param validatorId The validator identifier
-     * @param isEnabled The initial validator status Enable or Disable
+     * @param status The validator status to set
      */
-    function addValidator(string calldata validatorId, bool isEnabled) 
-        external 
-        override 
-        onlyRole(MANAGER_ROLE) 
+    function setValidatorStatus(string calldata validatorId, ValidatorStatus status)
+        external
+        override
+        onlyRole(MANAGER_ROLE)
         validValidatorId(validatorId)
     {
-        require(bytes(_validators[validatorId].id).length == 0, "Validator already exists");
-        
-        // Store normalized validator ID
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         
-        _validators[normalizedId] = Validator({
-            id: normalizedId,
-            status: isEnabled ? ValidatorStatus.Enabled : ValidatorStatus.Disabled,
-            totalStaked: 0,
-            uniqueStakers: 0
-        });
-        
-        _validatorIds.push(normalizedId);
-        
-        emit ValidatorAdded(normalizedId, isEnabled);
+        if (bytes(_validators[normalizedId].id).length == 0) {
+            // Add new validator
+            _validators[normalizedId] = Validator({
+                id: normalizedId,
+                status: status,
+                totalStaked: 0,
+                uniqueStakers: 0
+            });
+            
+            _validatorIds.push(normalizedId);
+            
+            emit ValidatorAdded(normalizedId, status == ValidatorStatus.Enabled);
+        } else {
+            // Update existing validator
+            _validators[normalizedId].status = status;
+            
+            emit ValidatorUpdated(normalizedId, status);
+        }
     }
-    
-    /**
-     * @dev Updates a validator's status
-     * @param validatorId The validator identifier
-     * @param status The new validator status
-     */
-    function updateValidatorStatus(string calldata validatorId, ValidatorStatus status) 
-        external 
-        override 
-        onlyRole(MANAGER_ROLE) 
-        validatorExists(validatorId)
-    {
-        _validators[validatorId].status = status;
-        
-        emit ValidatorUpdated(validatorId, status);
-    }
-    
     /**
      * @dev Stakes native XFI to a validator
      * @param validatorId The validator identifier
@@ -375,10 +363,8 @@ contract NativeStaking is
         claimTimeRestriction(validatorId)
         notInUnstakeProcess(validatorId)
     {
-        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
-        UserStake storage userStake = _userStakes[msg.sender][normalizedId];
-        
         require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
+        string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         
         emit RewardClaimInitiated(msg.sender, normalizedId);
     }
@@ -988,18 +974,25 @@ contract NativeStaking is
         external 
         view 
         returns (
+            UserStake memory userStake,
+            bool canStake,
             bool canUnstake,
             bool canClaim,
+            uint256 stakeUnlockTime,
             uint256 unstakeUnlockTime,
             uint256 claimUnlockTime
         ) 
     {
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
-        UserStake storage userStake = _userStakes[user][normalizedId];
+        userStake = _userStakes[user][normalizedId];
         
         // Calculate unlock times
+        stakeUnlockTime = userStake.stakedAt + _minStakeInterval;
         unstakeUnlockTime = userStake.stakedAt + _minUnstakeInterval;
         claimUnlockTime = userStake.stakedAt + _minClaimInterval;
+
+        canStake = userStake.amount == 0 && 
+                   block.timestamp >= stakeUnlockTime;
         
         // Determine if operations are possible
         canUnstake = userStake.amount > 0 && 
@@ -1011,7 +1004,7 @@ contract NativeStaking is
                        !userStake.inUnstakeProcess &&
                         block.timestamp >= claimUnlockTime;
         
-        return (canUnstake, canClaim, unstakeUnlockTime, claimUnlockTime);
+        return (userStake, canStake, canUnstake, canClaim, stakeUnlockTime, unstakeUnlockTime, claimUnlockTime);
     }
 
     /**

@@ -38,7 +38,7 @@ interface INativeStaking {
 
     // Events
     event ValidatorAdded(string validatorId, bool isEnabled);
-    event ValidatorUpdated(string validatorId, ValidatorStatus status);
+    event ValidatorStatusUpdated(string validatorId, ValidatorStatus status);
     
     event Staked(address indexed staker, string validatorId, uint256 amount, uint256 mpxAmount);
     event UnstakeInitiated(address indexed staker, string validatorId, uint256 amount, uint256 mpxAmount);
@@ -53,8 +53,7 @@ interface INativeStaking {
     event StakeMigrated(address indexed staker, string fromValidatorId, string toValidatorId, uint256 amount, uint256 mpxAmount);
 
     // Validator management functions
-    function addValidator(string calldata validatorId, bool isEnabled) external;
-    function updateValidatorStatus(string calldata validatorId, ValidatorStatus status) external;
+    function setValidatorStatus(string calldata validatorId, ValidatorStatus status) external;
     function getValidator(string calldata validatorId) external view returns (Validator memory);
     function getValidatorStatus(string calldata validatorId) external view returns (ValidatorStatus);
     function getValidatorCount() external view returns (uint256);
