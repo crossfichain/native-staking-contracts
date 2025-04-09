@@ -1,11 +1,35 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+
 /**
  * @title INativeStaking
  * @dev Interface for the NativeStaking contract
  */
 interface INativeStaking {
+
+    // Custom errors
+    error InvalidAmount(uint256 provided, uint256 required);
+    error StakingPaused();
+    error UnstakingPaused();
+    error UnstakeInProcess();
+    error NoUnstakeInProcess();
+    error TimeTooShort(uint256 requiredTime, uint256 currentTime);
+    error NoStakeFound();
+    error InsufficientStake(uint256 requested, uint256 available);
+    error ValidatorDoesNotExist(string validatorId);
+    error ValidatorNotEnabled(string validatorId);
+    error InvalidValidatorId(string validatorId);
+    error EmergencyWithdrawalInProcess();
+    error TransferFailed();
+    error NoEmergencyWithdrawalRequested();
+    error DuplicateValidator(string validatorId);
+    error SameValidator();
+    error ValidatorNotDeprecated(string validatorId);
+    error MigrationTimeError();
+    error UnauthorizedRole(bytes32 role);
+    error InsufficientRewards(uint256 provided, uint256 required);
+
     /**
      * @dev Validator status enum
      */
@@ -32,8 +56,9 @@ interface INativeStaking {
         uint256 amount;
         uint256 mpxAmount;
         uint256 stakedAt;
+        uint256 lastClaimedAt;  // Timestamp when rewards were last claimed
         bool inUnstakeProcess;
-        uint256 unstakeInitiatedAt; // Timestamp when unstake was initiated
+        uint256 lastUnstakedAt; // Timestamp when unstake was initiated
         uint256 unstakeAmount;      // Amount requested for unstake
     }
 
