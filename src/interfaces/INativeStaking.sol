@@ -30,6 +30,7 @@ interface INativeStaking {
      */
     struct UserStake {
         uint256 amount;
+        uint256 mpxAmount;
         uint256 stakedAt;
         bool inUnstakeProcess;
         uint256 unstakeInitiatedAt; // Timestamp when unstake was initiated
@@ -75,10 +76,10 @@ interface INativeStaking {
     
     // Reward claiming functions
     function initiateRewardClaim(string calldata validatorId) external;
-    function completeRewardClaim(address staker, string calldata validatorId, uint256 amount, bool isInitiatedDueUnstake) external payable;
+    function completeRewardClaim(address staker, string calldata validatorId, bool isInitiatedDueUnstake) external payable;
     
     // Combined processing function
-    function processRewardAndUnstake(address staker, string calldata validatorId, uint256 unstakeAmount, uint256 rewardAmount) external;
+    function processRewardAndUnstake(address staker, string calldata validatorId, uint256 unstakeAmount, uint256 rewardAmount) external payable;
     
     // Emergency functions
     function initiateEmergencyWithdrawal() external;

@@ -214,9 +214,11 @@ contract NativeStaking is
         
         // Check if this is a new stake to this validator
         bool isNewStake = userStake.amount == 0;
+        uint256 mpxAmount = PriceConverter.toMPX(_oracle, msg.value);
         
         // Update user stake
         userStake.amount += msg.value;
+        userStake.mpxAmount += mpxAmount;
         userStake.stakedAt = block.timestamp;
         
         // Update validator data
@@ -230,42 +232,10 @@ contract NativeStaking is
         _userTotalStaked[msg.sender] += msg.value;
         
         // Convert XFI to MPX for event
-        uint256 mpxAmount = PriceConverter.toMPX(_oracle, msg.value);
         
         emit Staked(msg.sender, normalizedId, msg.value, mpxAmount);
     }
     
-    //     function initiateUnstake(string calldata validatorId, uint256 amount) 
-    //     external 
-    //     override 
-    //     nonReentrant 
-    //     validValidatorId(validatorId) 
-    //     validatorExists(validatorId)
-    //     unstakeTimeRestriction(validatorId)
-    //     notInUnstakeProcess(validatorId)
-    // {
-    //     require(!_isUnstakePaused, "Unstake is paused");
-
-    //     string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
-    //     UserStake storage userStake = _userStakes[msg.sender][normalizedId];
-        
-    //     require(userStake.amount >= amount, "Insufficient staked amount");
-    //     require(amount > 0, "Amount must be greater than zero");
-    //     require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
-        
-    //     // Mark as in unstake process and record timestamp
-    //     userStake.inUnstakeProcess = true;
-    //     userStake.unstakeInitiatedAt = block.timestamp;
-    //     userStake.unstakeAmount = amount; // Store the requested unstake amount
-        
-    //     // Automatically initiate reward claim for better UX
-    //     emit RewardClaimInitiated(msg.sender, normalizedId);
-        
-    //     // Convert XFI to MPX for event
-    //     uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
-        
-    //     emit UnstakeInitiated(msg.sender, normalizedId, amount, mpxAmount);
-    // }
 
     /**
      * @dev Initiates unstaking of the full amount from a validator
@@ -287,6 +257,7 @@ contract NativeStaking is
         
         // Unstake the full amount
         uint256 amount = userStake.amount;
+        uint256 mpxAmount = userStake.mpxAmount;
         require(amount > 0, "No stake found");
         require(!_emergencyWithdrawalRequested[msg.sender], "Emergency withdrawal in process");
         
@@ -297,10 +268,6 @@ contract NativeStaking is
         
         // Automatically initiate reward claim for better UX
         emit RewardClaimInitiated(msg.sender, normalizedId);
-        
-        // Convert XFI to MPX for event
-        uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
-        
         emit UnstakeInitiated(msg.sender, normalizedId, amount, mpxAmount);
     }
     
@@ -320,12 +287,14 @@ contract NativeStaking is
     {
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         UserStake storage userStake = _userStakes[staker][normalizedId];
+        uint256 mpxAmount = userStake.mpxAmount;
         
         require(userStake.inUnstakeProcess, "No unstake in process");
         require(userStake.amount >= amount, "Insufficient staked amount");
         
         // Update user stake
         userStake.amount -= amount;
+        userStake.mpxAmount -= mpxAmount;
         userStake.inUnstakeProcess = false;
         userStake.unstakeAmount = 0; // Reset the unstake amount
         
@@ -343,9 +312,6 @@ contract NativeStaking is
         // Transfer XFI back to user
         (bool success, ) = staker.call{value: amount}("");
         require(success, "Transfer failed");
-        
-        // Convert XFI to MPX for event
-        uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
         
         emit UnstakeCompleted(staker, normalizedId, amount, mpxAmount);
     }
@@ -373,13 +339,11 @@ contract NativeStaking is
      * @dev Completes a reward claim
      * @param staker The address of the staker
      * @param validatorId The validator identifier
-     * @param amount The amount of rewards to claim
      * @param isInitiatedDueUnstake Whether the claim was initiated due to unstake
      */
     function completeRewardClaim(
         address staker, 
         string calldata validatorId, 
-        uint256 amount,
         bool isInitiatedDueUnstake
     ) 
         external 
@@ -390,8 +354,8 @@ contract NativeStaking is
         validValidatorId(validatorId)
         validatorExists(validatorId)
     {
-        require(amount > 0, "Amount must be greater than zero");
-        require(msg.value >= amount, "Insufficient rewards");
+        require(msg.value > 0, "Amount must be greater than zero");
+        // require(msg.value == amount, "Insufficient rewards");
         
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         UserStake storage userStake = _userStakes[staker][normalizedId];
@@ -403,10 +367,10 @@ contract NativeStaking is
         }
         
         // Transfer rewards to user
-        (bool success, ) = staker.call{value: amount}("");
+        (bool success, ) = staker.call{value: msg.value}("");
         require(success, "Transfer failed");
         
-        emit RewardClaimed(staker, normalizedId, amount);
+        emit RewardClaimed(staker, normalizedId, msg.value);
     }
     
     /**
@@ -459,6 +423,7 @@ contract NativeStaking is
                 // Clear user stake
                 userStake.amount = 0;
                 userStake.stakedAt = 0;
+                userStake.mpxAmount = 0;
                 userStake.inUnstakeProcess = false;
                 userStake.unstakeInitiatedAt = 0;
             }
@@ -754,6 +719,7 @@ contract NativeStaking is
         uint256 rewardAmount
     ) 
         external 
+        payable
         override 
         onlyRole(OPERATOR_ROLE) 
         nonReentrant 
@@ -762,6 +728,7 @@ contract NativeStaking is
     {
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         UserStake storage userStake = _userStakes[staker][normalizedId];
+        uint256 mpxAmount = userStake.mpxAmount;
         
         // Check if unstake is in process
         require(userStake.inUnstakeProcess, "No unstake in process");
@@ -770,6 +737,8 @@ contract NativeStaking is
         // Process rewards first if any
         if (rewardAmount > 0) {
             // Transfer rewards to user
+            require(msg.value == rewardAmount, "Insufficient staked amount");
+
             (bool rewardSuccess, ) = staker.call{value: rewardAmount}("");
             require(rewardSuccess, "Reward transfer failed");
             
@@ -779,6 +748,7 @@ contract NativeStaking is
         // Process unstake
         // Update user stake
         userStake.amount -= unstakeAmount;
+        userStake.mpxAmount -= mpxAmount;
         userStake.inUnstakeProcess = false;
         userStake.unstakeInitiatedAt = 0;
         userStake.unstakeAmount = 0;
@@ -798,8 +768,6 @@ contract NativeStaking is
         (bool unstakeSuccess, ) = staker.call{value: unstakeAmount}("");
         require(unstakeSuccess, "Unstake transfer failed");
         
-        // Convert XFI to MPX for event
-        uint256 mpxAmount = PriceConverter.toMPX(_oracle, unstakeAmount);
         
         emit UnstakeCompleted(staker, normalizedId, unstakeAmount, mpxAmount);
     }
