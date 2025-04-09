@@ -184,7 +184,7 @@ contract NativeStaking is
             // Update existing validator
             _validators[normalizedId].status = status;
             
-            emit ValidatorUpdated(normalizedId, status);
+            emit ValidatorStatusUpdated(normalizedId, status);
         }
     }
     /**
@@ -828,7 +828,7 @@ contract NativeStaking is
         // Update old validator status to deprecated
         _validators[normalizedOldId].status = ValidatorStatus.Deprecated;
         
-        emit ValidatorUpdated(normalizedOldId, ValidatorStatus.Deprecated);
+        emit ValidatorStatusUpdated(normalizedOldId, ValidatorStatus.Deprecated);
     }
     
     /**
