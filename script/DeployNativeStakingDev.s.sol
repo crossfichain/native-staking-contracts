@@ -1,0 +1,209 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+import {Script, console} from "forge-std/Script.sol";
+import "../src/core/NativeStaking.sol";
+import "../src/periphery/UnifiedOracle.sol";
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {MockDIAOracle} from "./mocks/MockDiaOracle.sol";
+
+contract DeployNativeStakingDev is Script {
+    // Roles
+    address constant ADMIN_ADDRESS = 0x2D2bA91B7c0EA2dB570a5Df61304B690FD1A3918;
+    address constant MANAGER_ADDRESS = 0x1C89357aF4f15B351F1Ba8a478d944DFa3f45715;
+    address constant OPERATOR_ADDRESS = 0x6Ff2Da7EB2DF14dB66f3F25a0AcE6a28e5f15CD9;
+
+    // Default values for delays (30 seconds for testing)
+    uint256 constant MIN_STAKE_INTERVAL = 30;
+    uint256 constant MIN_UNSTAKE_INTERVAL = 30;
+    uint256 constant MIN_CLAIM_INTERVAL = 30;
+    
+    // Minimum stake amount 
+    uint256 constant MINIMUM_STAKE_AMOUNT = 1 ether; // 1 XFI
+
+    string[] validatorIds;
+
+    constructor() {
+        // Initialize validator IDs
+        validatorIds.push("mxvaloper1gza5y94kal25eawsenl56th8kdyujszmcsxcgs");
+        validatorIds.push("mxvaloper1jp0m7ynwtvrknzlmdzargmd59mh8n9gkh9yfwm");
+        validatorIds.push("mxvaloper1rfza8qfktwy46ujrundtx5s5th6dq8vfnwscp3");
+        validatorIds.push("mxvaloper12w023r3vjjmhk8nss9u59np22mjsj8ykwrlxs7");
+        validatorIds.push("mxvaloper1zgrx9jjqrfye8swylcmrxq3k92e9j872s9amqu");
+        validatorIds.push("mxvaloper1kjr5gh0w3hrxw9r7e4pjw6vz5kywupm79t58n4");
+        validatorIds.push("mxvaloper1lthswtdl3dzkppq3ee3kn4jm6dkxdp79t8xq63");
+        validatorIds.push("mxvaloper1w0m48j6zejl65pwrt8d8f88jdsjfpne4g7qr5j");
+        validatorIds.push("mxvaloper1qj452fr5c8r59dtv5ullke776e07x5pk6umlh4");
+        validatorIds.push("mxvaloper1wsgm3jlgcxq7vftldz7hfmwfgq98hruj9yjgr5");
+    }
+
+    function run() public {
+        uint256 deployerKey = vm.envUint("DEV_PRIVATE_KEY");
+        address deployerAddress = vm.addr(deployerKey);
+        console.log("Deployer address:", deployerAddress);
+
+        // Get delay settings from environment variables
+        uint256 minStakeInterval = vm.envOr("MIN_STAKE_INTERVAL", MIN_STAKE_INTERVAL);
+        uint256 minUnstakeInterval = vm.envOr("MIN_UNSTAKE_INTERVAL", MIN_UNSTAKE_INTERVAL);
+        uint256 minClaimInterval = vm.envOr("MIN_CLAIM_INTERVAL", MIN_CLAIM_INTERVAL);
+
+        vm.startBroadcast(deployerKey);
+
+        // Deploy MockDiaOracle
+        console.log("Deploying MockDiaOracle...");
+        MockDIAOracle mockDiaOracle = new MockDIAOracle();
+        console.log("MockDiaOracle deployed at:", address(mockDiaOracle));
+
+        // Set XFI price in the MockDiaOracle
+        uint128 xfiPrice = 9_000_0000; // $0.90 with 8 decimals
+        mockDiaOracle.setPrice("XFI/USD", xfiPrice);
+        console.log("Set XFI price to:", xfiPrice);
+
+        // Deploy Oracle Contract
+        console.log("Deploying Oracle implementation...");
+        UnifiedOracle oracleImpl = new UnifiedOracle();
+        console.log("Oracle implementation deployed at:", address(oracleImpl));
+
+        // Deploy NativeStaking implementation
+        console.log("Deploying NativeStaking implementation...");
+        NativeStaking nativeStakingImpl = new NativeStaking();
+        console.log("NativeStaking implementation deployed at:", address(nativeStakingImpl));
+
+        // Deploy ProxyAdmin for both contracts
+        console.log("Deploying ProxyAdmin...");
+        ProxyAdmin proxyAdmin = new ProxyAdmin();
+        console.log("ProxyAdmin deployed at:", address(proxyAdmin));
+
+        // Deploy Oracle Proxy
+        console.log("Deploying Oracle Proxy...");
+        bytes memory oracleInitData = abi.encodeWithSelector(
+            UnifiedOracle.initialize.selector,
+            address(mockDiaOracle),
+            deployerAddress // Set deployer as admin initially so they can grant roles
+        );
+        TransparentUpgradeableProxy oracleProxy = new TransparentUpgradeableProxy(
+            address(oracleImpl),
+            address(proxyAdmin),
+            oracleInitData
+        );
+        console.log("Oracle Proxy deployed at:", address(oracleProxy));
+
+        // Cast to Oracle for easier interaction
+        UnifiedOracle oracle = UnifiedOracle(address(oracleProxy));
+
+        // Deploy NativeStaking Proxy
+        console.log("Deploying NativeStaking Proxy...");
+        bytes memory nativeStakingInitData = abi.encodeWithSelector(
+            NativeStaking.initialize.selector,
+            deployerAddress, // Set deployer as admin initially so they can grant roles
+            MINIMUM_STAKE_AMOUNT, // Use minimum stake amount
+            address(oracle) // Oracle address
+        );
+        TransparentUpgradeableProxy nativeStakingProxy = new TransparentUpgradeableProxy(
+            address(nativeStakingImpl),
+            address(proxyAdmin),
+            nativeStakingInitData
+        );
+        console.log("NativeStaking Proxy deployed at:", address(nativeStakingProxy));
+
+        // Cast to NativeStaking for easier interaction
+        NativeStaking nativeStaking = NativeStaking(payable(address(nativeStakingProxy)));
+        
+        // Set time intervals after initialization
+        nativeStaking.setMinStakeInterval(minStakeInterval);
+        console.log("Set min stake interval to:", minStakeInterval);
+        
+        nativeStaking.setMinUnstakeInterval(minUnstakeInterval);
+        console.log("Set min unstake interval to:", minUnstakeInterval);
+        
+        nativeStaking.setMinClaimInterval(minClaimInterval);
+        console.log("Set min claim interval to:", minClaimInterval);
+
+        // Set MPX price in the Oracle
+        uint256 mpxPrice = 2 * 10**16; // $0.02 with 18 decimals
+        oracle.setMPXPrice(mpxPrice);
+        console.log("Set MPX price to:", mpxPrice);
+
+        // Get role identifiers
+        bytes32 managerRole = nativeStaking.MANAGER_ROLE();
+        bytes32 operatorRole = nativeStaking.OPERATOR_ROLE();
+        bytes32 adminRole = nativeStaking.DEFAULT_ADMIN_ROLE();
+        
+        // Grant roles to all addresses
+        console.log("Granting roles to addresses...");
+        
+        // Grant manager role to all addresses
+        nativeStaking.grantRole(managerRole, ADMIN_ADDRESS);
+        console.log("Granted MANAGER_ROLE to ADMIN:", ADMIN_ADDRESS);
+        nativeStaking.grantRole(managerRole, MANAGER_ADDRESS);
+        console.log("Granted MANAGER_ROLE to MANAGER:", MANAGER_ADDRESS);
+        nativeStaking.grantRole(managerRole, OPERATOR_ADDRESS);
+        console.log("Granted MANAGER_ROLE to OPERATOR:", OPERATOR_ADDRESS);
+        
+        // Grant operator role to all addresses
+        nativeStaking.grantRole(operatorRole, ADMIN_ADDRESS);
+        console.log("Granted OPERATOR_ROLE to ADMIN:", ADMIN_ADDRESS);
+        nativeStaking.grantRole(operatorRole, MANAGER_ADDRESS);
+        console.log("Granted OPERATOR_ROLE to MANAGER:", MANAGER_ADDRESS);
+        nativeStaking.grantRole(operatorRole, OPERATOR_ADDRESS);
+        console.log("Granted OPERATOR_ROLE to OPERATOR:", OPERATOR_ADDRESS);
+        
+        // Grant admin role to all addresses
+        nativeStaking.grantRole(adminRole, ADMIN_ADDRESS);
+        console.log("Granted ADMIN_ROLE to ADMIN:", ADMIN_ADDRESS);
+        nativeStaking.grantRole(adminRole, MANAGER_ADDRESS);
+        console.log("Granted ADMIN_ROLE to MANAGER:", MANAGER_ADDRESS);
+        nativeStaking.grantRole(adminRole, OPERATOR_ADDRESS);
+        console.log("Granted ADMIN_ROLE to OPERATOR:", OPERATOR_ADDRESS);
+
+
+
+        oracle.grantRole(oracle.DEFAULT_ADMIN_ROLE(), ADMIN_ADDRESS);
+        oracle.grantRole(oracle.DEFAULT_ADMIN_ROLE(), MANAGER_ADDRESS);
+        oracle.grantRole(oracle.DEFAULT_ADMIN_ROLE(), OPERATOR_ADDRESS);
+        
+        oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), ADMIN_ADDRESS);
+        oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), MANAGER_ADDRESS);
+        oracle.grantRole(oracle.ORACLE_UPDATER_ROLE(), OPERATOR_ADDRESS);
+
+        nativeStaking.grantRole(nativeStaking.DEFAULT_ADMIN_ROLE(), ADMIN_ADDRESS);
+        nativeStaking.grantRole(nativeStaking.DEFAULT_ADMIN_ROLE(), MANAGER_ADDRESS);
+        nativeStaking.grantRole(nativeStaking.DEFAULT_ADMIN_ROLE(), OPERATOR_ADDRESS);
+
+        // Add validators directly
+        console.log("Adding validators...");
+        for (uint i = 0; i < validatorIds.length; i++) {
+            nativeStaking.addValidator(validatorIds[i], true);
+            console.log("Added validator:", validatorIds[i]);
+        }
+        console.log("Added all validators. Count:", validatorIds.length);
+
+        // Log deployment information
+        console.log("\n--- Deployment Summary ---");
+        console.log("MockDiaOracle address:", address(mockDiaOracle));
+        console.log("Oracle implementation address:", address(oracleImpl));
+        console.log("NativeStaking implementation address:", address(nativeStakingImpl));
+        console.log("ProxyAdmin address:", address(proxyAdmin));
+        console.log("Oracle Proxy address:", address(oracleProxy));
+        console.log("NativeStaking Proxy address:", address(nativeStakingProxy));
+        console.log("Admin address:", ADMIN_ADDRESS);
+        console.log("Manager address:", MANAGER_ADDRESS);
+        console.log("Operator address:", OPERATOR_ADDRESS);
+        console.log("Min stake interval:", minStakeInterval);
+        console.log("Min unstake interval:", minUnstakeInterval);
+        console.log("Min claim interval:", minClaimInterval);
+        console.log("Minimum stake amount:", MINIMUM_STAKE_AMOUNT);
+        console.log("XFI price (8 decimals):", xfiPrice);
+        console.log("MPX price (18 decimals):", mpxPrice);
+        console.log("Number of validators:", validatorIds.length);
+        console.log("-------------------------");
+
+        vm.stopBroadcast();
+    }
+}
+
+
+
+
+
