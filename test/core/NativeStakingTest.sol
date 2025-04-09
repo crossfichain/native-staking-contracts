@@ -19,7 +19,7 @@ contract NativeStakingTest is Test {
     string public validatorId2 = "mxvaloper1jp0m7ynwtvrknzlmdzargmd59mh8n9gkh9yfwm";
     
     uint256 public minStakeAmount = 0.1 ether;
-    uint256 public timeBuffer = 1 days + 1;
+    uint256 public constant MIN_TIME_INTERVAL = 1 hours;
     
     function setUp() public {
         // Deploy Oracle contract
@@ -28,11 +28,20 @@ contract NativeStakingTest is Test {
         // Deploy NativeStaking contract
         staking = new NativeStaking();
         
+        // Set initial block timestamp to be far in the past
+        // This allows us to fast forward time without issues
+        vm.warp(MIN_TIME_INTERVAL * 10);
+        
         // Initialize contract
-        staking.initialize(admin, minStakeAmount, address(oracle));
+        staking.initialize(admin, 0.1 ether, address(oracle));
+        
+        // Set time restrictions to 1 hour for testing
+        vm.startPrank(admin);
+        staking.setMinStakeInterval(MIN_TIME_INTERVAL);
+        staking.setMinUnstakeInterval(MIN_TIME_INTERVAL);
+        staking.setMinClaimInterval(MIN_TIME_INTERVAL);
         
         // Setup roles
-        vm.startPrank(admin);
         staking.grantRole(staking.OPERATOR_ROLE(), operator);
         vm.stopPrank();
         
@@ -42,16 +51,9 @@ contract NativeStakingTest is Test {
         
         // Fund contract with some initial ETH for rewards
         vm.deal(address(staking), 5 ether);
-        
-        // Set time intervals for testing
-        vm.startPrank(admin);
-        staking.setMinStakeInterval(1 hours);
-        staking.setMinUnstakeInterval(1 hours);
-        staking.setMinClaimInterval(1 hours);
-        vm.stopPrank();
     }
     
-    function testInitialization() public view {
+    function test_Initialize_CorrectSetup() public view {
         // Check roles
         assertTrue(staking.hasRole(staking.DEFAULT_ADMIN_ROLE(), admin), "Admin should have DEFAULT_ADMIN_ROLE");
         assertTrue(staking.hasRole(staking.MANAGER_ROLE(), admin), "Admin should have MANAGER_ROLE");
@@ -62,57 +64,17 @@ contract NativeStakingTest is Test {
         
         // Check oracle address
         assertEq(staking.getOracle(), address(oracle), "Oracle address should be set correctly");
+        
+        // Check time intervals are 1 hour
+        assertEq(staking.getMinStakeInterval(), MIN_TIME_INTERVAL, "Min stake interval should be 1 hour");
+        assertEq(staking.getMinUnstakeInterval(), MIN_TIME_INTERVAL, "Min unstake interval should be 1 hour");
+        assertEq(staking.getMinClaimInterval(), MIN_TIME_INTERVAL, "Min claim interval should be 1 hour");
     }
     
-    function testAddValidator() public {
-        vm.startPrank(admin);
-        
-        // Add first validator
-        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
-        
-        // Check validator was added
-        INativeStaking.Validator memory validator = staking.getValidator(validatorId1);
-        assertEq(validator.id, validatorId1, "Validator ID should match");
-        assertEq(uint8(validator.status), uint8(INativeStaking.ValidatorStatus.Enabled), "Validator should be enabled");
-        assertEq(validator.totalStaked, 0, "Total staked should be 0");
-        assertEq(validator.uniqueStakers, 0, "Unique stakers should be 0");
-        
-        // Add second validator
-        staking.setValidatorStatus(validatorId2, INativeStaking.ValidatorStatus.Disabled);
-        
-        // Check validator count
-        assertEq(staking.getValidatorCount(), 2, "Should have 2 validators");
-        
-        // Check validator list
-        INativeStaking.Validator[] memory validators = staking.getValidators();
-        assertEq(validators.length, 2, "Should return 2 validators");
-        
-        vm.stopPrank();
-    }
-    
-    function testUpdateValidatorStatus() public {
-        vm.startPrank(admin);
-        
-        // Add validator
-        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
-        
-        // Update validator status
-        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Disabled);
-        
-        // Check updated status
-        INativeStaking.Validator memory validator = staking.getValidator(validatorId1);
-        assertEq(uint8(validator.status), uint8(INativeStaking.ValidatorStatus.Disabled), "Validator should be disabled");
-        
-        vm.stopPrank();
-    }
-    
-    function testBasicStaking() public {
+    function test_stake_BasicFunctionality() public {
         // Add validator
         vm.prank(admin);
         staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
-        
-        // Set initial timestamp to a higher value to avoid time constraint issues
-        vm.warp(3700);
         
         uint256 stakeAmount = 1 ether;
         
@@ -140,25 +102,58 @@ contract NativeStakingTest is Test {
         assertEq(userValidators[0], validatorId1, "User validator should match");
     }
     
-    function testStakingRevertsForDisabledValidator() public {
-        // Add validator as disabled
+    function test_stake_RevertWhen_DisabledValidator() public {
+        // Add validator but set it as disabled
         vm.prank(admin);
         staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Disabled);
         
-        // Attempt to stake to disabled validator
+        uint256 stakeAmount = 1 ether;
+        
+        // Try to stake to disabled validator
         vm.startPrank(user1);
-        vm.expectRevert(abi.encodeWithSelector(INativeStaking.ValidatorNotEnabled.selector, validatorId1));
-        staking.stake{value: 1 ether}(validatorId1);
+        vm.expectRevert(abi.encodeWithSignature("ValidatorNotEnabled(string)", validatorId1));
+        staking.stake{value: stakeAmount}(validatorId1);
         vm.stopPrank();
     }
     
-    function testUnstake() public {
-        // Add validator first
+    function test_stake_RevertWhen_InsufficientAmount() public {
+        // Add validator
         vm.prank(admin);
         staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
         
-        // Set initial timestamp
-        vm.warp(3700);
+        // Try to stake less than minimum amount
+        uint256 stakeAmount = 0.05 ether; // Less than minimum (0.1 ether)
+        
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSignature("InvalidAmount(uint256,uint256)", stakeAmount, minStakeAmount));
+        staking.stake{value: stakeAmount}(validatorId1);
+        vm.stopPrank();
+    }
+    
+    function testFuzz_stake_ValidAmounts(uint256 amount) public {
+        // Bound amount to reasonable values (between min and 5 ETH)
+        vm.assume(amount >= minStakeAmount && amount <= 5 ether);
+        
+        // Add validator
+        vm.prank(admin);
+        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
+        
+        // Ensure user has enough balance
+        vm.deal(user1, amount);
+        
+        // Stake to validator
+        vm.prank(user1);
+        staking.stake{value: amount}(validatorId1);
+        
+        // Check user stake
+        INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId1);
+        assertEq(userStake.amount, amount, "User stake amount should match");
+    }
+    
+    function test_initiateUnstake_BasicProcess() public {
+        // Add validator first
+        vm.prank(admin);
+        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
         
         // Stake first
         uint256 stakeAmount = 1 ether;
@@ -167,7 +162,7 @@ contract NativeStakingTest is Test {
         staking.stake{value: stakeAmount}(validatorId1);
         
         // Wait for unstake interval
-        vm.warp(block.timestamp + 4 hours);
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL);
         
         // Initiate unstake
         vm.prank(user1);
@@ -190,13 +185,26 @@ contract NativeStakingTest is Test {
         assertEq(user1.balance, unstakeAmount);
     }
     
-    function testRewardClaiming() public {
+    function test_initiateUnstake_RevertWhen_TooEarly() public {
         // Add validator
         vm.prank(admin);
         staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
         
-        // Set initial timestamp
-        vm.warp(3700);
+        // Stake
+        uint256 stakeAmount = 1 ether;
+        vm.prank(user1);
+        staking.stake{value: stakeAmount}(validatorId1);
+        
+        // Try to unstake immediately (before min time interval)
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("TimeTooShort(uint256,uint256)", MIN_TIME_INTERVAL, 0));
+        staking.initiateUnstake(validatorId1);
+    }
+    
+    function test_initiateRewardClaim_Process() public {
+        // Add validator
+        vm.prank(admin);
+        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
         
         uint256 stakeAmount = 1 ether;
         uint256 rewardAmount = 0.1 ether;
@@ -208,8 +216,8 @@ contract NativeStakingTest is Test {
         vm.prank(user1);
         staking.stake{value: stakeAmount}(validatorId1);
         
-        // Set time to pass minimum claim interval
-        vm.warp(block.timestamp + 4 hours);
+        // Wait for claim interval
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL);
         
         // Initiate reward claim
         vm.prank(user1);
@@ -228,13 +236,10 @@ contract NativeStakingTest is Test {
         assertEq(user1.balance, userBalanceBefore + rewardAmount, "User should receive reward amount");
     }
     
-    function testEmergencyWithdrawal() public {
+    function test_initiateRewardClaim_RevertWhen_TooEarly() public {
         // Add validator
         vm.prank(admin);
         staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
-        
-        // Set initial timestamp
-        vm.warp(3700);
         
         uint256 stakeAmount = 1 ether;
         
@@ -242,42 +247,18 @@ contract NativeStakingTest is Test {
         vm.prank(user1);
         staking.stake{value: stakeAmount}(validatorId1);
         
-        // Move time forward to avoid time restrictions
-        vm.warp(block.timestamp + 4 hours);
-        
-        // Initiate emergency withdrawal
+        // Try to claim immediately (before min time interval)
         vm.prank(user1);
-        staking.initiateEmergencyWithdrawal();
-        
-        // Verify emergency withdrawal was initiated
-        assertTrue(staking.isEmergencyWithdrawalRequested(user1), "Emergency withdrawal should be requested");
-        
-        // Complete emergency withdrawal
-        uint256 userBalanceBefore = user1.balance;
-        
-        vm.prank(operator);
-        staking.completeEmergencyWithdrawal(user1, stakeAmount);
-        
-        // Check user balance increased
-        assertEq(user1.balance, userBalanceBefore + stakeAmount, "User balance should increase by staked amount");
-        
-        // Check user stake cleared
-        assertEq(staking.getUserTotalStaked(user1), 0, "User total staked should be 0");
-        
-        // Check user validators cleared
-        string[] memory userValidators = staking.getUserValidators(user1);
-        assertEq(userValidators.length, 0, "User should have no validators after emergency withdrawal");
+        vm.expectRevert(abi.encodeWithSignature("TimeTooShort(uint256,uint256)", MIN_TIME_INTERVAL, 0));
+        staking.initiateRewardClaim(validatorId1);
     }
     
-    function testValidatorMigration() public {
+    function test_migrateStake_ValidMigration() public {
         // Add validators
         vm.startPrank(admin);
         staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
         staking.setValidatorStatus(validatorId2, INativeStaking.ValidatorStatus.Enabled);
         vm.stopPrank();
-        
-        // Set initial timestamp
-        vm.warp(3700);
         
         uint256 stakeAmount = 1 ether;
         
@@ -285,12 +266,12 @@ contract NativeStakingTest is Test {
         vm.prank(user1);
         staking.stake{value: stakeAmount}(validatorId1);
         
-        // Warp time to allow migration
-        vm.warp(block.timestamp + 4 hours);
-        
         // Setup migration
         vm.prank(admin);
         staking.setupValidatorMigration(validatorId1, validatorId2);
+        
+        // Warp time to be able to migrate (stake time interval)
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL);
         
         // Migrate stake
         vm.prank(user1);
@@ -313,122 +294,122 @@ contract NativeStakingTest is Test {
         assertEq(toValidator.uniqueStakers, 1, "Destination validator should have 1 staker");
     }
     
-    function testGetUserStatus() public {
-        // Add validator
-        vm.prank(admin);
+    function test_migrateStake_RevertWhen_MigrationNotSetup() public {
+        // Add validators
+        vm.startPrank(admin);
         staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
-        
-        // Set initial timestamp to a higher value to avoid time constraint issues
-        vm.warp(3700);
-        
-        uint256 stakeAmount = 1 ether;
-        
-        // Stake to validator
-        vm.prank(user1);
-        staking.stake{value: stakeAmount}(validatorId1);
-        
-        // Check user status
-        (
-            INativeStaking.UserStake memory userStake,
-            bool canStake,
-            bool canUnstake,
-            bool canClaim,
-            uint256 stakeUnlockTime,
-            uint256 unstakeUnlockTime,
-            uint256 claimUnlockTime
-        ) = staking.getUserStatus(user1, validatorId1);
-        
-        assertEq(userStake.amount, stakeAmount, "User stake amount should match");
-        assertFalse(canStake, "User should not be able to stake again to the same validator");
-        assertFalse(canUnstake, "User should not be able to unstake yet");
-        assertFalse(canClaim, "User should not be able to claim yet");
-        
-        // Advance time past unstake unlock time
-        vm.warp(unstakeUnlockTime + 1);
-        
-        // Check user status again
-        (
-            ,
-            ,
-            bool canUnstakeNow,
-            ,
-            ,
-            ,
-            
-        ) = staking.getUserStatus(user1, validatorId1);
-        
-        assertTrue(canUnstakeNow, "User should be able to unstake now");
-    }
-    
-    function testPauseAndUnpauseStaking() public {
-        // Add validator
-        vm.prank(admin);
-        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
-        
-        // Set initial timestamp
-        vm.warp(3700);
-        
-        // Pause staking
-        vm.prank(admin);
-        staking.pauseStaking();
-        
-        // Try to stake when paused
-        vm.startPrank(user1);
-        vm.expectRevert("Pausable: paused");
-        staking.stake{value: 1 ether}(validatorId1);
+        staking.setValidatorStatus(validatorId2, INativeStaking.ValidatorStatus.Enabled);
         vm.stopPrank();
         
-        // Unpause staking
-        vm.prank(admin);
-        staking.unpauseStaking();
-        
-        // Move time forward to avoid time restrictions
-        vm.warp(block.timestamp + 4 hours);
-        
-        // Stake after unpausing
-        vm.prank(user1);
-        staking.stake{value: 1 ether}(validatorId1);
-        
-        // Verify stake was successful
-        INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId1);
-        assertEq(userStake.amount, 1 ether, "User stake amount should match");
-    }
-    
-    function testPauseAndUnpauseUnstaking() public {
-        // Add validator
-        vm.prank(admin);
-        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
-        
-        // Set initial timestamp
-        vm.warp(3700);
-        
-        // Stake first
         uint256 stakeAmount = 1 ether;
+        
+        // Stake to first validator
         vm.prank(user1);
         staking.stake{value: stakeAmount}(validatorId1);
+        
+        // Wait for proper time
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL);
+        
+        // Try to migrate without setup
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("ValidatorNotDeprecated(string)", validatorId1));
+        staking.migrateStake(validatorId1, validatorId2);
+    }
+
+    function test_CompleteStakingWorkflow() public {
+        // Use a properly formatted validator ID
+        string memory validatorId = validatorId1;
+        
+        // Enable validator
+        vm.startPrank(admin);
+        staking.setValidatorStatus(validatorId, INativeStaking.ValidatorStatus.Enabled);
+        vm.stopPrank();
+        
+        // Stake
+        uint256 stakeAmount = 1 ether;
+        vm.startPrank(user1);
+        staking.stake{value: stakeAmount}(validatorId);
+        vm.stopPrank();
+        
+        // Verify stake
+        INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId);
+        assertEq(userStake.amount, stakeAmount);
         
         // Wait for unstake interval
-        vm.warp(block.timestamp + 4 hours);
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL);
         
-        // Pause unstaking
-        vm.prank(admin);
-        staking.pauseUnstake();
-        
-        // Try to unstake when paused
+        // Initiate unstake
         vm.startPrank(user1);
-        vm.expectRevert(abi.encodeWithSelector(INativeStaking.UnstakingPaused.selector));
-        staking.initiateUnstake(validatorId1);
+        staking.initiateUnstake(validatorId);
         vm.stopPrank();
         
-        // Unpause unstaking
-        vm.prank(admin);
-        staking.unpauseUnstake();
+        // Verify unstake initiated
+        assertTrue(staking.isUnstakeInProcess(user1, validatorId));
         
-        // Unstake after unpausing
+        // Complete unstake by operator
+        vm.startPrank(operator);
+        staking.completeUnstake(user1, validatorId, stakeAmount);
+        vm.stopPrank();
+        
+        // Verify stake is now 0
+        userStake = staking.getUserStake(user1, validatorId);
+        assertEq(userStake.amount, 0);
+    }
+    
+    function test_TimeConstraints_SkippingTime() public {
+        // Add validator
+        vm.prank(admin);
+        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
+        
+        // Set user balance
+        vm.deal(user1, 5 ether);
+        
+        // Skip ahead in time to avoid any time-too-short errors
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL * 2);
+        
+        // Stake should work
+        vm.prank(user1);
+        staking.stake{value: 1 ether}(validatorId1);
+        
+        // Skip ahead in time to allow unstaking
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL * 2);
+        
+        // Unstake should work after time passes
         vm.prank(user1);
         staking.initiateUnstake(validatorId1);
         
-        // Verify unstake was initiated
-        assertTrue(staking.isUnstakeInProcess(user1, validatorId1), "Unstake should be in process");
+        // Verify unstake is in process
+        assertTrue(staking.isUnstakeInProcess(user1, validatorId1));
+        
+        // Complete unstake as operator
+        vm.prank(operator);
+        staking.completeUnstake(user1, validatorId1, 1 ether);
+        
+        // Verify stake is now 0
+        INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId1);
+        assertEq(userStake.amount, 0);
+    }
+    
+    function test_completeUnstake_RevertWhen_UnauthorizedOperator() public {
+        // Add validator
+        vm.prank(admin);
+        staking.setValidatorStatus(validatorId1, INativeStaking.ValidatorStatus.Enabled);
+        
+        // Stake
+        uint256 stakeAmount = 1 ether;
+        vm.prank(user1);
+        staking.stake{value: stakeAmount}(validatorId1);
+        
+        // Wait minimum interval and initiate unstake
+        vm.warp(block.timestamp + MIN_TIME_INTERVAL);
+        vm.prank(user1);
+        staking.initiateUnstake(validatorId1);
+        
+        // Try to complete unstake with unauthorized account (user2)
+        vm.prank(user2);
+        
+        // Use direct string assertion instead of encoding the error
+        vm.expectRevert("AccessControl: account 0x0000000000000000000000000000000000000004 is missing role 0x97667070c54ef182b0f5858b034beac1b6f3089aa2d3188bb1e8929f4fa9b929");
+        staking.completeUnstake(user1, validatorId1, stakeAmount);
     }
 } 

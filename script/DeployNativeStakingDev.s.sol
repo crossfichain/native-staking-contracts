@@ -174,7 +174,7 @@ contract DeployNativeStakingDev is Script {
         // Add validators directly
         console.log("Adding validators...");
         for (uint i = 0; i < validatorIds.length; i++) {
-            nativeStaking.addValidator(validatorIds[i], true);
+            nativeStaking.setValidatorStatus(validatorIds[i], INativeStaking.ValidatorStatus.Enabled);
             console.log("Added validator:", validatorIds[i]);
         }
         console.log("Added all validators. Count:", validatorIds.length);

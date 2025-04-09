@@ -64,6 +64,11 @@ contract NativeStakingE2ETest is Test {
         bytes32 operatorRole = staking.OPERATOR_ROLE();
         staking.grantRole(managerRole, manager);
         staking.grantRole(operatorRole, operator);
+        
+        // Set smaller time intervals for testing
+        staking.setMinStakeInterval(1 hours);
+        staking.setMinUnstakeInterval(1 hours);
+        staking.setMinClaimInterval(1 hours);
         vm.stopPrank();
         
         // Fund test accounts (10 ether each)
@@ -85,65 +90,93 @@ contract NativeStakingE2ETest is Test {
         vm.startPrank(manager);
         for (uint i = 0; i < validatorIds.length; i++) {
             bool isEnabled = i < 8; // First 8 validators enabled, last 2 disabled
-            staking.addValidator(validatorIds[i], isEnabled);
+            INativeStaking.ValidatorStatus status = isEnabled ? INativeStaking.ValidatorStatus.Enabled : INativeStaking.ValidatorStatus.Disabled;
+            staking.setValidatorStatus(validatorIds[i], status);
         }
         vm.stopPrank();
     }
     
     function testFullStake() public {
+        // Set initial timestamp
+        vm.warp(3700); // Set timestamp to allow for time intervals
+        
         _testMultipleUserStaking();
     }
     
     function testValidatorStatus() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         _testMultipleUserStaking();
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         _testValidatorStatusUpdate();
     }
     
     function testUnstaking() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         _testMultipleUserStaking();
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         _testUnstakeFlow();
     }
     
     function testRewards() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         _testMultipleUserStaking();
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         _testRewardClaiming();
     }
     
     function testMigration() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         _testMultipleUserStaking();
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         _testValidatorMigration();
     }
     
     function testEmergency() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         _testMultipleUserStaking();
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         _testEmergencyWithdrawal();
     }
     
     function testParams() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         _testMultipleUserStaking();
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         _testParameterUpdates();
     }
     
     function testPause() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         _testMultipleUserStaking();
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         _testPauseUnpause();
     }
     
     function testTimeRestrictions() public {
+        // Set initial timestamp to a higher value to avoid time constraint issues
+        vm.warp(3700);
+        
         // First stake with a user
         string memory validatorId = validatorIds[1];
         
@@ -151,12 +184,12 @@ contract NativeStakingE2ETest is Test {
         staking.stake{value: 1 ether}(validatorId);
         
         // Try to unstake immediately (should fail due to time restriction)
-        vm.expectRevert("Time since staking too short for unstake");
+        vm.expectRevert(abi.encodeWithSignature("TimeTooShort(uint256,uint256)", staking.getMinUnstakeInterval(), 0));
         staking.initiateUnstake(validatorId);
         vm.stopPrank();
         
         // Warp time forward past the unstake restriction
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 2 hours);
         
         // Now unstake should work
         vm.prank(user7);
@@ -164,15 +197,18 @@ contract NativeStakingE2ETest is Test {
     }
     
     function testEdgeCases() public {
+        // Set initial timestamp
+        vm.warp(3700);
+        
         // First stake with all users to setup state
         _testMultipleUserStaking();
         
         // Move time forward to satisfy time restrictions
-        vm.warp(block.timestamp + 3 days);
+        vm.warp(block.timestamp + 4 hours);
         
         // Test 1: Stake to non-existent validator
         vm.prank(user8);
-        vm.expectRevert("Invalid validator ID");
+        vm.expectRevert(abi.encodeWithSignature("InvalidValidatorId(string)", "nonexistentvalidator123"));
         staking.stake{value: 1 ether}("nonexistentvalidator123");
         
         // Test 2: Double unstake attempt
@@ -192,9 +228,13 @@ contract NativeStakingE2ETest is Test {
         assertTrue(inProcess, "Unstake should be in process");
         assertEq(unstakeAmount, testStakeAmount, "Full amount should be marked for unstaking");
         
+        // We need to move time forward again to be able to test the UnstakeInProcess error
+        // otherwise we'll hit the TimeTooShort error
+        vm.warp(block.timestamp + 2 hours);
+        
         // Try a second unstake while first is in process
         vm.prank(user6);
-        vm.expectRevert("Unstake already in process");
+        vm.expectRevert(abi.encodeWithSignature("UnstakeInProcess()"));
         staking.initiateUnstake(validatorId);
     }
     
@@ -218,9 +258,11 @@ contract NativeStakingE2ETest is Test {
             assertEq(user.balance, userBalanceBefore - testStakeAmount, "User balance not decreased correctly");
             
             // Verify validator data updated
-            INativeStaking.Validator memory validator = staking.getValidator(validatorId);
-            assertGt(validator.totalStaked, 0, "Validator total staked should be > 0");
-            assertGt(validator.uniqueStakers, 0, "Validator should have stakers");
+            {
+                INativeStaking.Validator memory validatorObj = staking.getValidator(validatorId);
+                assertGt(validatorObj.totalStaked, 0, "Validator total staked should be > 0");
+                assertGt(validatorObj.uniqueStakers, 0, "Validator should have stakers");
+            }
         }
         
         // Multiple users stake to the same validator
@@ -238,9 +280,11 @@ contract NativeStakingE2ETest is Test {
         }
         
         // Verify validator data reflects all stakers
-        INativeStaking.Validator memory validator = staking.getValidator(popularValidator);
-        assertEq(validator.uniqueStakers, 6, "Validator should have 6 unique stakers");
-        assertEq(validator.totalStaked, testStakeAmount * 6, "Total staked amount incorrect");
+        {
+            INativeStaking.Validator memory validatorObj = staking.getValidator(popularValidator);
+            assertEq(validatorObj.uniqueStakers, 6, "Validator should have 6 unique stakers");
+            assertEq(validatorObj.totalStaked, testStakeAmount * 6, "Total staked amount incorrect");
+        }
     }
     
     function _testValidatorStatusUpdate() private {
@@ -248,16 +292,20 @@ contract NativeStakingE2ETest is Test {
         string memory disabledValidator = validatorIds[8];
         
         // Verify it's currently disabled
-        INativeStaking.Validator memory validator = staking.getValidator(disabledValidator);
-        assertEq(uint8(validator.status), uint8(INativeStaking.ValidatorStatus.Disabled), "Validator should be disabled");
+        {
+            INativeStaking.Validator memory validatorObj = staking.getValidator(disabledValidator);
+            assertEq(uint8(validatorObj.status), uint8(INativeStaking.ValidatorStatus.Disabled), "Validator should be disabled");
+        }
         
         // Update status to enabled
         vm.prank(manager);
-        staking.updateValidatorStatus(disabledValidator, INativeStaking.ValidatorStatus.Enabled);
+        staking.setValidatorStatus(disabledValidator, INativeStaking.ValidatorStatus.Enabled);
         
         // Verify status changed
-        validator = staking.getValidator(disabledValidator);
-        assertEq(uint8(validator.status), uint8(INativeStaking.ValidatorStatus.Enabled), "Validator should be enabled");
+        {
+            INativeStaking.Validator memory validatorObj = staking.getValidator(disabledValidator);
+            assertEq(uint8(validatorObj.status), uint8(INativeStaking.ValidatorStatus.Enabled), "Validator should be enabled");
+        }
         
         // Verify user can now stake to this validator
         vm.prank(user10);
@@ -267,11 +315,13 @@ contract NativeStakingE2ETest is Test {
         string memory deprecateValidator = validatorIds[1];
         
         vm.prank(manager);
-        staking.updateValidatorStatus(deprecateValidator, INativeStaking.ValidatorStatus.Deprecated);
+        staking.setValidatorStatus(deprecateValidator, INativeStaking.ValidatorStatus.Deprecated);
         
         // Verify status changed
-        validator = staking.getValidator(deprecateValidator);
-        assertEq(uint8(validator.status), uint8(INativeStaking.ValidatorStatus.Deprecated), "Validator should be deprecated");
+        {
+            INativeStaking.Validator memory validatorObj = staking.getValidator(deprecateValidator);
+            assertEq(uint8(validatorObj.status), uint8(INativeStaking.ValidatorStatus.Deprecated), "Validator should be deprecated");
+        }
     }
     
     function _testUnstakeFlow() private {
@@ -285,7 +335,7 @@ contract NativeStakingE2ETest is Test {
         // Verify unstake initiated
         INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId);
         assertTrue(userStake.inUnstakeProcess, "Should be in unstake process");
-        assertGt(userStake.unstakeInitiatedAt, 0, "Unstake initiated timestamp should be set");
+        assertGt(userStake.lastUnstakedAt, 0, "Unstake initiated timestamp should be set");
         
         // Verify the full amount is set for unstaking
         (bool inProcess, uint256 unstakeAmount) = staking.getUnstakeStatus(user1, validatorId);
@@ -305,6 +355,13 @@ contract NativeStakingE2ETest is Test {
         
         // Verify user received funds
         assertEq(user1.balance, user1BalanceBefore + testStakeAmount, "User balance not increased correctly");
+
+        // Check validator was enabled and in the correct status
+        {
+            INativeStaking.Validator memory validatorObj = staking.getValidator(validatorId);
+            assertTrue(bytes(validatorObj.id).length > 0, "Validator should be added");
+            assertEq(uint8(validatorObj.status), uint8(INativeStaking.ValidatorStatus.Enabled), "Validator should be enabled");
+        }
     }
     
     function _testRewardClaiming() private {
@@ -324,7 +381,7 @@ contract NativeStakingE2ETest is Test {
         vm.deal(operator, 5 ether);
         
         vm.prank(operator);
-        staking.completeRewardClaim{value: testRewardAmount}(user3, validatorId, testRewardAmount, false);
+        staking.completeRewardClaim{value: testRewardAmount}(user3, validatorId, false);
         
         // Verify user received rewards
         assertEq(user3.balance, user3BalanceBefore + testRewardAmount, "User should receive reward");
@@ -340,7 +397,7 @@ contract NativeStakingE2ETest is Test {
         staking.setupValidatorMigration(fromValidator, toValidator);
         
         // Warp time forward to allow migration
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(block.timestamp + 2 hours);
         
         // User4 migrates stake
         uint256 stakeBefore = staking.getUserStake(user4, fromValidator).amount;
@@ -400,7 +457,7 @@ contract NativeStakingE2ETest is Test {
         
         // Verify small stakes are rejected
         vm.prank(user6);
-        vm.expectRevert("Amount below minimum");
+        vm.expectRevert(abi.encodeWithSignature("InvalidAmount(uint256,uint256)", 0.15 ether, 0.2 ether));
         staking.stake{value: 0.15 ether}(validatorIds[5]);
         
         // Update time intervals
