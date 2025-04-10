@@ -1,79 +1,73 @@
-# Native Staking Contract Deployment
+# Native Staking Contracts
 
-This section explains how to deploy the NativeStaking contract with the provided deployment script.
+Smart contracts for staking native XFI tokens to CrossFi validators with Oracle integration for MPX conversion.
 
-## Deployment Script
+## Overview
 
-The `DeployNativeStaking.s.sol` script facilitates the deployment of the Native Staking contracts with proper configuration. It sets up the following:
+The Native Staking system allows users to stake their native XFI tokens to validators in the CrossFi network. The system includes:
 
-- Deploys the NativeStaking contract with a TransparentUpgradeableProxy
-- Sets up roles for three addresses:
-  - Admin: 0xee2e617a42Aab5be36c290982493C6CC6C072982
-  - Manager: 0xc35e04979A78630F16e625902283720681f2932e
-  - Operator: 0x79F9860d48ef9dDFaF3571281c033664de05E6f5
-- Configures all time delays with either default values or custom values provided through environment variables
+- **Two-step unstaking** - Initiated by users, completed by operators
+- **Reward claiming** - Two-step process with backend integration
+- **Validator management** - Add, update status, and migrate between validators
+- **Emergency withdrawal** - Safety feature for urgent situations
+- **Oracle integration** - XFI/MPX price conversion
 
-## Required Environment Variables
+## Architecture
 
-Before running the deployment script, set up the following environment variable:
+![System Architecture](./docs/diagrams/system-architecture.png)
 
-```bash
-export DEV_PRIVATE_KEY=your_private_key_without_0x_prefix
-```
+The system consists of three main components:
+- **Core contracts**: NativeStaking for staking operations
+- **Periphery contracts**: UnifiedOracle for price feeds
+- **Libraries**: Utilities for validation and price conversion
 
-This private key will be used to:
-1. Deploy all contracts
-2. Initialize the contracts with the corresponding address as admin
-3. Assign roles to other addresses
+## Documentation
 
-## Running the Deployment
+Detailed documentation is available in the `/docs` directory:
 
-To deploy with default time delay parameters:
+- [System Architecture](./docs/architecture/ARCHITECTURE.md) - Component overview and interactions
+- [Contract Flows](./docs/architecture/FLOWS.md) - Detailed operation flows with diagrams
+- [Deployment Guide](./docs/guides/DEPLOYMENT.md) - Step-by-step deployment instructions
+- [Oracle Integration](./docs/architecture/ORACLE.md) - Price feed and conversion details
+- [Role-Based Access](./docs/guides/ROLES.md) - Role configuration and management
 
-```bash
-forge script script/DeployNativeStaking.s.sol:DeployNativeStaking --broadcast -vvvv
-```
+## Development
 
-To customize the time delay parameters:
+### Prerequisites
 
-```bash
-forge script script/DeployNativeStaking.s.sol:DeployNativeStaking --broadcast -vvvv \
-  --env MIN_STAKE_INTERVAL=3600 \
-  --env MIN_UNSTAKE_INTERVAL=86400 \
-  --env MIN_CLAIM_INTERVAL=43200
-```
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+- Node.js 16+
 
-Replace the values with your desired time intervals in seconds.
+### Setup
 
-## Default Time Parameters
-
-- MIN_STAKE_INTERVAL: 1 hour (3600 seconds)
-- MIN_UNSTAKE_INTERVAL: 1 day (86400 seconds)
-- MIN_CLAIM_INTERVAL: 12 hours (43200 seconds)
-
-## For Testing on a Dev Network
-
-To deploy on a local or development network:
+1. Clone the repository
+2. Copy `.env.example` to `.env` and configure your environment
+3. Install dependencies:
 
 ```bash
-forge script script/DeployNativeStaking.s.sol:DeployNativeStaking --broadcast --rpc-url http://localhost:8545 -vvvv
+forge install
 ```
 
-For a public testnet (like Sepolia):
+### Testing
 
 ```bash
-forge script script/DeployNativeStaking.s.sol:DeployNativeStaking --broadcast --rpc-url $RPC_URL -vvvv
+forge test
 ```
 
-## Important Notes on Roles
+### Deployment
 
-- The deployer address (derived from DEV_PRIVATE_KEY) will be the initial admin
-- The script will assign Manager role to MANAGER_ADDRESS
-- The script will assign Operator role to OPERATOR_ADDRESS
-- If the deployer address is different from ADMIN_ADDRESS, the script will also grant admin role to ADMIN_ADDRESS
+For development deployment:
 
-## Notes
+```bash
+forge script script/DeployNativeStakingDev.s.sol:DeployNativeStakingDev --broadcast --rpc-url $RPC_URL -vvv
+```
 
-- The script deploys a mock Oracle for testing purposes. In production, you'll need to connect to a real Oracle.
-- The deployment uses the Transparent Proxy pattern to allow for future upgrades.
-- After deployment, all specified addresses can manage their respective roles directly through the contract. 
+For production deployment, see the [Deployment Guide](./docs/guides/DEPLOYMENT.md).
+
+## Security
+
+This code is pending audit and is not recommended for production use until a thorough security review has been completed.
+
+## License
+
+MIT 

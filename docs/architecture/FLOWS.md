@@ -1,0 +1,110 @@
+# Contract Operation Flows
+
+This document details the key operational flows in the Native Staking system, illustrating how different components interact to execute specific actions.
+
+## Staking Flow
+
+The process for users to stake XFI tokens to validators:
+
+[![Staking Flow](https://mermaid.ink/img/pako:eNp9ks1qwzAQhF9F7CmF2I5zSGol5NJTTlEPvdiWYgv9YbWykxTj9-jXSZPQQnuwQJ6Z2dmRlwhVLQEhMufv7FgbUOjw_p4nh_f3M08OvoPIqwvY7dq3gRBcaWpQkW9CFih8URS-zF7O8nQDhCB_mYwJNFmJQ-dGw_5iy5HKIWZgfQzXSvYXI8w6mVr0llXHNPv_mekQRV0m5XLXY29qjSbUtgTINGpnI7DXphOTOoH8j8-60Qp5nDnsIO9XTE6QZhoTKE-zvxGSfgLdmZ5nLLs6G5-1GqVLRgLl8AaR91ELNRJsRaziXmntg7Vk8ko-UJSgAUFjqulbgQXzgWKIJXbhQo7bDnWdwWioi52U3CRQg2gMOSiH96qxUIPNi25O-vMNkk5HGo9n9K1pBGewTT-oTi_p?type=png)](https://mermaid.live/edit#pako:eNp9ks1qwzAQhF9F7CmF2I5zSGol5NJTTlEPvdiWYgv9YbWykxTj9-jXSZPQQnuwQJ6Z2dmRlwhVLQEhMufv7FgbUOjw_p4nh_f3M08OvoPIqwvY7dq3gRBcaWpQkW9CFih8URS-zF7O8nQDhCB_mYwJNFmJQ-dGw_5iy5HKIWZgfQzXSvYXI8w6mVr0llXHNPv_mekQRV0m5XLXY29qjSbUtgTINGpnI7DXphOTOoH8j8-60Qp5nDnsIO9XTE6QZhoTKE-zvxGSfgLdmZ5nLLs6G5-1GqVLRgLl8AaR91ELNRJsRaziXmntg7Vk8ko-UJSgAUFjqulbgQXzgWKIJXbhQo7bDnWdwWioi52U3CRQg2gMOSiH96qxUIPNi25O-vMNkk5HGo9n9K1pBGewTT-oTi_p)
+
+1. User initiates staking by calling `stake(validatorId)` with XFI value
+2. NativeStaking validates the validator ID and checks if it's enabled
+3. Contract checks time restrictions (minimum time since last stake)
+4. Oracle converts XFI amount to MPX equivalent for record-keeping
+5. Contract updates user's stake data and validator statistics
+6. Event `Staked(user, validatorId, xfiAmount, mpxAmount)` is emitted
+
+## Unstaking Flow (Two-step Process)
+
+Unstaking requires interaction between the user, backend, and contract:
+
+[![Unstaking Flow](https://mermaid.ink/img/pako:eNp1kstqwzAQRX9F3VUK8SPerE2LNptCVu2muyK3DhWWUPzQSHaTYPz3jOwkTaGzGnTnzMydkZZAldGAAB3TN3qnjSVLGi8vo_7t9fWDRteUMC-Ke7jZDK89zzmiqcmSE2XGC8789Xr9WfT6HmEP5WFgdKbi1I9yMxn2FxsOLJkYtXI2bJRsLrrP_RBd9JKV-yz9_9nJsIqsT8r4nG_xTRprY3lZYs4OuQtsYPaCr5Xpy9Ip67yijMddx_7bUGiQ2b0gm-a5h32WezuCrA0Vo5-IXrLy92s2k5D1JIJM6eIR8vGOXW5xC6KMZ8XzDRbjSmn6xgn1mjKmILR4-qclA05QD3XkEX7iCJp1pX1GqLtkp2Ry5-0t1dwG2yDNHtXCuOrlmMV9ub-Oue3Ozb9AXZyMJ-MPFL9FZPU?type=png)](https://mermaid.live/edit#pako:eNp1kstqwzAQRX9F3VUK8SPerE2LNptCVu2muyK3DhWWUPzQSHaTYPz3jOwkTaGzGnTnzMydkZZAldGAAB3TN3qnjSVLGi8vo_7t9fWDRteUMC-Ke7jZDK89zzmiqcmSE2XGC8789Xr9WfT6HmEP5WFgdKbi1I9yMxn2FxsOLJkYtXI2bJRsLrrP_RBd9JKV-yz9_9nJsIqsT8r4nG_xTRprY3lZYs4OuQtsYPaCr5Xpy9Ip67yijMddx_7bUGiQ2b0gm-a5h32WezuCrA0Vo5-IXrLy92s2k5D1JIJM6eIR8vGOXW5xC6KMZ8XzDRbjSmn6xgn1mjKmILR4-qclA05QD3XkEX7iCJp1pX1GqLtkp2Ry5-0t1dwG2yDNHtXCuOrlmMV9ub-Oue3Ozb9AXZyMJ-MPFL9FZPU)
+
+1. User initiates unstaking by calling `initiateUnstake(validatorId)`
+2. Contract validates time restrictions and sets `inUnstakeProcess = true`
+3. Events `UnstakeInitiated` and `RewardClaimInitiated` are emitted (rewards are always processed with unstaking)
+4. Backend (Operator) monitors events and calls `processRewardAndUnstake()`
+5. Contract verifies conditions and sends XFI (unstake amount + rewards) to user
+6. Events `UnstakeCompleted` and `RewardClaimed` are emitted
+
+## Rewards Claiming Flow
+
+Users can claim rewards independent of unstaking:
+
+[![Rewards Flow](https://mermaid.ink/img/pako:eNp1kc1qwzAQhF9F7KmF2KpzcCMnuYZeemoPRVgOgv1hfnaTYPz2juwmaYHO0TDfzu6OFYKmaAACdFAf-C4dWXLk8faWRR-vr1caXXJYMH6A3W78JXiuK8gTWXJC10UmuPLX63Vb9HIB8JzKA0OSSs7jRdlMw_5ow0HkE5MZueZbLduLx-dtjD56g_JQFv8_O4F1dHNSpvc-p3cjrZ2UVY25cMhd4BLm46Rv7LhSTlnnTUkl3-8592MpGBJ5xsQkFww4FT1NoDtbC2GfhN6g9M-hGJeSzSQiyKXLX7A4nLPLGb9A6MuZeL7RcnwUmj94yr0hRx6EFvfftGTACeqRjjziL3HEHI9yzDxN326oE9Y_4MeGppb9YnbPtHW-Og27cth319EXdwg1Qd1D0_gNxJI_pA?type=png)](https://mermaid.live/edit#pako:eNp1kc1qwzAQhF9F7KmF2KpzcCMnuYZeemoPRVgOgv1hfnaTYPz2juwmaYHO0TDfzu6OFYKmaAACdFAf-C4dWXLk8faWRR-vr1caXXJYMH6A3W78JXiuK8gTWXJC10UmuPLX63Vb9HIB8JzKA0OSSs7jRdlMw_5ow0HkE5MZueZbLduLx-dtjD56g_JQFv8_O4F1dHNSpvc-p3cjrZ2UVY25cMhd4BLm46Rv7LhSTlnnTUkl3-8592MpGBJ5xsQkFww4FT1NoDtbC2GfhN6g9M-hGJeSzSQiyKXLX7A4nLPLGb9A6MuZeL7RcnwUmj94yr0hRx6EFvfftGTACeqRjjziL3HEHI9yzDxN326oE9Y_4MeGppb9YnbPtHW-Og27cth319EXdwg1Qd1D0_gNxJI_pA)
+
+1. User initiates reward claiming by calling `initiateRewardClaim(validatorId)`
+2. Contract validates time restrictions
+3. Event `RewardClaimInitiated` is emitted
+4. Backend (Operator) monitors events and calculates reward amount
+5. Operator calls `completeRewardClaim()` with reward amount
+6. Contract sends rewards to user
+7. Event `RewardClaimed` is emitted
+
+## Emergency Withdrawal Flow
+
+Emergency withdrawal provides a safety mechanism for urgent situations:
+
+[![Emergency Withdrawal](https://mermaid.ink/img/pako:eNp1kctqwzAQRX9F3VUKsSPnwVh2sk2h2-YhFmERBMYP9SO2CcZ_78hOmgLtSiPdOTNzRyMFVBU6QICe6CN9qK2joGj09jbtf7y_P6v-JYU55Q-w3Y4-Pc9xguygaAidaGbInf94PCbLPt0A3EK5Y0gqLR_7Xt1Nh7OHLVsxM-nChdio5XCx-jDUqEctYHnMsv-fnQ6jGMakfHnYtPShNuIo8wIjDwFFCLzAfNSb2shVFFWOXgQ1bntKv5ZCq4n8hYlhvvI4pV3wGLJxNa_8ldgliP9-VuM-YvMJh1yYUjyhOOy9LxVuIJbpzPj1Sovxo9L8yZnvHDnykOb4-lMFB3JQT3zgEX6TI2Z_rMexo65fD1Qb58vtXMHQcl7c7oG22pYv-9o47prPsdtmyTv07blruhNYmOFLUNaOt0cxppYc-uaVtk9EV7txJIJMJ37fGDN8A0CwSwY?type=png)](https://mermaid.live/edit#pako:eNp1kctqwzAQRX9F3VUKsSPnwVh2sk2h2-YhFmERBMYP9SO2CcZ_78hOmgLtSiPdOTNzRyMFVBU6QICe6CN9qK2joGj09jbtf7y_P6v-JYU55Q-w3Y4-Pc9xguygaAidaGbInf94PCbLPt0A3EK5Y0gqLR_7Xt1Nh7OHLVsxM-nChdio5XCx-jDUqEctYHnMsv-fnQ6jGMakfHnYtPShNuIo8wIjDwFFCLzAfNSb2shVFFWOXgQ1bntKv5ZCq4n8hYlhvvI4pV3wGLJxNa_8ldgliP9-VuM-YvMJh1yYUjyhOOy9LxVuIJbpzPj1Sovxo9L8yZnvHDnykOb4-lMFB3JQT3zgEX6TI2Z_rMexo65fD1Qb58vtXMHQcl7c7oG22pYv-9o47prPsdtmyTv07blruhNYmOFLUNaOt0cxppYc-uaVtk9EV7txJIJMJ37fGDN8A0CwSwY)
+
+1. User initiates emergency withdrawal by calling `initiateEmergencyWithdrawal()`
+2. Contract sets a flag marking the user's request
+3. Event `EmergencyWithdrawalInitiated` is emitted
+4. Backend (Operator) processes the request and determines total amount
+5. Operator calls `completeEmergencyWithdrawal()`
+6. Contract clears all user stakes and sends total amount to user
+7. Event `EmergencyWithdrawalCompleted` is emitted
+
+## Validator Migration Flow
+
+Validator migration allows moving stakes between validators:
+
+[![Validator Migration](https://mermaid.ink/img/pako:eNp9ks9OwzAMxl8l8mmT2m7tAW26St04ASdOE1IXIqXtH8VJ2VD17jhd1wkQJzv5fT8n_uw1QlVLQMRs-JO9aGMlGnT4eEijj8_PF4y-BTzL4gnO5_2F57mA0dRIJK7MRM6537puNwvSCsDIyvfsSKr52PXqYSrsbVqylRORWbkWrVrPLqv327g2elOXx1r8_-x0GEU3J2d6x8ewD2msRe3xwBgZNsyd4wNXCVtjTCfc55IzBncd0c9JytrLaCHrTmO2VtAjlFFv8uCYylP3aLaRLhOdSctXjsqaZmtBmF1dPnB6PHtrC_7ggqpn5vlGlvmgCvkhae5NMmQROHv-p0UALrCc6JYj3tORU3rUY9Ni1yUtrYUNN6XCsZXafzlLd2q1ufJpd43H6s_ue93-7brhB-AcSbM?type=png)](https://mermaid.live/edit#pako:eNp9ks9OwzAMxl8l8mmT2m7tAW26St04ASdOE1IXIqXtH8VJ2VD17jhd1wkQJzv5fT8n_uw1QlVLQMRs-JO9aGMlGnT4eEijj8_PF4y-BTzL4gnO5_2F57mA0dRIJK7MRM6537puNwvSCsDIyvfsSKr52PXqYSrsbVqylRORWbkWrVrPLqv327g2elOXx1r8_-x0GEU3J2d6x8ewD2msRe3xwBgZNsyd4wNXCVtjTCfc55IzBncd0c9JytrLaCHrTmO2VtAjlFFv8uCYylP3aLaRLhOdSctXjsqaZmtBmF1dPnB6PHtrC_7ggqpn5vlGlvmgCvkhae5NMmQROHv-p0UALrCc6JYj3tORU3rUY9Ni1yUtrYUNN6XCsZXafzlLd2q1ufJpd43H6s_ue93-7brhB-AcSbM)
+
+1. Manager sets up migration by calling `setupValidatorMigration(oldValidatorId, newValidatorId)`
+2. Old validator status is changed to `Deprecated`
+3. User calls `migrateStake(fromValidatorId, toValidatorId)` to move their stake
+4. Contract validates validator statuses (old must be Deprecated, new must be Enabled)
+5. Contract transfers stake data and updates validator statistics
+6. Event `StakeMigrated` is emitted
+
+## Backend Integration Flow
+
+The system relies on backend integration for two-step operations:
+
+[![Backend Integration](https://mermaid.ink/img/pako:eNqFk81uwjAMhV8l8gWkUmDbkBoKYpeNE-wxjN1CpJaSn6YpVRHvPieFFVpUdrLl7_jYsX3JQdYCCJg9f-N7pZVAjZpfr5P-9eXlxPqXFNZ5foP9Pvz0PVdnNdVCourE0ocgGAzCZBUXMIPyxJCUil_7QT51xgOHDeswMUmrzMOVcrRppfU-7lG3UfJjnv3_7uQxim4fVa4JnrN8W-a2qJRRaH1EyCUa3zuXJdbKVrxcG55BXa5ZXEwN5doJZ5QcY87WCGaGMhwd0_J6ljY9kEljWpOKzpwUFfVQSGjVzR0k2T7ayuAeRJHMlec9LRePUsVvnHBfC2aMBRVP_zRnQA6rhfY-xV_lykWwCJZtmAY-tTQ67sMWrI5asF3Db7pRu_KoQdl_DscQs8K-OlQPIBvsJVyQNv7yDTnxAz9qzTsaBuGQhnEY9mm4mYbTafPOxVfXofkw0MQ_z_YnXJbhGdNQz_4?type=png)](https://mermaid.live/edit#pako:eNqFk81uwjAMhV8l8gWkUmDbkBoKYpeNE-wxjN1CpJaSn6YpVRHvPieFFVpUdrLl7_jYsX3JQdYCCJg9f-N7pZVAjZpfr5P-9eXlxPqXFNZ5foP9Pvz0PVdnNdVCourE0ocgGAzCZBUXMIPyxJCUil_7QT51xgOHDeswMUmrzMOVcrRppfU-7lG3UfJjnv3_7uQxim4fVa4JnrN8W-a2qJRRaH1EyCUa3zuXJdbKVrxcG55BXa5ZXEwN5doJZ5QcY87WCGaGMhwd0_J6ljY9kEljWpOKzpwUFfVQSGjVzR0k2T7ayuAeRJHMlec9LRePUsVvnHBfC2aMBRVP_zRnQA6rhfY-xV_lykWwCJZtmAY-tTQ67sMWrI5asF3Db7pRu_KoQdl_DscQs8K-OlQPIBvsJVyQNv7yDTnxAz9qzTsaBuGQhnEY9mm4mYbTafPOxVfXofkw0MQ_z_YnXJbhGdNQz_4)
+
+1. Contract emits events on user actions (UnstakeInitiated, RewardClaimInitiated)
+2. Backend monitors blockchain for events
+3. Backend processes events and retrieves additional data (validator info)
+4. Backend calls appropriate functions to complete operations
+5. Contract validates operations and updates state
+6. Contract emits completion events
+
+## Oracle Price Feed Flow
+
+Price conversion relies on oracle data:
+
+[![Oracle Flow](https://mermaid.ink/img/pako:eNp9ks1uwjAMx19FztWktt14QCktuHPh1OO0KnNCmrRf2rRlqHr3JW1AICGdbPn3_2PHnsVQVAoYYTj-5edSaUma9N1f2_7h9fWL7S897KR8guNxeHBdnzEYGiRFi-J7aZo2TdvDOllBj7A9McyLUn8OvXzrLq4Wdq7l3GhC0_KiPavhbLU5tHZr7JKVWyb-f3YyjCKfkgrleqvOUmrT_Y-JqTB0beAO8zZeaN1dR4CkdJ6LnSgO5k_TUqiRyY0jm-UtE5vk5tmYiKwNRlSumT2y4vLtWM-WZDuJKVpR6yeW2-XHWoMPsfB7tnyl1XhEUX_ixGeNBrmiwrX3TUdGNKKcceARXuiMKZzrxLfYDfOeKu30q1MF7OOb8Z_WUc0u1jvr2tEeGvP4FkydnOuGRyNgSL8?type=png)](https://mermaid.live/edit#pako:eNp9ks1uwjAMx19FztWktt14QCktuHPh1OO0KnNCmrRf2rRlqHr3JW1AICGdbPn3_2PHnsVQVAoYYTj-5edSaUma9N1f2_7h9fWL7S897KR8guNxeHBdnzEYGiRFi-J7aZo2TdvDOllBj7A9McyLUn8OvXzrLq4Wdq7l3GhC0_KiPavhbLU5tHZr7JKVWyb-f3YyjCKfkgrleqvOUmrT_Y-JqTB0beAO8zZeaN1dR4CkdJ6LnSgO5k_TUqiRyY0jm-UtE5vk5tmYiKwNRlSumT2y4vLtWM-WZDuJKVpR6yeW2-XHWoMPsfB7tnyl1XhEUX_ixGeNBrmiwrX3TUdGNKKcceARXuiMKZzrxLfYDfOeKu30q1MF7OOb8Z_WUc0u1jvr2tEeGvP4FkydnOuGRyNgSL8)
+
+1. Contract needs to convert XFI to MPX during operations
+2. NativeStaking calls PriceConverter library
+3. PriceConverter uses UnifiedOracle for price data
+4. UnifiedOracle checks DIA Oracle for XFI/USD price
+5. If DIA Oracle price is unavailable or stale, fallback price is used
+6. Conversion calculation is performed and returned to NativeStaking
+
+## Time Restriction Flow
+
+Operations have time-based restrictions to prevent abuse:
+
+[![Time Restrictions](https://mermaid.ink/img/pako:eNp9kk9PAjEQxb9Kc9ZkC-wfD2Vlt-GG8aRHwmGb7raJ_dPMdBdC-O5OC4KKcprmvd-bvOnJCpSNBEYYxW_8RUllFRoKr69Z8vT4-MTi1xnspXyA_X5xn2U-YzCd0mJwlAFvzVTw4WKRi1fLc0g2B6iXKxh0ZG87_Z-gGPF2H7NA2ajbMNFVZlg3_Eiayc0sV2q0MVqfwzVSWJtlUKkdYaYuWfOt8aL6Wgj82cOLX6-71h7oT7rDe2j1e0E2ZlPxNW4cHdnkUCv7TBYTNtyGjcZ_bqJVA7NbR7vU_Zx4jHnLwiEkbaIY9ULwBSu_vgnbSMh5OV2zUhc3kB2u0fwi3oIs0pl5vtJq2osUjxzxVKJBLqgQe9-gIIKZcsCBB_zWxkz3W-rbSKGf95Sa7qMPBtZqU78Z-Wdca-1C6SfhurELlfZ2Vpi6lCaFyGc-GEYfxjtUkA?type=png)](https://mermaid.live/edit#pako:eNp9kk9PAjEQxb9Kc9ZkC-wfD2Vlt-GG8aRHwmGb7raJ_dPMdBdC-O5OC4KKcprmvd-bvOnJCpSNBEYYxW_8RUllFRoKr69Z8vT4-MTi1xnspXyA_X5xn2U-YzCd0mJwlAFvzVTw4WKRi1fLc0g2B6iXKxh0ZG87_Z-gGPF2H7NA2ajbMNFVZlg3_Eiayc0sV2q0MVqfwzVSWJtlUKkdYaYuWfOt8aL6Wgj82cOLX6-71h7oT7rDe2j1e0E2ZlPxNW4cHdnkUCv7TBYTNtyGjcZ_bqJVA7NbR7vU_Zx4jHnLwiEkbaIY9ULwBSu_vgnbSMh5OV2zUhc3kB2u0fwi3oIs0pl5vtJq2osUjxzxVKJBLqgQe9-gIIKZcsCBB_zWxkz3W-rbSKGf95Sa7qMPBtZqU78Z-Wdca-1C6SfhurELlfZ2Vpi6lCaFyGc-GEYfxjtUkA)
+
+1. User attempts an operation (stake, unstake, claim)
+2. Contract checks appropriate time restrictions for that operation
+3. If not enough time has passed, the operation is reverted with TimeTooShort error
+4. If conditions are met, operation proceeds
+5. Time values are updated for future operations
+
+For more detailed information about these flows and their implementation, refer to the contract source code and other documentation sections. 
