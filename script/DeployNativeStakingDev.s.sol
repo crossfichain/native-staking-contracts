@@ -91,6 +91,11 @@ contract DeployNativeStakingDev is Script {
 
         // Cast to Oracle for easier interaction
         UnifiedOracle oracle = UnifiedOracle(address(oracleProxy));
+        
+        // Set fallback price in Oracle
+        uint256 xfiPriceInOracle = 9 * 10**16; // $0.09 with 18 decimals
+        oracle.setPrice("XFI", xfiPriceInOracle);
+        console.log("Set XFI fallback price in Oracle to:", xfiPriceInOracle);
 
         // Deploy NativeStaking Proxy
         console.log("Deploying NativeStaking Proxy...");
@@ -135,27 +140,27 @@ contract DeployNativeStakingDev is Script {
         
         // Grant manager role to all addresses
         nativeStaking.grantRole(managerRole, ADMIN_ADDRESS);
-        console.log("Granted MANAGER_ROLE to ADMIN:", ADMIN_ADDRESS);
         nativeStaking.grantRole(managerRole, MANAGER_ADDRESS);
-        console.log("Granted MANAGER_ROLE to MANAGER:", MANAGER_ADDRESS);
         nativeStaking.grantRole(managerRole, OPERATOR_ADDRESS);
-        console.log("Granted MANAGER_ROLE to OPERATOR:", OPERATOR_ADDRESS);
+        // console.log("Granted MANAGER_ROLE to ADMIN:", ADMIN_ADDRESS);
+        // console.log("Granted MANAGER_ROLE to MANAGER:", MANAGER_ADDRESS);
+        // console.log("Granted MANAGER_ROLE to OPERATOR:", OPERATOR_ADDRESS);
         
         // Grant operator role to all addresses
         nativeStaking.grantRole(operatorRole, ADMIN_ADDRESS);
-        console.log("Granted OPERATOR_ROLE to ADMIN:", ADMIN_ADDRESS);
         nativeStaking.grantRole(operatorRole, MANAGER_ADDRESS);
-        console.log("Granted OPERATOR_ROLE to MANAGER:", MANAGER_ADDRESS);
         nativeStaking.grantRole(operatorRole, OPERATOR_ADDRESS);
-        console.log("Granted OPERATOR_ROLE to OPERATOR:", OPERATOR_ADDRESS);
+        // console.log("Granted OPERATOR_ROLE to ADMIN:", ADMIN_ADDRESS);
+        // console.log("Granted OPERATOR_ROLE to MANAGER:", MANAGER_ADDRESS);
+        // console.log("Granted OPERATOR_ROLE to OPERATOR:", OPERATOR_ADDRESS);
         
         // Grant admin role to all addresses
         nativeStaking.grantRole(adminRole, ADMIN_ADDRESS);
-        console.log("Granted ADMIN_ROLE to ADMIN:", ADMIN_ADDRESS);
         nativeStaking.grantRole(adminRole, MANAGER_ADDRESS);
-        console.log("Granted ADMIN_ROLE to MANAGER:", MANAGER_ADDRESS);
         nativeStaking.grantRole(adminRole, OPERATOR_ADDRESS);
-        console.log("Granted ADMIN_ROLE to OPERATOR:", OPERATOR_ADDRESS);
+        // console.log("Granted ADMIN_ROLE to ADMIN:", ADMIN_ADDRESS);
+        // console.log("Granted ADMIN_ROLE to MANAGER:", MANAGER_ADDRESS);
+        // console.log("Granted ADMIN_ROLE to OPERATOR:", OPERATOR_ADDRESS);
 
 
 
