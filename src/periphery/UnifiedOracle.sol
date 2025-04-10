@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+/**
+ * @notice External imports
+ */
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
@@ -18,24 +21,36 @@ contract UnifiedOracle is
     AccessControlUpgradeable, 
     PausableUpgradeable 
 {
-    // Roles
+    /**
+     * @dev Roles
+     */
     bytes32 public constant ORACLE_UPDATER_ROLE = keccak256("ORACLE_UPDATER_ROLE");
     
-    // Constants
+    /**
+     * @dev Constants
+     */
     uint256 private constant PRICE_FRESHNESS_THRESHOLD = 1 hours;
     uint256 private constant DIA_PRECISION = 1e8;  // DIA uses 8 decimals
     uint256 private constant PRICE_PRECISION = 1e18; // We use 18 decimals
     
-    // Price oracle
+    /**
+     * @dev Price oracle
+     */
     IDIAOracle private _diaOracle;
     
-    // MPX price (MPX/USD with 18 decimals)
+    /**
+     * @dev MPX price (MPX/USD with 18 decimals)
+     */
     uint256 private _mpxPrice;
     
-    // Fallback prices (in case DIA oracle is unavailable)
+    /**
+     * @dev Fallback prices (in case DIA oracle is unavailable)
+     */
     mapping(string => uint256) private _fallbackPrices;
     
-    // Events
+    /**
+     * @dev Events
+     */
     event PriceUpdated(string indexed symbol, uint256 price);
     
     /**
@@ -94,10 +109,14 @@ contract UnifiedOracle is
         override 
         returns (uint256 price, uint256 timestamp) 
     {
-        // Try to get price from DIA oracle
+        /**
+         * @dev Try to get price from DIA oracle
+         */
         (uint128 diaPrice, uint128 diaTimestamp) = _diaOracle.getValue("XFI/USD");
         
-        // Check if price is fresh (within threshold)
+        /**
+         * @dev Check if price is fresh (within threshold)
+         */
         if (diaPrice > 0 && block.timestamp - diaTimestamp <= PRICE_FRESHNESS_THRESHOLD) {
             // Convert from DIA precision (8 decimals) to our precision (18 decimals)
             price = uint256(diaPrice) * (PRICE_PRECISION / DIA_PRECISION);
@@ -134,8 +153,6 @@ contract UnifiedOracle is
         (uint256 xfiPrice, ) = getXFIPrice();
         if (xfiPrice == 0) return 0;
         
-        // Convert XFI to MPX using the formula:
-        // mpxAmount = xfiAmount * xfiPrice / mpxPrice
         return (xfiAmount * xfiPrice) / _mpxPrice;
     }
     

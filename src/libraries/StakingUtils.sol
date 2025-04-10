@@ -6,11 +6,15 @@ pragma solidity 0.8.26;
  * @dev Library with utility functions for the NativeStaking contract
  */
 library StakingUtils {
-    // Constants
+    /**
+     * @dev Constants
+     */
     string private constant VALIDATOR_PREFIX = "mxvaloper";
     string private constant WALLET_PREFIX = "mx";
     
-    // Staking settings
+    /**
+     * @dev Staking settings
+     */
     uint256 private constant MIN_STAKE_COOLDOWN = 1 hours;
     uint256 private constant MIN_VALIDATOR_ID_LENGTH = 45;
     uint256 private constant MAX_VALIDATOR_ID_LENGTH = 60;

@@ -1,17 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/* ====== EXTERNAL IMPORTS ====== */
+/**
+ * @notice External imports
+ */
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-/* ====== INTERFACES IMPORTS ====== */
+/**
+ * @notice Interface imports
+ */
 import "../interfaces/INativeStaking.sol";
 import "../interfaces/IOracle.sol";
 
-/* ====== LIBRARIES IMPORTS ====== */
+/**
+ * @notice Library imports
+ */
 import "../libraries/StakingUtils.sol";
 import "../libraries/ValidatorAddressUtils.sol";
 import "../libraries/PriceConverter.sol";
@@ -27,8 +33,9 @@ contract NativeStaking is
     PausableUpgradeable,
     ReentrancyGuardUpgradeable
 {
-    /* ======== STATE ======== */
-
+    /**
+     * @dev State variables
+     */
     // Role definitions
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -60,12 +67,17 @@ contract NativeStaking is
     uint256 private _minimumStakeAmount;
     uint256 private _minClaimAmount;
 
-    /* ======== ERRORS ======== */
+    /**
+     * @dev Error definitions are in the interface
+     */
 
-    /* ======== EVENTS ======== */
+    /**
+     * @dev Event definitions are in the interface
+     */
 
-    /* ======== CONSTRUCTOR AND INIT ======== */
-
+    /**
+     * @dev Constructor and initialization
+     */
     /**
      * @dev Initializes the contract
      * @param admin Address of the admin who will have DEFAULT_ADMIN_ROLE
@@ -92,8 +104,9 @@ contract NativeStaking is
         _minClaimInterval = 1 days;
     }
 
-    /* ======== MODIFIERS ======== */
-
+    /**
+     * @dev Modifiers
+     */
     /**
      * @dev Modifier to check if validator ID is valid
      */
@@ -223,8 +236,9 @@ contract NativeStaking is
         _;
     }
 
-    /* ======== EXTERNAL/PUBLIC ======== */
-
+    /**
+     * @dev External and public functions
+     */
     /**
      * @dev Stakes native XFI to a validator
      * @param validatorId The validator identifier
@@ -458,8 +472,9 @@ contract NativeStaking is
      */
     receive() external payable {}
 
-    /* ======== ADMIN ======== */
-
+    /**
+     * @dev Admin functions
+     */
     /**
      * @dev Sets validator status
      * @param validatorId The validator identifier
@@ -617,13 +632,14 @@ contract NativeStaking is
         );
     }
 
-    /* ======== OPERATOR FUNCTIONS ======== */
-
+    /**
+     * @dev Operator functions
+     */
     /**
      * @dev Completes an unstake process
      * @param staker The address of the staker
      * @param validatorId The validator identifier
-     * @param amount The amount to unstake
+     * @param amount Amount to unstake
      */
     function completeUnstake(
         address staker,
@@ -865,8 +881,9 @@ contract NativeStaking is
         }
     }
 
-    /* ======== VIEW ======== */
-
+    /**
+     * @dev View functions
+     */
     /**
      * @dev Gets the Oracle address
      * @return address The oracle address
@@ -1128,12 +1145,13 @@ contract NativeStaking is
         );
     }
 
-    /* ======== INTERNAL ======== */
-
+    /**
+     * @dev Internal functions
+     */
     /**
      * @dev Removes a validator from a user's list
-     * @param staker The address of the staker
-     * @param validatorId The validator identifier to remove
+     * @param staker The staker address
+     * @param validatorId The validator ID to remove
      */
     function _removeValidatorFromUserList(
         address staker,
@@ -1151,5 +1169,48 @@ contract NativeStaking is
                 break;
             }
         }
+    }
+
+    /**
+     * @dev Records a staking action
+     * @param staker Address of the staker
+     * @param validatorId Validator ID
+     * @param amount Amount staked
+     * @param mpxAmount MPX amount
+     */
+    function _recordStake(
+        address staker,
+        string calldata validatorId,
+        uint256 amount,
+        uint256 mpxAmount
+    ) private {
+        string memory normalizedId = StakingUtils.normalizeValidatorId(
+            validatorId
+        );
+        UserStake storage userStake = _userStakes[staker][normalizedId];
+
+        userStake.amount += amount;
+        userStake.mpxAmount += mpxAmount;
+        userStake.stakedAt = block.timestamp;
+        userStake.lastClaimedAt = block.timestamp;
+
+        _validators[normalizedId].totalStaked += amount;
+        if (bytes(_validators[normalizedId].id).length == 0) {
+            _validators[normalizedId] = Validator({
+                id: normalizedId,
+                status: ValidatorStatus.Enabled,
+                totalStaked: 0,
+                uniqueStakers: 0
+            });
+
+            _validatorIds.push(normalizedId);
+
+            emit ValidatorAdded(
+                normalizedId,
+                true
+            );
+        }
+
+        _userTotalStaked[staker] += amount;
     }
 }
