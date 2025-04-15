@@ -276,12 +276,8 @@ contract NativeStaking is
         userStake.amount += msg.value;
         userStake.mpxAmount += mpxAmount;
         userStake.stakedAt = block.timestamp;
-        userStake.lastClaimedAt = block.timestamp;
-
-        if (isNewStake) {
-            userStake.lastClaimedAt = 0;
-        }
-
+        
+        
         _validators[normalizedId].totalStaked += msg.value;
         if (isNewStake) {
             _validators[normalizedId].uniqueStakers++;
@@ -454,9 +450,10 @@ contract NativeStaking is
         oldStake.amount = 0;
         oldStake.stakedAt = 0;
         oldStake.mpxAmount = 0;
-        oldStake.lastClaimedAt = 0;
+        oldStake.lastClaimInitiatedAt = 0;
         oldStake.inUnstakeProcess = false;
-        oldStake.lastUnstakedAt = 0;
+        oldStake.lastUnstakeInitiatedAt = 0;
+oldStake.unstakeAmount = 0;
 
         emit StakeMigrated(
             msg.sender,
@@ -545,7 +542,7 @@ contract NativeStaking is
         address oracleAddress
     ) external override onlyRole(MANAGER_ROLE) {
         if (oracleAddress == address(0)) {
-            revert InvalidAmount(0, 1);
+            revert ZeroAddress();
         }
         _oracle = IOracle(oracleAddress);
     }
@@ -714,7 +711,7 @@ contract NativeStaking is
         validatorExists(validatorId)
     {
         if (msg.value == 0) {
-            revert InvalidAmount(0, 1);
+            revert InsufficientRewards(msg.value, _minimumStakeAmount);
         }
 
         string memory normalizedId = StakingUtils.normalizeValidatorId(
@@ -733,12 +730,12 @@ contract NativeStaking is
         uint256 rewardAmount = msg.value;
         userStake.lastClaimedAt = block.timestamp;
 
-        emit RewardClaimed(staker, normalizedId, rewardAmount);
-
         (bool success, ) = staker.call{value: rewardAmount}("");
         if (!success) {
             revert TransferFailed();
         }
+
+        emit RewardClaimed(staker, normalizedId, rewardAmount);
     }
 
     /**
@@ -783,12 +780,12 @@ contract NativeStaking is
 
         uint256 mpxAmount = PriceConverter.toMPX(_oracle, amount);
 
-        emit EmergencyWithdrawalCompleted(staker, amount, mpxAmount);
-
         (bool success, ) = staker.call{value: amount}("");
         if (!success) {
             revert TransferFailed();
         }
+
+        emit EmergencyWithdrawalCompleted(staker, amount, mpxAmount);
     }
 
     /**

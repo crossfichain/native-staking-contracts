@@ -29,7 +29,8 @@ interface INativeStaking {
     error MigrationTimeError();
     error UnauthorizedRole(bytes32 role);
     error InsufficientRewards(uint256 provided, uint256 required);
-
+    error ZeroAddress();
+    
     /**
      * @dev Validator status enum
      */
