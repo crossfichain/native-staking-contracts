@@ -475,7 +475,8 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
         claimUnlockTime = lastTimeCheck + _minClaimInterval;
 
         // Determine available actions
-        canStake = userStake.amount == 0 && 
+        canStake = userStake.amount > 0 && 
+            !userStake.inUnstakeProcess &&
             block.timestamp >= stakeUnlockTime;
 
         canUnstake = userStake.amount > 0 &&
