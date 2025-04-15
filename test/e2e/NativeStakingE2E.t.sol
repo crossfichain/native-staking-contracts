@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
-import "../../src/core/NativeStaking.sol";
+import "../../src/NativeStaking.sol";
 import "../../src/interfaces/INativeStaking.sol";
 import "../mocks/MockOracle.sol";
 
@@ -335,7 +335,7 @@ contract NativeStakingE2ETest is Test {
         // Verify unstake initiated
         INativeStaking.UserStake memory userStake = staking.getUserStake(user1, validatorId);
         assertTrue(userStake.inUnstakeProcess, "Should be in unstake process");
-        assertGt(userStake.lastUnstakedAt, 0, "Unstake initiated timestamp should be set");
+        assertGt(userStake.lastUnstakeInitiatedAt, 0, "Unstake initiated timestamp should be set");
         
         // Verify the full amount is set for unstaking
         (bool inProcess, uint256 unstakeAmount) = staking.getUnstakeStatus(user1, validatorId);

@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
-import "../../src/core/NativeStaking.sol";
+import "../../src/NativeStaking.sol";
 import "../../src/interfaces/INativeStaking.sol";
 import "../mocks/MockOracle.sol";
 
