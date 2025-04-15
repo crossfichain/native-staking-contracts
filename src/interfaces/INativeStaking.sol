@@ -30,7 +30,7 @@ interface INativeStaking {
     error UnauthorizedRole(bytes32 role);
     error InsufficientRewards(uint256 provided, uint256 required);
     error ZeroAddress();
-    
+
     /**
      * @dev Validator status enum
      */
@@ -57,10 +57,10 @@ interface INativeStaking {
         uint256 amount;
         uint256 mpxAmount;
         uint256 stakedAt;
-        uint256 lastClaimedAt;  // Timestamp when rewards were last claimed
-        bool inUnstakeProcess;
-        uint256 lastUnstakedAt; // Timestamp when unstake was initiated
+        uint256 lastClaimInitiatedAt;  // Timestamp when rewards were last claimed
+        uint256 lastUnstakeInitiatedAt; // Timestamp when unstake was initiated
         uint256 unstakeAmount;      // Amount requested for unstake
+        bool inUnstakeProcess;
     }
 
     // Events

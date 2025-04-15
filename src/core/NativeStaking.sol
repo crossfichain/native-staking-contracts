@@ -147,7 +147,7 @@ contract NativeStaking is
     }
 
     /**
-     * @dev Modifier to check if enough time has passed since last stake
+     * @dev Modifier to check if enough time has passed since last stake and last completed unstake
      */
     modifier stakeTimeRestriction(string calldata validatorId) {
         UserStake storage userStake = _userStakes[msg.sender][validatorId];
@@ -159,10 +159,10 @@ contract NativeStaking is
                 );
             }
         }
-        if (block.timestamp < userStake.lastUnstakedAt + _minStakeInterval) {
+        if (block.timestamp < userStake.lastUnstakeInitiatedAt + _minStakeInterval) {
             revert TimeTooShort(
                 _minStakeInterval,
-                block.timestamp - userStake.lastUnstakedAt
+                block.timestamp - userStake.lastUnstakeInitiatedAt
             );
         }
         _;
@@ -186,8 +186,8 @@ contract NativeStaking is
             );
         }
 
-        uint256 lastTimeCheck = userStake.lastUnstakedAt > 0
-            ? userStake.lastUnstakedAt
+        uint256 lastTimeCheck = userStake.lastUnstakeInitiatedAt > 0
+            ? userStake.lastUnstakeInitiatedAt
             : userStake.stakedAt;
         if (block.timestamp < lastTimeCheck + _minUnstakeInterval) {
             revert TimeTooShort(
@@ -199,7 +199,7 @@ contract NativeStaking is
     }
 
     /**
-     * @dev Modifier to check if enough time has passed since last stake to allow reward claim
+     * @dev Modifier to check if enough time has passed since last stake, last unstake or last claim to allow reward claim
      */
     modifier claimTimeRestriction(string calldata validatorId) {
         string memory normalizedId = StakingUtils.normalizeValidatorId(
@@ -209,9 +209,25 @@ contract NativeStaking is
         if (userStake.amount == 0) {
             revert NoStakeFound();
         }
+        if (block.timestamp < userStake.stakedAt + _minClaimInterval) {
+            revert TimeTooShort(
+                _minClaimInterval,
+                block.timestamp - userStake.stakedAt
+            );
+        }
 
-        uint256 lastTimeCheck = userStake.lastClaimedAt > 0
-            ? userStake.lastClaimedAt
+        uint256 lastTimeCheck = userStake.lastUnstakeInitiatedAt > 0
+            ? userStake.lastUnstakeInitiatedAt
+            : userStake.stakedAt;
+        if (block.timestamp < lastTimeCheck + _minClaimInterval) {
+            revert TimeTooShort(
+                _minClaimInterval,
+                block.timestamp - lastTimeCheck
+            );
+        }
+
+        lastTimeCheck = userStake.lastClaimInitiatedAt > 0
+            ? userStake.lastClaimInitiatedAt
             : userStake.stakedAt;
         if (block.timestamp < lastTimeCheck + _minClaimInterval) {
             revert TimeTooShort(
@@ -276,8 +292,8 @@ contract NativeStaking is
         userStake.amount += msg.value;
         userStake.mpxAmount += mpxAmount;
         userStake.stakedAt = block.timestamp;
-        
-        
+
+
         _validators[normalizedId].totalStaked += msg.value;
         if (isNewStake) {
             _validators[normalizedId].uniqueStakers++;
@@ -324,7 +340,6 @@ contract NativeStaking is
         }
 
         userStake.inUnstakeProcess = true;
-        userStake.lastUnstakedAt = block.timestamp;
         userStake.unstakeAmount = amount;
 
         emit RewardClaimInitiated(msg.sender, normalizedId);
@@ -332,7 +347,7 @@ contract NativeStaking is
     }
 
     /**
-     * @dev Initiates reward claim for a validator
+     * @dev Let the User to init Claim that will be completed by operator 
      * @param validatorId The validator identifier
      */
     function initiateRewardClaim(
@@ -355,7 +370,7 @@ contract NativeStaking is
         );
 
         UserStake storage userStake = _userStakes[msg.sender][normalizedId];
-        userStake.lastClaimedAt = block.timestamp;
+        userStake.lastClaimInitiatedAt = block.timestamp;
         emit RewardClaimInitiated(msg.sender, normalizedId);
     }
 
@@ -434,7 +449,7 @@ contract NativeStaking is
         newStake.amount += migrationAmount;
         newStake.mpxAmount += mpxAmount;
         newStake.stakedAt = block.timestamp;
-        newStake.lastClaimedAt = 0;
+        newStake.lastClaimInitiatedAt = 0;
 
         _validators[normalizedToId].totalStaked += migrationAmount;
         if (isNewStake) {
@@ -453,7 +468,7 @@ contract NativeStaking is
         oldStake.lastClaimInitiatedAt = 0;
         oldStake.inUnstakeProcess = false;
         oldStake.lastUnstakeInitiatedAt = 0;
-oldStake.unstakeAmount = 0;
+        oldStake.unstakeAmount = 0;
 
         emit StakeMigrated(
             msg.sender,
@@ -672,7 +687,6 @@ oldStake.unstakeAmount = 0;
         userStake.amount -= amount;
         userStake.mpxAmount -= mpxAmountToUnstake;
         userStake.inUnstakeProcess = false;
-        userStake.lastUnstakedAt = block.timestamp;
         userStake.unstakeAmount = 0;
 
         _validators[normalizedId].totalStaked -= amount;
@@ -728,7 +742,6 @@ oldStake.unstakeAmount = 0;
         }
 
         uint256 rewardAmount = msg.value;
-        userStake.lastClaimedAt = block.timestamp;
 
         (bool success, ) = staker.call{value: rewardAmount}("");
         if (!success) {
@@ -769,9 +782,9 @@ oldStake.unstakeAmount = 0;
                 userStake.amount = 0;
                 userStake.stakedAt = 0;
                 userStake.mpxAmount = 0;
-                userStake.lastClaimedAt = 0;
+                userStake.lastClaimInitiatedAt = 0;
                 userStake.inUnstakeProcess = false;
-                userStake.lastUnstakedAt = 0;
+                userStake.lastUnstakeInitiatedAt = 0;
             }
         }
 
@@ -835,7 +848,6 @@ oldStake.unstakeAmount = 0;
             }
 
             // Update lastClaimedAt timestamp when claiming rewards
-            userStake.lastClaimedAt = block.timestamp;
 
             emit RewardClaimed(staker, normalizedId, rewardAmount);
         }
@@ -843,7 +855,6 @@ oldStake.unstakeAmount = 0;
         userStake.amount -= unstakeAmount;
         userStake.mpxAmount -= mpxAmountToUnstake;
         userStake.inUnstakeProcess = false;
-        userStake.lastUnstakedAt = block.timestamp;
         userStake.unstakeAmount = 0;
 
         _validators[normalizedId].totalStaked -= unstakeAmount;
@@ -1093,28 +1104,28 @@ oldStake.unstakeAmount = 0;
 
         // Calculate stake unlock time based on most recent stake/unstake
         uint256 stakedAtUnlock = userStake.stakedAt + _minStakeInterval;
-        uint256 unstakedAtUnlock = userStake.lastUnstakedAt + _minStakeInterval;
+        uint256 unstakedAtUnlock = userStake.lastUnstakeInitiatedAt + _minStakeInterval;
         stakeUnlockTime = stakedAtUnlock > unstakedAtUnlock 
             ? stakedAtUnlock 
             : unstakedAtUnlock;
         
         // Calculate unstake unlock time
         if (!userStake.inUnstakeProcess) {
-            uint256 lastUnstakeUnlock = userStake.lastUnstakedAt + _minUnstakeInterval;
+            uint256 lastUnstakeUnlock = userStake.lastUnstakeInitiatedAt + _minUnstakeInterval;
             uint256 lastStakeUnlock = userStake.stakedAt + _minUnstakeInterval;
             unstakeUnlockTime = lastUnstakeUnlock > lastStakeUnlock 
                 ? lastUnstakeUnlock 
                 : lastStakeUnlock;
         } else {
-            unstakeUnlockTime = userStake.lastUnstakedAt + 
+            unstakeUnlockTime = userStake.lastUnstakeInitiatedAt + 
                 AVG_BOND_DURATION + 
                 _minStakeInterval + 
                 _minUnstakeInterval;
         }
 
         // Calculate claim unlock time
-        uint256 lastTimeCheck = userStake.lastClaimedAt > 0 
-            ? userStake.lastClaimedAt 
+        uint256 lastTimeCheck = userStake.lastClaimInitiatedAt > 0 
+            ? userStake.lastClaimInitiatedAt 
             : userStake.stakedAt;
         claimUnlockTime = lastTimeCheck + _minClaimInterval;
 
@@ -1189,7 +1200,7 @@ oldStake.unstakeAmount = 0;
         userStake.amount += amount;
         userStake.mpxAmount += mpxAmount;
         userStake.stakedAt = block.timestamp;
-        userStake.lastClaimedAt = block.timestamp;
+        userStake.lastClaimInitiatedAt = block.timestamp;
 
         _validators[normalizedId].totalStaked += amount;
         if (bytes(_validators[normalizedId].id).length == 0) {
