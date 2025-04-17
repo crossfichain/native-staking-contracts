@@ -214,7 +214,7 @@ library StakingUtils {
         
         // Check for min amount
         if (amount < minAmount) {
-            return (false, "Amount below min");
+            return (false, "Amount below minimum");
         }
         
         return (true, "");

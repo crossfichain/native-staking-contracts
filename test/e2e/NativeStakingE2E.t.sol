@@ -450,10 +450,10 @@ contract NativeStakingE2ETest is Test {
         uint256 newMinStake = 0.2 ether;
         
         vm.prank(admin);
-        staking.setMinimumStakeAmount(newMinStake);
+        staking.setMinStakeAmount(newMinStake);
         
         // Verify updated
-        assertEq(staking.getMinimumStakeAmount(), newMinStake, "Min stake amount should be updated");
+        assertEq(staking.getMinStakeAmount(), newMinStake, "Min stake amount should be updated");
         
         // Verify small stakes are rejected
         vm.prank(user6);

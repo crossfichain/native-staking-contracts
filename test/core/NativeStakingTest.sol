@@ -60,7 +60,7 @@ contract NativeStakingTest is Test {
         assertTrue(staking.hasRole(staking.OPERATOR_ROLE(), operator), "Operator should have OPERATOR_ROLE");
         
         // Check minimum stake amount
-        assertEq(staking.getMinimumStakeAmount(), minStakeAmount, "Minimum stake amount should be set correctly");
+        assertEq(staking.getMinStakeAmount(), minStakeAmount, "Minimum stake amount should be set correctly");
         
         // Check oracle address
         assertEq(staking.getOracle(), address(oracle), "Oracle address should be set correctly");
