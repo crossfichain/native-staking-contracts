@@ -16,16 +16,16 @@ contract DeployNativeStakingDev is Script {
     /**
      * @dev Role addresses
      */
-    address constant ADMIN_ADDRESS = 0x2D2bA91B7c0EA2dB570a5Df61304B690FD1A3918;
-    address constant MANAGER_ADDRESS = 0x1C89357aF4f15B351F1Ba8a478d944DFa3f45715;
-    address constant OPERATOR_ADDRESS = 0x6Ff2Da7EB2DF14dB66f3F25a0AcE6a28e5f15CD9;
+    address constant ADMIN_ADDRESS = 0xee2e617a42Aab5be36c290982493C6CC6C072982;
+    address constant MANAGER_ADDRESS = 0x79F9860d48ef9dDFaF3571281c033664de05E6f5;
+    address constant OPERATOR_ADDRESS = 0xc35e04979A78630F16e625902283720681f2932e;
 
     /**
      * @dev Default values for delays (30 seconds for testing)
      */
-    uint256 constant MIN_STAKE_INTERVAL = 30;
-    uint256 constant MIN_UNSTAKE_INTERVAL = 30;
-    uint256 constant MIN_CLAIM_INTERVAL = 30;
+    uint256 constant MIN_STAKE_INTERVAL = 5 minutes;
+    uint256 constant MIN_UNSTAKE_INTERVAL = 5 minutes;
+    uint256 constant MIN_CLAIM_INTERVAL = 5 minutes;
     
     /**
      * @dev Minimum stake amount 
@@ -102,7 +102,7 @@ contract DeployNativeStakingDev is Script {
 
         UnifiedOracle oracle = UnifiedOracle(address(oracleProxy));
         
-        uint256 xfiPriceInOracle = 9 * 10**16; // $0.09 with 18 decimals
+        uint256 xfiPriceInOracle = 13 * 10**16; // $0.13 with 18 decimals
         oracle.setPrice("XFI", xfiPriceInOracle);
         console.log("Set XFI fallback price in Oracle to:", xfiPriceInOracle);
 
@@ -172,16 +172,28 @@ contract DeployNativeStakingDev is Script {
         }
         console.log("Added all validators. Count:", validatorIds.length);
 
-        console.log("\n--- Deployment Summary ---");
+        console.log(" ");
+        console.log(" ");
+        console.log(" ");
+        console.log(" ");
+        console.log(" ");
+        console.log(" ");
+        console.log(" ");
+        console.log("\n--- DEPLOYMENT SUMMARY ---");
         console.log("MockDiaOracle address:", address(mockDiaOracle));
+        console.log("NativeStaking Proxy address:", address(nativeStakingProxy));
+        console.log("-------------------------");
+
         console.log("Oracle implementation address:", address(oracleImpl));
         console.log("NativeStaking implementation address:", address(nativeStakingImpl));
         console.log("ProxyAdmin address:", address(proxyAdmin));
         console.log("Oracle Proxy address:", address(oracleProxy));
-        console.log("NativeStaking Proxy address:", address(nativeStakingProxy));
+        console.log("-------------------------");
+
         console.log("Admin address:", ADMIN_ADDRESS);
         console.log("Manager address:", MANAGER_ADDRESS);
         console.log("Operator address:", OPERATOR_ADDRESS);
+        console.log("-------------------------");
         console.log("Min stake interval:", minStakeInterval);
         console.log("Min unstake interval:", minUnstakeInterval);
         console.log("Min claim interval:", minClaimInterval);
@@ -189,7 +201,9 @@ contract DeployNativeStakingDev is Script {
         console.log("XFI price (8 decimals):", xfiPrice);
         console.log("MPX price (18 decimals):", mpxPrice);
         console.log("Number of validators:", validatorIds.length);
-        console.log("-------------------------");
+        console.log("================================================");
+
+        
 
         vm.stopBroadcast();
     }
