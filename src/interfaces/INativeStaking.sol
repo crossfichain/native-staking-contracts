@@ -128,8 +128,8 @@ interface INativeStaking {
     function getUnstakeStatus(address staker, string calldata validatorId) external view returns (bool inProcess, uint256 amount);
     
     // Protocol settings
-    function getMinimumStakeAmount() external view returns (uint256);
-    function setMinimumStakeAmount(uint256 amount) external;
+    function getMinStakeAmount() external view returns (uint256);
+    function setMinStakeAmount(uint256 amount) external;
     function pauseStaking() external;
     function unpauseStaking() external;
 

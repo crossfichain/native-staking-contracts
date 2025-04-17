@@ -92,21 +92,21 @@ abstract contract NativeStakingAdmin is NativeStakingBase {
     }
 
     /**
-     * @dev Sets the minimum stake amount
-     * @param amount The new minimum stake amount
+     * @dev Sets the min stake amount
+     * @param amount The new min stake amount
      */
-    function setMinimumStakeAmount(
+    function setMinStakeAmount(
         uint256 amount
     ) external onlyRole(MANAGER_ROLE) {
         if (amount == 0) {
             revert InvalidAmount(0, 1);
         }
-        _minimumStakeAmount = amount;
+        _minStakeAmount = amount;
     }
 
     /**
-     * @dev Sets the minimum time between stakes
-     * @param interval The new minimum interval
+     * @dev Sets the min time between stakes
+     * @param interval The new min interval
      */
     function setMinStakeInterval(
         uint256 interval
@@ -115,8 +115,8 @@ abstract contract NativeStakingAdmin is NativeStakingBase {
     }
 
     /**
-     * @dev Sets the minimum time before unstake
-     * @param interval The new minimum interval
+     * @dev Sets the min time before unstake
+     * @param interval The new min interval
      */
     function setMinUnstakeInterval(
         uint256 interval
@@ -125,8 +125,8 @@ abstract contract NativeStakingAdmin is NativeStakingBase {
     }
 
     /**
-     * @dev Sets the minimum time before claim
-     * @param interval The new minimum interval
+     * @dev Sets the min time before claim
+     * @param interval The new min interval
      */
     function setMinClaimInterval(
         uint256 interval

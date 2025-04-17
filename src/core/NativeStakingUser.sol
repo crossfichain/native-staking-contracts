@@ -30,13 +30,13 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
         whenNotPaused
         nonReentrant
         validValidatorId(validatorId)
+        validatorExists(validatorId)
         validatorEnabled(validatorId)
         stakeTimeRestriction(validatorId)
         notInUnstakeProcess(validatorId)
     {
-        bool isValid = msg.value >= _minimumStakeAmount;
-        if (!isValid) {
-            revert InvalidAmount(msg.value, _minimumStakeAmount);
+        if (msg.value < _minStakeAmount) {
+            revert InvalidAmount(msg.value, _minStakeAmount);
         }
 
         if (_emergencyWithdrawalRequested[msg.sender]) {
@@ -85,6 +85,10 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
             revert UnstakingPaused();
         }
 
+        if (_emergencyWithdrawalRequested[msg.sender]) {
+            revert EmergencyWithdrawalInProcess();
+        }
+
         string memory normalizedId = StakingUtils.normalizeValidatorId(
             validatorId
         );
@@ -96,14 +100,12 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
         if (amount == 0) {
             revert NoStakeFound();
         }
-        if (_emergencyWithdrawalRequested[msg.sender]) {
-            revert EmergencyWithdrawalInProcess();
-        }
 
         userStake.inUnstakeProcess = true;
         userStake.lastUnstakeInitiatedAt = block.timestamp;
         userStake.unstakeAmount = amount;
 
+        // initiate Claim, so user receives Rewards + Staked funds after unstake 
         emit RewardClaimInitiated(msg.sender, normalizedId);
         emit UnstakeInitiated(msg.sender, normalizedId, amount, mpxAmount);
     }
@@ -167,6 +169,7 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
         validValidatorId(fromValidatorId)
         validValidatorId(toValidatorId)
         validatorExists(fromValidatorId)
+        validatorExists(toValidatorId)
         validatorEnabled(toValidatorId)
         notInUnstakeProcess(fromValidatorId)
     {
@@ -250,32 +253,32 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
     }
 
     /**
-     * @dev Gets the minimum stake amount
-     * @return uint256 The minimum stake amount
+     * @dev Gets the min stake amount
+     * @return uint256 The min stake amount
      */
-    function getMinimumStakeAmount() external view virtual override returns (uint256) {
-        return _minimumStakeAmount;
+    function getMinStakeAmount() external view virtual override returns (uint256) {
+        return _minStakeAmount;
     }
 
     /**
-     * @dev Gets the minimum time between stakes
-     * @return uint256 The minimum interval
+     * @dev Gets the min time between stakes
+     * @return uint256 The min interval
      */
     function getMinStakeInterval() external view virtual override returns (uint256) {
         return _minStakeInterval;
     }
 
     /**
-     * @dev Gets the minimum unstake interval
-     * @return uint256 The minimum interval
+     * @dev Gets the min unstake interval
+     * @return uint256 The min interval
      */
     function getMinUnstakeInterval() external view virtual override returns (uint256) {
         return _minUnstakeInterval;
     }
 
     /**
-     * @dev Gets the minimum claim interval
-     * @return uint256 The minimum interval
+     * @dev Gets the min claim interval
+     * @return uint256 The min interval
      */
     function getMinClaimInterval() external view virtual override returns (uint256) {
         return _minClaimInterval;
@@ -475,8 +478,7 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
         claimUnlockTime = lastTimeCheck + _minClaimInterval;
 
         // Determine available actions
-        canStake = userStake.amount > 0 && 
-            !userStake.inUnstakeProcess &&
+        canStake = !userStake.inUnstakeProcess &&
             block.timestamp >= stakeUnlockTime;
 
         canUnstake = userStake.amount > 0 &&

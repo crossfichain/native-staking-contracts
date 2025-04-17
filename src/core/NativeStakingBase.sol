@@ -63,20 +63,24 @@ abstract contract NativeStakingBase is
     bool internal _isUnstakePaused;
 
     // Contract settings
-    uint256 internal _minimumStakeAmount;
+    uint256 internal _minStakeAmount;
     uint256 internal _minClaimAmount;
 
     /**
      * @dev Initializes the contract base state
      * @param admin Address of the admin who will have DEFAULT_ADMIN_ROLE
-     * @param minimumStakeAmount The minimum amount required for staking
+     * @param minStakeAmount The min amount required for staking
      * @param oracle Address of the oracle for price conversions
      */
-    function __NativeStakingBase_init(
+    function __nativeStakingBase_init(
         address admin,
-        uint256 minimumStakeAmount,
+        uint256 minStakeAmount,
         address oracle
     ) internal onlyInitializing {
+        if (admin == address(0) || oracle == address(0)) {
+            revert ZeroAddress();
+        }
+        
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();
@@ -84,12 +88,13 @@ abstract contract NativeStakingBase is
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MANAGER_ROLE, admin);
 
-        _minimumStakeAmount = minimumStakeAmount;
+        _minStakeAmount = minStakeAmount;
         _oracle = IOracle(oracle);
 
         _minStakeInterval = 1 days;
         _minUnstakeInterval = 1 days;
         _minClaimInterval = 1 days;
+        _minClaimAmount = 10000000000000000000;
     }
 
     /**
@@ -128,15 +133,13 @@ abstract contract NativeStakingBase is
     }
 
     /**
-     * @dev Modifier to check if validator exists and is enabled
+     * @dev Modifier to check if validator status is enabled
+     * @notice This should be used along with validatorExists
      */
     modifier validatorEnabled(string calldata validatorId) {
         string memory normalizedId = StakingUtils.normalizeValidatorId(
             validatorId
         );
-        if (bytes(_validators[normalizedId].id).length == 0) {
-            revert ValidatorDoesNotExist(normalizedId);
-        }
         if (_validators[normalizedId].status != ValidatorStatus.Enabled) {
             revert ValidatorNotEnabled(normalizedId);
         }

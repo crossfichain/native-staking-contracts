@@ -95,7 +95,7 @@ abstract contract NativeStakingOperator is NativeStakingUser {
         validatorExists(validatorId)
     {
         if (msg.value == 0) {
-            revert InsufficientRewards(msg.value, _minimumStakeAmount);
+            revert InsufficientRewards(msg.value, _minStakeAmount);
         }
 
         string memory normalizedId = StakingUtils.normalizeValidatorId(

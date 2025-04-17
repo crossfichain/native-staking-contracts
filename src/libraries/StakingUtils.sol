@@ -199,7 +199,7 @@ library StakingUtils {
     /**
      * @dev Validates the staking parameters
      * @param amount The amount to stake
-     * @param minAmount The minimum staking amount
+     * @param minAmount The min staking amount
      * @return isValid Whether the parameters are valid
      * @return errorMessage The error message if not valid
      */
@@ -212,9 +212,9 @@ library StakingUtils {
             return (false, "Amount must be greater than 0");
         }
         
-        // Check for minimum amount
+        // Check for min amount
         if (amount < minAmount) {
-            return (false, "Amount below minimum");
+            return (false, "Amount below min");
         }
         
         return (true, "");

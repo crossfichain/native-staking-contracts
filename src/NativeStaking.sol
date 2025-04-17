@@ -14,15 +14,15 @@ contract NativeStaking is NativeStakingOperator {
     /**
      * @dev Initializes the contract
      * @param admin Address of the admin who will have DEFAULT_ADMIN_ROLE
-     * @param minimumStakeAmount The minimum amount required for staking
+     * @param minStakeAmount The min amount required for staking
      * @param oracle Address of the oracle for price conversions
      */
     function initialize(
         address admin,
-        uint256 minimumStakeAmount,
+        uint256 minStakeAmount,
         address oracle
     ) external initializer {
-        __NativeStakingBase_init(admin, minimumStakeAmount, oracle);
+        __nativeStakingBase_init(admin, minStakeAmount, oracle);
     }
 
     /**
