@@ -450,6 +450,10 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
         string memory normalizedId = StakingUtils.normalizeValidatorId(validatorId);
         userStake = _userStakes[user][normalizedId];
 
+        // Get validator information
+        bool validatorExists = bytes(_validators[normalizedId].id).length > 0;
+        ValidatorStatus validatorStatus = _validators[normalizedId].status;
+
         // Calculate stake unlock time based on most recent stake/unstake
         uint256 stakedAtUnlock = userStake.stakedAt + _minStakeInterval;
         uint256 unstakedAtUnlock = userStake.lastUnstakeInitiatedAt + _minStakeInterval;
@@ -478,17 +482,24 @@ abstract contract NativeStakingUser is NativeStakingAdmin {
         claimUnlockTime = lastTimeCheck + _minClaimInterval;
 
         // Determine available actions
-        canStake = !userStake.inUnstakeProcess &&
-            block.timestamp >= stakeUnlockTime;
+        canStake = validatorExists &&
+            validatorStatus == ValidatorStatus.Enabled &&
+            !userStake.inUnstakeProcess &&
+            block.timestamp >= stakeUnlockTime &&
+            !_emergencyWithdrawalRequested[user];
 
-        canUnstake = userStake.amount > 0 &&
+        canUnstake = validatorExists &&
+            userStake.amount > 0 &&
             !userStake.inUnstakeProcess &&
             block.timestamp >= unstakeUnlockTime &&
-            !_isUnstakePaused;
+            !_isUnstakePaused &&
+            !_emergencyWithdrawalRequested[user];
 
-        canClaim = userStake.amount > 0 &&
+        canClaim = validatorExists &&
+            userStake.amount > 0 &&
             !userStake.inUnstakeProcess &&
-            block.timestamp >= claimUnlockTime;
+            block.timestamp >= claimUnlockTime &&
+            !_emergencyWithdrawalRequested[user];
 
         return (
             userStake,
